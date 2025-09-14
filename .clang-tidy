@@ -1,0 +1,31 @@
+---
+# This is a basic configuration for clang-tidy.
+# It enables a selection of checks that are generally useful for modern C++.
+# The '-' at the beginning of the list disables all checks by default,
+# and then specific check groups are re-enabled.
+
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  - readability-*,
+  - readability-identifier-length
+  - readability-function-cognitive-complexity
+  - readability-identifier-length
+  - bugprone-easily-swappable-parameters
+
+CheckOptions:
+  # This option configures the 'modernize-use-trailing-return-type' check.
+  # By setting 'DefinitionRequired' to '0' (false), we enforce the use of
+  # trailing return types for both function declarations and definitions,
+  # not just definitions. This helps maintain a consistent function syntax
+  # across the entire codebase.
+  - key: modernize-use-trailing-return-type.DefinitionRequired
+    value: "0"
+  - key: cppcoreguidelines-avoid-do-while.IgnoreMacros
+    value: "1"
+

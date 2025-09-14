@@ -1,0 +1,64 @@
+cmake_minimum_required(VERSION 3.20)
+
+if(NOT CMAKE_CXX_COMPILER)
+  find_program(CLANG_CXX_COMPILER clang++)
+  find_program(GNU_CXX_COMPILER g++)
+
+  if(CLANG_CXX_COMPILER)
+    set(CMAKE_CXX_COMPILER ${CLANG_CXX_COMPILER})
+    message(STATUS "Using LLVM Clang++ compiler: ${CLANG_CXX_COMPILER}")
+  elseif(GNU_CXX_COMPILER)
+    set(CMAKE_CXX_COMPILER ${GNU_CXX_COMPILER})
+    message(STATUS "Using GNU G++ compiler: ${GNU_CXX_COMPILER}")
+  endif()
+endif()
+
+if(NOT CMAKE_C_COMPILER)
+  find_program(CLANG_C_COMPILER clang)
+  find_program(GNU_C_COMPILER gcc)
+
+  if(CLANG_C_COMPILER)
+    set(CMAKE_C_COMPILER ${CLANG_C_COMPILER})
+    message(STATUS "Using LLVM Clang compiler: ${CLANG_C_COMPILER}")
+  elseif(GNU_C_COMPILER)
+    set(CMAKE_C_COMPILER ${GNU_C_COMPILER})
+    message(STATUS "Using GNU GCC compiler: ${GNU_C_COMPILER}")
+  endif()
+endif()
+
+project(OBCX LANGUAGES CXX)
+
+option(ENABLE_DEBUG_TRACE "Enable logging with file and line numbers" OFF)
+
+if(ENABLE_DEBUG_TRACE)
+  message(
+    STATUS
+      "Debug trace logging is enabled. Logs will include file and line numbers."
+  )
+  add_compile_definitions(OBCX_DEBUG_TRACE)
+endif()
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+  # set(CMAKE_CXX_FLAGS "-stdlib=libc++")
+  set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld")
+  message(STATUS "Using libc++ standard library with Clang")
+endif()
+
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+find_package(Boost CONFIG REQUIRED COMPONENTS system thread)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
+find_package(tomlplusplus REQUIRED)
+
+include_directories(${CMAKE_SOURCE_DIR}/include)
+
+enable_testing()
+
+add_subdirectory(src)
+add_subdirectory(examples)
+add_subdirectory(tests)

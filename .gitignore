@@ -50,3 +50,17 @@ _deps
 .vim/
 .cache/
 .tasks
+
+# Build dir
+cmake-build*/
+build/
+
+# Doc
+docs/
+
+# Shit MacOS
+.DS_Store
+
+*.db
+logs/
+
