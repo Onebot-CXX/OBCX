@@ -64,9 +64,16 @@ void QQBot::run() {
 
 void QQBot::stop() {
   OBCX_INFO("正在请求停止 Bot...");
+
+  // 首先断开连接
+  if (connection_manager_) {
+    connection_manager_->disconnect();
+  }
+
   if (task_scheduler_) {
     task_scheduler_->stop();
   }
+
   io_context_->stop();
 }
 

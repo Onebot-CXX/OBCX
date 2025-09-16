@@ -2,6 +2,7 @@
 #include "common/Logger.hpp"
 #include "onebot11/adapter/ProtocolAdapter.hpp"
 
+#include <atomic>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/bind/bind.hpp>
@@ -25,9 +26,37 @@ void WebSocketConnectionManager::connect(
 
 void WebSocketConnectionManager::disconnect() {
   is_running_ = false;
+  is_connected_.store(false, std::memory_order_release);
+
+  // 清理所有pending请求，避免析构时访问已销毁的对象
+  {
+    std::lock_guard lock(pending_requests_mutex_);
+    for (auto &[echo_id, request] : pending_requests_) {
+      if (request) {
+        // 取消所有timer
+        request->timeout_timer.cancel();
+        // 如果有rejecter，调用它来清理
+        if (request->rejecter) {
+          try {
+            request->rejecter(std::make_exception_ptr(
+                std::runtime_error("Connection disconnected")));
+          } catch (...) {
+            // 忽略rejecter中的异常
+          }
+        }
+      }
+    }
+    pending_requests_.clear();
+    OBCX_DEBUG("已清理所有pending requests，总数: 0");
+  }
+
+  // 关闭WebSocket连接
   if (ws_client_) {
     asio::co_spawn(ioc_, ws_client_->close(), asio::detached);
   }
+
+  // 取消重连timer
+  reconnect_timer_.cancel();
 }
 
 auto WebSocketConnectionManager::get_connection_type() const -> std::string {
@@ -154,142 +183,283 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
     throw std::runtime_error("没有可用的 WebSocket 客户端");
   }
 
-  std::string result;
-  bool response_received = false;
-  std::exception_ptr error_ptr = nullptr;
+  // 编译时选择超时机制类型
+  // true: 事件驱动超时 - 性能更好，响应更快，不轮询
+  // false: 轮询等待超时 - 更稳定，但会定期唤醒协程检查状态
+  constexpr bool USE_EVENT_DRIVEN_TIMEOUT = false;
 
-  auto request = std::make_shared<PendingRequest>(ioc_);
+  if constexpr (USE_EVENT_DRIVEN_TIMEOUT) {
+    // === 事件驱动超时机制 ===
 
-  // 创建定时器
-  asio::steady_timer response_timer(ioc_);
-  asio::steady_timer timeout_timer(ioc_);
+    // 使用shared_ptr来管理状态，确保生命周期正确
+    struct RequestState {
+      std::string result;
+      std::exception_ptr error_ptr = nullptr;
+      bool is_timeout = false;
+      std::mutex state_mutex;
+    };
+    std::atomic_bool skip_wait{false};
+    auto state = std::make_shared<RequestState>();
+    auto request = std::make_shared<PendingRequest>(ioc_);
 
-  response_timer.expires_at(std::chrono::steady_clock::time_point::max());
-  timeout_timer.expires_after(std::chrono::seconds(30));
+    // 设置30秒超时
+    request->timeout_timer.expires_after(std::chrono::seconds(30));
 
-  // 设置resolver - 必须在添加到pending_requests之前设置
-  request->resolver = [&, echo_id](std::string response) {
-    OBCX_DEBUG("Resolver调用，echo: {}, response: {}", echo_id, response);
-    result = std::move(response);
-    response_received = true;
-    timeout_timer.cancel();
-    response_timer.cancel();
-    OBCX_DEBUG("Timer已取消，协程应该立即唤醒，echo: {}", echo_id);
-  };
-  OBCX_DEBUG("Resolver已设置，echo: {}", echo_id);
+    // 使用信号量来实现事件驱动的等待
+    auto completion_semaphore = std::make_shared<asio::steady_timer>(ioc_);
+    completion_semaphore->expires_at(
+        std::chrono::steady_clock::time_point::max());
 
-  // 现在添加到pending requests - resolver已经设置好了
-  {
-    std::lock_guard lock(pending_requests_mutex_);
-    pending_requests_[echo_id] = request;
-    OBCX_DEBUG("添加pending request，echo: {}, 总数: {}", echo_id,
-               pending_requests_.size());
-  }
-
-  try {
-    // 发送WebSocket消息 - 现在resolver已经准备好处理快速响应了
-    co_await asio::co_spawn(
-        send_strand_,
-        [this, action_payload]() -> asio::awaitable<void> {
-          try {
-            co_await ws_client_->send(action_payload);
-          } catch (...) {
-            throw;
-          }
-        },
-        asio::use_awaitable);
-
-    request->rejecter = [&](std::exception_ptr ex) {
-      error_ptr = std::move(ex);
-      timeout_timer.cancel();
-      response_timer.cancel();
+    // 设置resolver - 纯事件驱动，完成时唤醒协程
+    request->resolver = [state, echo_id, completion_semaphore,
+                         &skip_wait](std::string response) {
+      OBCX_DEBUG("Resolver调用，echo: {}, response: {}", echo_id, response);
+      {
+        std::lock_guard<std::mutex> lock(state->state_mutex);
+        state->result = std::move(response);
+      }
+      if (0 == completion_semaphore->cancel()) {
+        skip_wait.store(true, std::memory_order_release);
+      }
+      OBCX_DEBUG("响应已设置并唤醒协程，echo: {}", echo_id);
     };
 
-    auto timeout_task = [&]() -> asio::awaitable<void> {
-      try {
-        co_await timeout_timer.async_wait(asio::use_awaitable);
-        response_timer.cancel();
-      } catch (const boost::system::system_error &e) {
-        if (e.code() == asio::error::operation_aborted) {
-        } else {
-          throw;
-        }
+    request->rejecter = [state, completion_semaphore,
+                         &skip_wait](std::exception_ptr ex) {
+      {
+        std::lock_guard<std::mutex> lock(state->state_mutex);
+        state->error_ptr = std::move(ex);
+      }
+      if (0 == completion_semaphore->cancel()) {
+        skip_wait.store(true, std::memory_order_release);
       }
     };
 
-    // 并发启动超时任务
-    asio::co_spawn(ioc_, timeout_task(), asio::detached);
+    OBCX_DEBUG("Event-driven resolver已设置，echo: {}", echo_id);
 
-    // 等待响应timer被取消（无论是响应到达还是超时）
-    OBCX_DEBUG("开始等待响应，echo: {}", echo_id);
-
-    // 使用一个循环来轮询，避免调度器延迟
-    while (!response_received && !error_ptr) {
-      try {
-        // 设置短超时以避免阻塞太久
-        auto short_timeout = std::chrono::milliseconds(100);
-        asio::steady_timer short_timer(ioc_);
-        short_timer.expires_after(short_timeout);
-
-        co_await short_timer.async_wait(asio::use_awaitable);
-        OBCX_DEBUG("轮询检查，echo: {}, response_received: {}", echo_id,
-                   response_received);
-
-        // 检查是否超时
-        if (!response_received &&
-            std::chrono::steady_clock::now() > timeout_timer.expiry()) {
-          OBCX_DEBUG("检测到超时，echo: {}", echo_id);
-          break;
-        }
-      } catch (const boost::system::system_error &e) {
-        if (e.code() != asio::error::operation_aborted) {
-          OBCX_ERROR("轮询等待异常，echo: {}, error: {}", echo_id, e.what());
-          throw;
-        }
-      }
-    }
-
-    if (response_received) {
-      OBCX_DEBUG("响应已收到，echo: {}", echo_id);
-    } else {
-      OBCX_DEBUG("响应等待结束（超时或错误），echo: {}", echo_id);
-    }
-
-    // 确保取消所有timer
-    timeout_timer.cancel();
-    response_timer.cancel();
-
-    // 清理请求
+    // 添加到pending requests
     {
       std::lock_guard lock(pending_requests_mutex_);
-      pending_requests_.erase(echo_id);
-      OBCX_DEBUG("清理pending request，echo: {}, 剩余总数: {}", echo_id,
+      pending_requests_[echo_id] = request;
+      OBCX_DEBUG("添加pending request，echo: {}, 总数: {}", echo_id,
                  pending_requests_.size());
     }
 
-    // 检查结果
-    if (error_ptr) {
-      std::rethrow_exception(error_ptr);
+    try {
+      // 发送WebSocket消息
+      co_await asio::co_spawn(
+          send_strand_,
+          [this, action_payload]() -> asio::awaitable<void> {
+            co_await ws_client_->send(action_payload);
+          },
+          asio::use_awaitable);
+
+      OBCX_DEBUG("WebSocket消息已发送，echo: {}", echo_id);
+
+      // 启动超时检查 - 超时时唤醒协程
+      asio::co_spawn(
+          ioc_,
+          [request, state, echo_id, &skip_wait,
+           completion_semaphore]() -> asio::awaitable<void> {
+            try {
+              co_await request->timeout_timer.async_wait(asio::use_awaitable);
+              // 超时发生
+              OBCX_DEBUG("检测到超时，echo: {}", echo_id);
+              {
+                std::lock_guard<std::mutex> lock(state->state_mutex);
+                state->is_timeout = true;
+              }
+              if (0 == completion_semaphore->cancel()) {
+                skip_wait.store(true, std::memory_order_release);
+              }
+            } catch (const boost::system::system_error &e) {
+              if (e.code() != asio::error::operation_aborted) {
+                OBCX_ERROR("超时任务异常，echo: {}, error: {}", echo_id,
+                           e.what());
+              }
+            }
+          },
+          asio::detached);
+
+      OBCX_DEBUG("开始事件驱动等待响应，echo: {}", echo_id);
+
+      // 等待completion_semaphore被取消（响应到达或超时）
+      if (!skip_wait.load(std::memory_order_acquire)) {
+        try {
+          co_await completion_semaphore->async_wait(asio::use_awaitable);
+          OBCX_ERROR("Completion semaphore正常到期，这不应该发生，echo: {}",
+                     echo_id);
+        } catch (const boost::system::system_error &e) {
+          if (e.code() == asio::error::operation_aborted) {
+            OBCX_DEBUG("事件驱动等待完成，echo: {}", echo_id);
+          } else {
+            throw;
+          }
+        }
+      }
+
+      request->timeout_timer.cancel();
+
+      {
+        std::lock_guard lock(pending_requests_mutex_);
+        pending_requests_.erase(echo_id);
+        OBCX_DEBUG("清理pending request，echo: {}, 剩余总数: {}", echo_id,
+                   pending_requests_.size());
+      }
+
+      {
+        std::lock_guard<std::mutex> lock(state->state_mutex);
+        if (state->error_ptr) {
+          std::rethrow_exception(state->error_ptr);
+        }
+
+        if (state->is_timeout || state->result.empty()) {
+          OBCX_ERROR("API请求超时，echo: {}", echo_id);
+          throw std::runtime_error("API请求超时");
+        }
+
+        OBCX_DEBUG("事件驱动API请求成功完成，echo: {}, result length: {}",
+                   echo_id, state->result.length());
+        co_return state->result;
+      }
+
+    } catch (...) {
+      request->timeout_timer.cancel();
+      {
+        std::lock_guard lock(pending_requests_mutex_);
+        pending_requests_.erase(echo_id);
+      }
+      throw;
     }
 
-    if (!response_received) {
-      // 如果没有收到响应，说明是超时了
-      OBCX_ERROR("API请求超时，echo: {}, response_received: {}", echo_id,
-                 response_received);
-      throw std::runtime_error("API请求超时");
-    }
+  } else {
+    // === 轮询等待超时机制 ===
 
-    OBCX_DEBUG("API请求成功完成，echo: {}, result length: {}", echo_id,
-               result.length());
-    co_return result;
+    // 使用shared_ptr来管理状态，确保生命周期正确
+    struct RequestState {
+      std::string result;
+      std::atomic<bool> response_received{false};
+      std::exception_ptr error_ptr = nullptr;
+      std::mutex state_mutex;
+    };
 
-  } catch (...) {
-    // 清理
+    auto state = std::make_shared<RequestState>();
+    auto request = std::make_shared<PendingRequest>(ioc_);
+
+    // 设置30秒超时
+    request->timeout_timer.expires_after(std::chrono::seconds(30));
+
+    // 设置resolver - 使用shared_ptr确保安全访问
+    request->resolver = [state, echo_id](std::string response) {
+      OBCX_DEBUG("Resolver调用，echo: {}, response: {}", echo_id, response);
+      std::lock_guard<std::mutex> lock(state->state_mutex);
+      state->result = std::move(response);
+      state->response_received.store(true, std::memory_order_release);
+      OBCX_DEBUG("响应已设置，echo: {}", echo_id);
+    };
+
+    request->rejecter = [state](std::exception_ptr ex) {
+      std::lock_guard<std::mutex> lock(state->state_mutex);
+      state->error_ptr = std::move(ex);
+      state->response_received.store(true, std::memory_order_release);
+    };
+
+    OBCX_DEBUG("Polling resolver已设置，echo: {}", echo_id);
+
+    // 添加到pending requests
     {
       std::lock_guard lock(pending_requests_mutex_);
-      pending_requests_.erase(echo_id);
+      pending_requests_[echo_id] = request;
+      OBCX_DEBUG("添加pending request，echo: {}, 总数: {}", echo_id,
+                 pending_requests_.size());
     }
-    throw;
+
+    try {
+      // 发送WebSocket消息
+      co_await asio::co_spawn(
+          send_strand_,
+          [this, action_payload]() -> asio::awaitable<void> {
+            co_await ws_client_->send(action_payload);
+          },
+          asio::use_awaitable);
+
+      OBCX_DEBUG("WebSocket消息已发送，echo: {}", echo_id);
+
+      // 启动超时检查
+      asio::co_spawn(
+          ioc_,
+          [request, state, echo_id]() -> asio::awaitable<void> {
+            try {
+              co_await request->timeout_timer.async_wait(asio::use_awaitable);
+              // 超时发生
+              OBCX_DEBUG("检测到超时，echo: {}", echo_id);
+              std::lock_guard<std::mutex> lock(state->state_mutex);
+              if (!state->response_received.load(std::memory_order_acquire)) {
+                state->response_received.store(true, std::memory_order_release);
+              }
+            } catch (const boost::system::system_error &e) {
+              if (e.code() != asio::error::operation_aborted) {
+                OBCX_ERROR("超时任务异常，echo: {}, error: {}", echo_id,
+                           e.what());
+              }
+            }
+          },
+          asio::detached);
+
+      // 轮询等待响应或超时
+      OBCX_DEBUG("开始轮询等待响应，echo: {}", echo_id);
+
+      while (!state->response_received.load(std::memory_order_acquire)) {
+        // 使用短暂的sleep避免busy waiting
+        asio::steady_timer wait_timer(ioc_);
+        wait_timer.expires_after(std::chrono::milliseconds(10));
+
+        try {
+          co_await wait_timer.async_wait(asio::use_awaitable);
+        } catch (const boost::system::system_error &e) {
+          if (e.code() != asio::error::operation_aborted) {
+            throw;
+          }
+        }
+      }
+
+      // 取消超时timer
+      request->timeout_timer.cancel();
+
+      // 清理请求
+      {
+        std::lock_guard lock(pending_requests_mutex_);
+        pending_requests_.erase(echo_id);
+        OBCX_DEBUG("清理pending request，echo: {}, 剩余总数: {}", echo_id,
+                   pending_requests_.size());
+      }
+
+      // 检查结果
+      {
+        std::lock_guard<std::mutex> lock(state->state_mutex);
+        if (state->error_ptr) {
+          std::rethrow_exception(state->error_ptr);
+        }
+
+        if (state->result.empty()) {
+          OBCX_ERROR("API请求超时，echo: {}", echo_id);
+          throw std::runtime_error("API请求超时");
+        }
+
+        OBCX_DEBUG("轮询API请求成功完成，echo: {}, result length: {}", echo_id,
+                   state->result.length());
+        co_return state->result;
+      }
+
+    } catch (...) {
+      // 清理
+      request->timeout_timer.cancel();
+      {
+        std::lock_guard lock(pending_requests_mutex_);
+        pending_requests_.erase(echo_id);
+      }
+      throw;
+    }
   }
 }
 

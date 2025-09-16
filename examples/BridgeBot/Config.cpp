@@ -69,7 +69,8 @@ void load_group_mappings() {
           if (!telegram_group_id.empty()) {
             std::vector<TopicBridgeConfig> topics;
 
-            // 查找对应的topics - 从全局topics数组中查找属于当前telegram_group_id的topics
+            // 查找对应的topics -
+            // 从全局topics数组中查找属于当前telegram_group_id的topics
             if (config.contains("topics")) {
               const auto &topics_array = config["topics"];
 
@@ -81,7 +82,8 @@ void load_group_mappings() {
 
                   // 检查这个topic是否属于当前的telegram_group_id
                   std::string topic_telegram_group_id =
-                      topic_table["telegram_group_id"].value_or<std::string>("");
+                      topic_table["telegram_group_id"].value_or<std::string>(
+                          "");
 
                   if (topic_telegram_group_id != telegram_group_id) {
                     continue; // 跳过不属于当前群的topic
