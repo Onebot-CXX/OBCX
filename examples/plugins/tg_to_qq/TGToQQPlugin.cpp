@@ -5,11 +5,10 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 
-#include "../../BridgeBot/Config.hpp"
-#include "../../BridgeBot/DatabaseManager.hpp"
-#include "../../BridgeBot/RetryQueueManager.hpp"
-#include "../../BridgeBot/TelegramHandler.hpp"
-#include "common/ConfigLoader.hpp"
+#include "../BridgeBot/Config.hpp"
+#include "../BridgeBot/DatabaseManager.hpp"
+#include "../BridgeBot/RetryQueueManager.hpp"
+#include "../BridgeBot/TelegramHandler.hpp"
 
 namespace plugins {
 TGToQQPlugin::TGToQQPlugin() { OBCX_DEBUG("TGToQQPlugin constructor called"); }
