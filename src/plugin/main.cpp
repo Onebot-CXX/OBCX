@@ -1,15 +1,17 @@
-#include "common/ConfigLoader.hpp"
-#include "common/Logger.hpp"
-#include "common/PluginManager.hpp"
-#include "core/QQBot.hpp"
-#include "core/TGBot.hpp"
-#include "network/IConnectionManager.hpp"
-#include "onebot11/adapter/ProtocolAdapter.hpp"
-#include "telegram/adapter/ProtocolAdapter.hpp"
+#include "common/config_loader.hpp"
+#include "common/logger.hpp"
+#include "common/plugin_manager.hpp"
+#include "core/qq_bot.hpp"
+#include "core/tg_bot.hpp"
+#include "interfaces/connection_manager.hpp"
+#include "onebot11/adapter/protocol_adapter.hpp"
+#include "telegram/adapter/protocol_adapter.hpp"
 #include <boost/date_time/posix_time/time_formatters.hpp>
+#include <csignal>
+#include <cstdint>
 #include <iostream>
 #include <memory>
-#include <signal.h>
+#include <spdlog/common.h>
 #include <thread>
 #include <vector>
 
@@ -18,6 +20,25 @@ using namespace obcx;
 namespace {
 volatile sig_atomic_t g_should_stop = 0;
 volatile sig_atomic_t g_shutdown_started = 0;
+
+const uint16_t DEFAULT_PORT = 8080;
+
+void print_version() {
+  std::cout << "OBCX Robot Framework v1.0.0" << '\n';
+  std::cout << "A modular bot framework supporting QQ and Telegram" << '\n';
+}
+
+void print_help() {
+  std::cout << "Usage: OBCX [OPTIONS] [CONFIG_FILE]" << '\n';
+  std::cout << '\n';
+  std::cout << "OPTIONS:" << '\n';
+  std::cout << "  -h, --help     Show this help message" << '\n';
+  std::cout << "  -v, --version  Show version information" << '\n';
+  std::cout << '\n';
+  std::cout << "CONFIG_FILE:" << '\n';
+  std::cout << "  Path to TOML configuration file (default: config.toml)"
+            << '\n';
+}
 
 void signal_handler(int signal) {
   // Use atomic flag to prevent multiple shutdown attempts
@@ -39,7 +60,8 @@ public:
     return instance;
   }
 
-  std::unique_ptr<core::IBot> create_bot(const common::BotConfig &config) {
+  static std::unique_ptr<core::IBot> create_bot(
+      const common::BotConfig &config) {
     if (config.type == "qq") {
       return std::make_unique<core::QQBot>(
           adapter::onebot11::ProtocolAdapter{});
@@ -53,20 +75,22 @@ public:
     return nullptr;
   }
 
-  network::ConnectionManagerFactory::ConnectionType get_connection_type(
+  static network::ConnectionManagerFactory::ConnectionType get_connection_type(
       const std::string &type, const std::string &bot_type) {
     if (bot_type == "qq") {
       if (type == "websocket" || type == "ws") {
         return network::ConnectionManagerFactory::ConnectionType::
             Onebot11WebSocket;
-      } else if (type == "http") {
+      }
+      if (type == "http") {
         return network::ConnectionManagerFactory::ConnectionType::Onebot11HTTP;
       }
     } else if (bot_type == "telegram") {
       if (type == "websocket" || type == "ws") {
         return network::ConnectionManagerFactory::ConnectionType::
             TelegramWebsocket;
-      } else if (type == "http") {
+      }
+      if (type == "http") {
         return network::ConnectionManagerFactory::ConnectionType::TelegramHTTP;
       }
     }
@@ -75,66 +99,66 @@ public:
     return network::ConnectionManagerFactory::ConnectionType::Onebot11HTTP;
   }
 
-  common::ConnectionConfig create_connection_config(
+  static common::ConnectionConfig create_connection_config(
       const toml::table &conn_table) {
     common::ConnectionConfig config;
 
-    if (auto host = conn_table.get("host")) {
+    if (const auto *host = conn_table.get("host")) {
       config.host = host->value_or<std::string>("localhost");
     } else {
       config.host = "localhost";
     }
 
-    if (auto port = conn_table.get("port")) {
-      config.port = port->value_or<uint16_t>(8080);
+    if (const auto *port = conn_table.get("port")) {
+      config.port = port->value_or(DEFAULT_PORT);
     } else {
-      config.port = 8080;
+      config.port = DEFAULT_PORT;
     }
 
-    if (auto token = conn_table.get("access_token")) {
+    if (const auto *token = conn_table.get("access_token")) {
       config.access_token = token->value_or<std::string>("");
     } else {
       config.access_token = "";
     }
 
-    if (auto secret = conn_table.get("secret")) {
+    if (const auto *secret = conn_table.get("secret")) {
       config.secret = secret->value_or<std::string>("");
     } else {
       config.secret = "";
     }
 
-    if (auto ssl = conn_table.get("use_ssl")) {
+    if (const auto *ssl = conn_table.get("use_ssl")) {
       config.use_ssl = ssl->value_or<bool>(false);
     } else {
       config.use_ssl = false;
     }
 
-    if (auto timeout = conn_table.get("timeout")) {
+    if (const auto *timeout = conn_table.get("timeout")) {
       if (auto timeout_ms = timeout->value<int64_t>()) {
         config.timeout = std::chrono::milliseconds(*timeout_ms);
       }
     }
 
-    if (auto heartbeat_interval = conn_table.get("heartbeat_interval")) {
+    if (const auto *heartbeat_interval = conn_table.get("heartbeat_interval")) {
       if (auto interval_ms = heartbeat_interval->value<int64_t>()) {
         config.heartbeat_interval = std::chrono::milliseconds(*interval_ms);
       }
     }
 
     // Proxy configuration
-    if (auto proxy_host = conn_table.get("proxy_host")) {
+    if (const auto *proxy_host = conn_table.get("proxy_host")) {
       config.proxy_host = proxy_host->value_or<std::string>("");
     } else {
       config.proxy_host = "";
     }
 
-    if (auto proxy_port = conn_table.get("proxy_port")) {
+    if (const auto *proxy_port = conn_table.get("proxy_port")) {
       config.proxy_port = proxy_port->value_or<uint16_t>(0);
     } else {
       config.proxy_port = 0;
     }
 
-    if (auto proxy_type = conn_table.get("proxy_type")) {
+    if (const auto *proxy_type = conn_table.get("proxy_type")) {
       config.proxy_type = proxy_type->value_or<std::string>("http");
     } else {
       config.proxy_type = "http";
@@ -144,13 +168,13 @@ public:
     OBCX_INFO("Proxy config - Host: '{}', Port: {}, Type: '{}'",
               config.proxy_host, config.proxy_port, config.proxy_type);
 
-    if (auto proxy_username = conn_table.get("proxy_username")) {
+    if (const auto *proxy_username = conn_table.get("proxy_username")) {
       config.proxy_username = proxy_username->value_or<std::string>("");
     } else {
       config.proxy_username = "";
     }
 
-    if (auto proxy_password = conn_table.get("proxy_password")) {
+    if (const auto *proxy_password = conn_table.get("proxy_password")) {
       config.proxy_password = proxy_password->value_or<std::string>("");
     } else {
       config.proxy_password = "";
@@ -196,30 +220,12 @@ private:
   ComponentManager() = default;
 };
 
-void print_version() {
-  std::cout << "OBCX Robot Framework v1.0.0" << std::endl;
-  std::cout << "A modular bot framework supporting QQ and Telegram"
-            << std::endl;
-}
-
-void print_help() {
-  std::cout << "Usage: OBCX [OPTIONS] [CONFIG_FILE]" << std::endl;
-  std::cout << std::endl;
-  std::cout << "OPTIONS:" << std::endl;
-  std::cout << "  -h, --help     Show this help message" << std::endl;
-  std::cout << "  -v, --version  Show version information" << std::endl;
-  std::cout << std::endl;
-  std::cout << "CONFIG_FILE:" << std::endl;
-  std::cout << "  Path to TOML configuration file (default: config.toml)"
-            << std::endl;
-}
-
 auto main(int argc, char *argv[]) -> int {
   signal(SIGINT, signal_handler);
   signal(SIGTERM, signal_handler);
 
   common::Logger::initialize(
-      spdlog::level::debug,
+      spdlog::level::info,
       fmt::format("logs/obcx-bridge-{}.log",
                   boost::posix_time::to_iso_extended_string(
                       boost::posix_time::second_clock::local_time())));
@@ -231,23 +237,23 @@ auto main(int argc, char *argv[]) -> int {
     if (arg == "-h" || arg == "--help") {
       print_help();
       return 0;
-    } else if (arg == "-v" || arg == "--version") {
+    }
+    if (arg == "-v" || arg == "--version") {
       print_version();
       return 0;
-    } else if (arg.starts_with("-")) {
-      std::cerr << "Unknown option: " << arg << std::endl;
+    }
+    if (arg.starts_with("-")) {
+      std::cerr << "Unknown option: " << arg << '\n';
       print_help();
       return 1;
-    } else {
-      config_path = arg;
     }
+    config_path = arg;
   }
 
   // Initialize configuration
   auto &config_loader = common::ConfigLoader::instance();
   if (!config_loader.load_config(config_path)) {
-    std::cerr << "Failed to load configuration from: " << config_path
-              << std::endl;
+    std::cerr << "Failed to load configuration from: " << config_path << '\n';
     return 1;
   }
 
@@ -292,7 +298,7 @@ auto main(int argc, char *argv[]) -> int {
       continue;
     }
 
-    auto bot = component_manager.create_bot(config);
+    auto bot = ComponentManager::create_bot(config);
     if (!bot) {
       OBCX_ERROR("Failed to create bot component of type: {}", config.type);
       continue;
@@ -331,7 +337,7 @@ auto main(int argc, char *argv[]) -> int {
   OBCX_INFO("All components started successfully. OBCX Framework running...");
 
   // Wait for shutdown signal
-  while (!g_should_stop) {
+  while (g_should_stop == 0) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 

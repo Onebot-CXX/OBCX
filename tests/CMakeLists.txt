@@ -6,7 +6,7 @@ set(gtest_disable_pthreads ON)
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
 add_executable(test_timeout_mechanism
-        TimeoutMechanismTest.cpp
+        timeout_mechanism_test.cpp
 )
 
 target_link_libraries(test_timeout_mechanism
@@ -21,7 +21,7 @@ target_compile_features(test_timeout_mechanism PRIVATE cxx_std_20)
 gtest_discover_tests(test_timeout_mechanism)
 
 add_executable(test_websocket_queue
-        WebsocketQueueTest.cpp
+        websocket_queue_test.cpp
 )
 
 target_link_libraries(test_websocket_queue

@@ -63,4 +63,4 @@ docs/
 
 *.db
 logs/
-
+vcpkg_installed/
