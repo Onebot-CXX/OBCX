@@ -7,3 +7,4 @@ cmake_minimum_required(VERSION 3.15)
 # Add plugin subdirectories
 add_subdirectory(qq_to_tg)
 add_subdirectory(tg_to_qq)
+add_subdirectory(torrent_downloader)

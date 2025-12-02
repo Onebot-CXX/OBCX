@@ -1,0 +1,133 @@
+# OBCX Torrent Downloader Plugin Configuration
+# 完整可用的配置示例
+
+# Plugin directories
+[plugin_directories]
+local = "./plugins"
+build = "./build/plugins"
+
+# Bot configuration - Telegram bot for torrent downloading
+[bots.telegram_bot]
+type = "telegram"
+enabled = true
+plugins = ["torrent_downloader"] # 加载torrent下载插件
+
+[bots.telegram_bot.connection]
+type = "http"
+host = "api.telegram.org"
+port = 443
+access_token = "<Your token>" # 替换为你的Telegram Bot Token
+use_ssl = true
+timeout = 30000
+
+# Proxy configuration for Telegram (如果需要代理访问Telegram)
+# 如果不需要代理，可以注释掉这几行
+proxy_host = "127.0.0.1"
+proxy_port = 114514
+proxy_type = "http"      # 可选: http, https, socks5
+
+# Torrent Downloader Plugin configuration
+[plugins.torrent_downloader]
+enabled = true
+callbacks = ["on_message"] # 监听消息事件
+
+[plugins.torrent_downloader.config]
+# qBittorrent WebAPI 配置
+# qBittorrent WebUI 地址和端口
+qbt_host = "localhost"
+qbt_port = 10000
+
+# qBittorrent WebUI 登录凭据
+qbt_username = "root"
+qbt_password = "<Your passwd>"
+
+# qBittorrent 下载保存路径（留空使用默认路径）
+qbt_download_path = "/tmp/torrent_downloads"
+
+# rclone 远程名称（需要预先配置好rclone）
+# 使用命令 'rclone config' 来配置Google Drive
+# 配置后的remote名称，必须以冒号结尾
+rclone_remote = "gdrive:"
+
+# 上传到Google Drive的路径
+# 文件会上传到 gdrive:/BitTorrents/ 目录下
+rclone_path = "BitTorrents"
+
+# rclone 代理配置（可选）
+# 如果需要通过代理上传到Google Drive，设置代理地址
+# 例如: "http://127.0.0.1:7890"
+# 留空表示不使用代理
+rclone_proxy = "http://127.0.0.1:114514"
+
+# 最大并发下载数
+# 同时最多允许3个下载任务运行
+# 超过这个数量的下载请求会被拒绝
+max_concurrent_downloads = 3
+
+# 进度检查间隔（秒）
+# 每隔多少秒检查一次下载进度
+progress_check_interval = 5
+
+# ============================================================
+# 使用说明
+# ============================================================
+#
+# 1. 修改 access_token
+#    - 将上面的 access_token 替换为你的Telegram Bot Token
+#    - 从 @BotFather 获取token
+#
+# 2. 配置代理（如果需要）
+#    - 如果你在中国大陆，需要配置代理才能访问Telegram
+#    - 设置 proxy_host, proxy_port, proxy_type 配置项
+#    - 设置为你的代理服务器地址
+#
+# 3. 安装和配置qBittorrent
+#    安装qBittorrent-nox (无界面版本):
+#    $ sudo apt install qbittorrent-nox  # Debian/Ubuntu
+#    $ sudo pacman -S qbittorrent-nox    # Arch Linux
+#
+#    启动qBittorrent并启用WebUI:
+#    $ qbittorrent-nox
+#    默认WebUI地址: http://127.0.0.1:8080
+#    默认用户名: admin
+#    默认密码: adminpass (首次登录后会要求修改)
+#
+#    修改上面的 qbt_username 和 qbt_password 配置
+#
+# 4. 配置rclone
+#    运行以下命令配置Google Drive:
+#    $ rclone config
+#    - 选择 "n" 新建remote
+#    - 名称输入 "gdrive"（或其他名称，需与rclone_remote配置一致）
+#    - 类型选择 "drive" (Google Drive)
+#    - 按照提示完成OAuth认证
+#
+# 5. 验证配置
+#    $ qbittorrent-nox --version  # 确保已安装qBittorrent
+#    $ rclone version             # 确保已安装rclone
+#    $ rclone lsd gdrive:         # 测试rclone配置是否正确
+#
+# 6. 启动bot
+#    $ ./your_bot_executable --config torrent_config.toml
+#
+# 7. 使用方法
+#    - 向bot发送磁力链接: magnet:?xt=urn:btih:...
+#    - 或发送 .torrent 文件作为附件
+#    - bot会自动使用qBittorrent下载并上传到Google Drive
+#    - 完成后会返回分享链接
+#    - 发送 /status 命令查看当前下载进度
+#
+# ============================================================
+# 高级配置选项
+# ============================================================
+#
+# rclone_proxy 代理配置:
+# - 如果上传到Google Drive需要代理，设置为代理地址
+# - 例如: rclone_proxy = "http://127.0.0.1:7890"
+# - 插件会使用 zsh -c "export http_proxy=xxx && rclone copy..." 命令
+#
+# qBittorrent WebUI 配置:
+# - 可以在qBittorrent WebUI中配置下载目录、速度限制等
+# - 访问 http://127.0.0.1:8080 进行配置
+# - 插件会自动获取下载完成的文件路径进行上传
+qbt_use_ssl = true

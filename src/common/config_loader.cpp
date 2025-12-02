@@ -73,8 +73,8 @@ std::optional<PluginConfig> ConfigLoader::get_plugin_config(
   }
 
   std::string plugin_path = "plugins." + plugin_name;
-  if (auto plugin_section = config_data_->get(plugin_path)) {
-    if (auto plugin_table = plugin_section->as_table()) {
+  if (auto plugin_section = config_data_->at_path(plugin_path)) {
+    if (auto plugin_table = plugin_section.as_table()) {
       PluginConfig config;
       config.name = plugin_name;
       config.enabled = plugin_table->get("enabled")->value_or<bool>(false);
