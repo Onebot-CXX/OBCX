@@ -124,8 +124,13 @@ auto TelegramHandler::forward_to_qq(obcx::core::IBot &telegram_bot,
     co_return;
   }
 
-  // 检查消息是否已转发（避免重复）
-  if (db_manager_->get_target_message_id("telegram", event.message_id, "qq")
+  // 检查是否是编辑后的重发（通过is_edited_resend标记识别）
+  bool is_edited_resend = event.data.contains("is_edited_resend") &&
+                          event.data["is_edited_resend"].get<bool>();
+
+  // 检查消息是否已转发（避免重复），但编辑重发时跳过此检查
+  if (!is_edited_resend &&
+      db_manager_->get_target_message_id("telegram", event.message_id, "qq")
           .has_value()) {
     OBCX_DEBUG("Telegram消息 {} 已转发到QQ，跳过重复处理", event.message_id);
     co_return;
@@ -226,17 +231,31 @@ auto TelegramHandler::forward_to_qq(obcx::core::IBot &telegram_bot,
             qq_message_id = std::to_string(
                 response_json["data"]["message_id"].get<int64_t>());
 
-            // 保存消息映射
-            obcx::storage::MessageMapping mapping;
-            mapping.source_platform = "telegram";
-            mapping.source_message_id = event.message_id;
-            mapping.target_platform = "qq";
-            mapping.target_message_id = qq_message_id.value();
-            mapping.created_at = std::chrono::system_clock::now();
+            // 保存或更新消息映射
+            if (is_edited_resend) {
+              // 编辑重发：更新现有映射
+              if (!db_manager_->update_message_mapping(
+                      "telegram", event.message_id, "qq",
+                      qq_message_id.value())) {
+                OBCX_WARN("更新消息映射失败: telegram:{} -> qq:{}",
+                          event.message_id, qq_message_id.value());
+              } else {
+                OBCX_INFO("成功更新消息映射: telegram:{} -> qq:{}",
+                          event.message_id, qq_message_id.value());
+              }
+            } else {
+              // 首次转发：添加新映射
+              obcx::storage::MessageMapping mapping;
+              mapping.source_platform = "telegram";
+              mapping.source_message_id = event.message_id;
+              mapping.target_platform = "qq";
+              mapping.target_message_id = qq_message_id.value();
+              mapping.created_at = std::chrono::system_clock::now();
 
-            if (!db_manager_->add_message_mapping(mapping)) {
-              OBCX_WARN("保存消息映射失败: telegram:{} -> qq:{}",
-                        event.message_id, qq_message_id.value());
+              if (!db_manager_->add_message_mapping(mapping)) {
+                OBCX_WARN("保存消息映射失败: telegram:{} -> qq:{}",
+                          event.message_id, qq_message_id.value());
+              }
             }
 
             OBCX_INFO("成功转发Telegram消息到QQ: {} -> {}", event.message_id,

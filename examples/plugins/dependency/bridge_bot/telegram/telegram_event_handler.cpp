@@ -80,11 +80,9 @@ auto TelegramEventHandler::handle_message_edited(
               recall_success ? "成功" : "失败");
 
     try {
-      // 如果撤回成功，先删除旧的消息映射
-      if (recall_success) {
-        db_manager_->delete_message_mapping("telegram", event.message_id, "qq");
-        OBCX_INFO("撤回成功，已删除旧的消息映射");
-      }
+      // 标记此消息为编辑消息，以便forward_function_可以识别并更新映射而非创建新映射
+      // 通过在event.data中添加标记
+      const_cast<nlohmann::json &>(event.data)["is_edited_resend"] = true;
 
       // 使用传入的转发函数重发编辑后的内容
       co_await forward_function_(telegram_bot, qq_bot, event);
