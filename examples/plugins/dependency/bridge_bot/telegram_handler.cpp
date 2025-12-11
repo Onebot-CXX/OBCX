@@ -234,9 +234,9 @@ auto TelegramHandler::forward_to_qq(obcx::core::IBot &telegram_bot,
             // 保存或更新消息映射
             if (is_edited_resend) {
               // 编辑重发：更新现有映射
-              if (!db_manager_->update_message_mapping(
-                      "telegram", event.message_id, "qq",
-                      qq_message_id.value())) {
+              if (!db_manager_->update_message_mapping("telegram",
+                                                       event.message_id, "qq",
+                                                       qq_message_id.value())) {
                 OBCX_WARN("更新消息映射失败: telegram:{} -> qq:{}",
                           event.message_id, qq_message_id.value());
               } else {

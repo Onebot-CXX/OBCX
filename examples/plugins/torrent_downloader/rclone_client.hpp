@@ -1,7 +1,7 @@
 #pragma once
 
-#include <string>
 #include <boost/asio/awaitable.hpp>
+#include <string>
 
 namespace plugins {
 
@@ -31,9 +31,9 @@ public:
       const std::string &remote_full_path);
 
 private:
-  std::string remote_;       // rclone remote名称 (e.g., "gdrive:")
-  std::string remote_path_;  // 远程目标路径 (e.g., "Torrents")
-  std::string proxy_;        // 代理URL (可选)
+  std::string remote_;      // rclone remote名称 (e.g., "gdrive:")
+  std::string remote_path_; // 远程目标路径 (e.g., "Torrents")
+  std::string proxy_;       // 代理URL (可选)
 
   /**
    * @brief 设置代理环境变量
@@ -47,7 +47,7 @@ private:
    * @brief 恢复代理环境变量
    */
   void restore_proxy_env(bool proxy_was_set, const std::string &old_http,
-                          const std::string &old_https);
+                         const std::string &old_https);
 };
 
 } // namespace plugins

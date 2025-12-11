@@ -4,6 +4,9 @@
 # The '-' at the beginning of the list disables all checks by default,
 # and then specific check groups are re-enabled.
 
+# Only check headers from the project source directories
+HeaderFilterRegex: '^.*/OBCX/(include|src|examples|tests)/.*$'
+
 Checks: >
   -*,
   bugprone-*,

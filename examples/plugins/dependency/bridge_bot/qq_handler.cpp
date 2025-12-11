@@ -1509,8 +1509,7 @@ auto QQHandler::handle_checkalive_command(obcx::core::IBot &telegram_bot,
 
     // 发送到QQ
     try {
-      co_await qq_bot.send_group_message(qq_group_id,
-                                         reply_message);
+      co_await qq_bot.send_group_message(qq_group_id, reply_message);
       OBCX_INFO("/checkalive 命令处理完成");
     } catch (const std::exception &send_e) {
       OBCX_ERROR("/checkalive 命令：发送回复消息失败: {}", send_e.what());

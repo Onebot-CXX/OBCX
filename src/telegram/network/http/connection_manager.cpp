@@ -103,7 +103,7 @@ auto TelegramConnectionManager::send_action_and_wait_async(
 
     // 获取请求体（去除method字段）
     payload_json.erase("method");
-    payload_json.erase("echo");  // Telegram API不支持echo字段
+    payload_json.erase("echo"); // Telegram API不支持echo字段
     std::string body = payload_json.dump();
 
     // 发送POST请求到Telegram API

@@ -1,13 +1,13 @@
 #pragma once
 
-#include <string>
-#include <memory>
-#include <thread>
+#include "common/message_type.hpp"
+#include "network/http_client.hpp"
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/io_context.hpp>
+#include <memory>
 #include <nlohmann/json.hpp>
-#include "network/http_client.hpp"
-#include "common/message_type.hpp"
+#include <string>
+#include <thread>
 
 namespace plugins {
 
@@ -15,8 +15,8 @@ namespace plugins {
  * @brief add_torrent的结果
  */
 struct AddTorrentResult {
-  std::string hash;           // torrent hash
-  bool already_existed;       // 是否已存在
+  std::string hash;     // torrent hash
+  bool already_existed; // 是否已存在
 };
 
 /**
@@ -45,8 +45,9 @@ public:
   boost::asio::awaitable<nlohmann::json> get_all_torrents(
       const std::string &cookie);
 
-  boost::asio::awaitable<void> delete_torrent(
-      const std::string &cookie, const std::string &hash, bool delete_files);
+  boost::asio::awaitable<void> delete_torrent(const std::string &cookie,
+                                              const std::string &hash,
+                                              bool delete_files);
 
   // Torrent properties
   boost::asio::awaitable<nlohmann::json> get_torrent_properties(
@@ -56,8 +57,8 @@ public:
       const std::string &cookie, const std::string &hash);
 
 private:
-  boost::asio::io_context ioc_;  // Own io_context for HttpClient
-  std::thread ioc_thread_;  // Thread to run io_context
+  boost::asio::io_context ioc_; // Own io_context for HttpClient
+  std::thread ioc_thread_;      // Thread to run io_context
   std::unique_ptr<obcx::network::HttpClient> http_client_;
   std::string host_;
   int port_;
@@ -71,14 +72,12 @@ private:
 
   // HTTP methods using HttpClient
   boost::asio::awaitable<std::string> http_post(
-      const std::string &path,
-      const std::string &body,
+      const std::string &path, const std::string &body,
       const std::string &cookie = "",
       const std::string &content_type = "application/x-www-form-urlencoded");
 
-  boost::asio::awaitable<std::string> http_get(
-      const std::string &path,
-      const std::string &cookie = "");
+  boost::asio::awaitable<std::string> http_get(const std::string &path,
+                                               const std::string &cookie = "");
 };
 
 } // namespace plugins
