@@ -1,0 +1,220 @@
+# English translations for OBCX
+# Copyright (C) 2025
+# This file is distributed under the same license as the OBCX package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: OBCX 1.0\n"
+"Language: en_US\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Logger initialized successfully"
+msgstr "Logger initialized successfully"
+
+msgid "Logger initialization failed: {}"
+msgstr "Logger initialization failed: {}"
+
+msgid "Connection established to {}:{}"
+msgstr "Connection established to {}:{}"
+
+msgid "Connection failed: {}"
+msgstr "Connection failed: {}"
+
+msgid "Connection closed"
+msgstr "Connection closed"
+
+msgid "HTTP connection will be established through {} proxy {}:{} to {}:{}"
+msgstr "HTTP connection will be established through {} proxy {}:{} to {}:{}"
+
+msgid "Parsing event: {}"
+msgstr "Parsing event: {}"
+
+msgid "Unhandled update type in update"
+msgstr "Unhandled update type in update"
+
+msgid "No update_id field in JSON"
+msgstr "No update_id field in JSON"
+
+msgid "Failed to parse event: {}. JSON: {}"
+msgstr "Failed to parse event: {}. JSON: {}"
+
+msgid "Successfully parsed event"
+msgstr "Successfully parsed event"
+
+msgid "Failed to parse event: {}"
+msgstr "Failed to parse event: {}"
+
+msgid "Extracted message_id: {}"
+msgstr "Extracted message_id: {}"
+
+msgid "Extracted user_id: {}"
+msgstr "Extracted user_id: {}"
+
+msgid "Extracted chat_id: {}"
+msgstr "Extracted chat_id: {}"
+
+msgid "Extracted message text: {}"
+msgstr "Extracted message text: {}"
+
+msgid "Extracted file_id: {}"
+msgstr "Extracted file_id: {}"
+
+msgid "Extracted photo file_id: {}"
+msgstr "Extracted photo file_id: {}"
+
+msgid "Extracted sticker file_id: {}"
+msgstr "Extracted sticker file_id: {}"
+
+msgid "Extracted video file_id: {}"
+msgstr "Extracted video file_id: {}"
+
+msgid "Extracted animation file_id: {}"
+msgstr "Extracted animation file_id: {}"
+
+msgid "Extracted document file_id: {}"
+msgstr "Extracted document file_id: {}"
+
+msgid "Extracted audio file_id: {}"
+msgstr "Extracted audio file_id: {}"
+
+msgid "Extracted voice file_id: {}"
+msgstr "Extracted voice file_id: {}"
+
+msgid "Extracted video_note file_id: {}"
+msgstr "Extracted video_note file_id: {}"
+
+msgid "Chat type: {}"
+msgstr "Chat type: {}"
+
+msgid "Set group_id: {}"
+msgstr "Set group_id: {}"
+
+msgid "Set private chat"
+msgstr "Set private chat"
+
+msgid "Marked as edit message: message_id={}"
+msgstr "Marked as edit message: message_id={}"
+
+msgid "Successfully parsed callback query event"
+msgstr "Successfully parsed callback query event"
+
+msgid "Failed to parse callback query event: {}"
+msgstr "Failed to parse callback query event: {}"
+
+msgid "Added reply message ID: {}"
+msgstr "Added reply message ID: {}"
+
+msgid "sendSticker added reply message ID: {}"
+msgstr "sendSticker added reply message ID: {}"
+
+msgid "sendVideo added reply message ID: {}"
+msgstr "sendVideo added reply message ID: {}"
+
+msgid "sendVideoNote added reply message ID: {}"
+msgstr "sendVideoNote added reply message ID: {}"
+
+msgid "sendAudio added reply message ID: {}"
+msgstr "sendAudio added reply message ID: {}"
+
+msgid "sendVoice added reply message ID: {}"
+msgstr "sendVoice added reply message ID: {}"
+
+msgid "sendDocument added reply message ID: {}"
+msgstr "sendDocument added reply message ID: {}"
+
+msgid "Start polling, interval: {}ms"
+msgstr "Start polling, interval: {}ms"
+
+msgid "Stop polling"
+msgstr "Stop polling"
+
+msgid "Polling failed: {}"
+msgstr "Polling failed: {}"
+
+msgid "Polling coroutine exited"
+msgstr "Polling coroutine exited"
+
+msgid "Received updates: {}"
+msgstr "Received updates: {}"
+
+msgid "Processing {} updates"
+msgstr "Processing {} updates"
+
+msgid "Processing single update: {}"
+msgstr "Processing single update: {}"
+
+msgid "Dispatching event"
+msgstr "Dispatching event"
+
+msgid "Failed to parse event from update"
+msgstr "Failed to parse event from update"
+
+msgid "Event callback not set"
+msgstr "Event callback not set"
+
+msgid "Sending action: {}"
+msgstr "Sending action: {}"
+
+msgid "API request failed: {}"
+msgstr "API request failed: {}"
+
+msgid "Download file failed: {}"
+msgstr "Download file failed: {}"
+
+msgid "Download file content failed: {}"
+msgstr "Download file content failed: {}"
+
+msgid "Plugin loaded: {}"
+msgstr "Plugin loaded: {}"
+
+msgid "Plugin load failed: {}"
+msgstr "Plugin load failed: {}"
+
+msgid "Plugin initialized: {}"
+msgstr "Plugin initialized: {}"
+
+msgid "Plugin initialization failed: {}"
+msgstr "Plugin initialization failed: {}"
+
+msgid "Message conversion start"
+msgstr "Message conversion start"
+
+msgid "Message conversion success"
+msgstr "Message conversion success"
+
+msgid "Message conversion failed: {}"
+msgstr "Message conversion failed: {}"
+
+msgid "Loading config: {}"
+msgstr "Loading config: {}"
+
+msgid "Config loaded successfully"
+msgstr "Config loaded successfully"
+
+msgid "Config load failed: {}"
+msgstr "Config load failed: {}"
+
+msgid "Database connection failed: {}"
+msgstr "Database connection failed: {}"
+
+msgid "Database query failed: {}"
+msgstr "Database query failed: {}"
+
+msgid "Bot started"
+msgstr "Bot started"
+
+msgid "Bot stopped"
+msgstr "Bot stopped"
+
+msgid "Bot error: {}"
+msgstr "Bot error: {}"
+
+msgid "Operation success"
+msgstr "Operation success"
+
+msgid "Operation failed: {}"
+msgstr "Operation failed: {}"
+
+msgid "Invalid parameter: {}"
+msgstr "Invalid parameter: {}"

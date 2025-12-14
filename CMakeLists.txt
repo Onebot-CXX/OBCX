@@ -76,10 +76,11 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
     message(STATUS "Using libc++ standard library with Clang")
 endif ()
 
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Boost CONFIG REQUIRED COMPONENTS system thread)
+find_package(Boost CONFIG REQUIRED COMPONENTS system thread locale)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
@@ -90,6 +91,33 @@ find_package(tomlplusplus REQUIRED)
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
 enable_testing()
+
+# Compile i18n .po files to .mo files
+find_program(GETTEXT_MSGFMT_EXECUTABLE msgfmt)
+if (GETTEXT_MSGFMT_EXECUTABLE)
+    file(GLOB_RECURSE PO_FILES "${CMAKE_SOURCE_DIR}/locales/*/messages.po")
+
+    foreach (PO_FILE ${PO_FILES})
+        get_filename_component(PO_DIR ${PO_FILE} DIRECTORY)
+        get_filename_component(LOCALE_NAME ${PO_DIR} NAME)
+
+        set(MO_FILE "${CMAKE_BINARY_DIR}/locales/${LOCALE_NAME}/LC_MESSAGES/messages.mo")
+
+        add_custom_command(
+                OUTPUT ${MO_FILE}
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/locales/${LOCALE_NAME}/LC_MESSAGES"
+                COMMAND ${GETTEXT_MSGFMT_EXECUTABLE} -o ${MO_FILE} ${PO_FILE}
+                DEPENDS ${PO_FILE}
+                COMMENT "Compiling ${PO_FILE} to ${MO_FILE}"
+        )
+
+        list(APPEND MO_FILES ${MO_FILE})
+    endforeach ()
+
+    add_custom_target(i18n ALL DEPENDS ${MO_FILES})
+else ()
+    message(WARNING "msgfmt not found. i18n .mo files will not be compiled.")
+endif ()
 
 add_subdirectory(src)
 add_subdirectory(examples)

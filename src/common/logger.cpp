@@ -13,6 +13,9 @@ void Logger::initialize(spdlog::level::level_enum level,
     return;
   }
 
+  // Initialize i18n messages
+  I18nLogMessages::initialize();
+
   try {
     std::vector<spdlog::sink_ptr> sinks;
 

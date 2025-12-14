@@ -19,6 +19,16 @@
 #include <fmt/format.h>
 #endif
 
+/*
+ * \if CHINESE
+ * 包含国际化日志消息头文件
+ * \endif
+ * \if ENGLISH
+ * Include i18n log messages header
+ * \endif
+ */
+#include "common/i18n_log_messages.hpp"
+
 namespace obcx::common {
 
 /**
@@ -143,5 +153,35 @@ private:
 #define OBCX_ERROR(...) obcx::common::Logger::get()->error(__VA_ARGS__)
 #define OBCX_CRITICAL(...) obcx::common::Logger::get()->critical(__VA_ARGS__)
 #endif
+
+/*
+ * \if CHINESE
+ * 国际化日志宏定义
+ * \endif
+ * \if ENGLISH
+ * Internationalized logging macro definitions
+ * \endif
+ */
+#define OBCX_I18N_LOG_IMPL(__level, __key, ...)                                \
+  do {                                                                         \
+    if (obcx::common::Logger::get()->should_log(spdlog::level::__level)) {     \
+      std::string __msg =                                                      \
+          obcx::common::I18nLogMessages::format_message(__key, ##__VA_ARGS__); \
+      obcx::common::Logger::get()->log(spdlog::level::__level, __msg);         \
+    }                                                                          \
+  } while (false)
+
+#define OBCX_I18N_TRACE(__key, ...)                                            \
+  OBCX_I18N_LOG_IMPL(trace, __key, ##__VA_ARGS__)
+#define OBCX_I18N_DEBUG(__key, ...)                                            \
+  OBCX_I18N_LOG_IMPL(debug, __key, ##__VA_ARGS__)
+#define OBCX_I18N_INFO(__key, ...)                                             \
+  OBCX_I18N_LOG_IMPL(info, __key, ##__VA_ARGS__)
+#define OBCX_I18N_WARN(__key, ...)                                             \
+  OBCX_I18N_LOG_IMPL(warn, __key, ##__VA_ARGS__)
+#define OBCX_I18N_ERROR(__key, ...)                                            \
+  OBCX_I18N_LOG_IMPL(err, __key, ##__VA_ARGS__)
+#define OBCX_I18N_CRITICAL(__key, ...)                                         \
+  OBCX_I18N_LOG_IMPL(critical, __key, ##__VA_ARGS__)
 
 } // namespace obcx::common

@@ -1,0 +1,220 @@
+# Chinese translations for OBCX
+# Copyright (C) 2025
+# This file is distributed under the same license as the OBCX package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: OBCX 1.0\n"
+"Language: zh_CN\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Logger initialized successfully"
+msgstr "日志系统初始化成功"
+
+msgid "Logger initialization failed: {}"
+msgstr "日志系统初始化失败: {}"
+
+msgid "Connection established to {}:{}"
+msgstr "连接已建立到 {}:{}"
+
+msgid "Connection failed: {}"
+msgstr "连接失败: {}"
+
+msgid "Connection closed"
+msgstr "连接已关闭"
+
+msgid "HTTP connection will be established through {} proxy {}:{} to {}:{}"
+msgstr "HTTP连接将通过{}代理 {}:{} 建立到 {}:{}"
+
+msgid "Parsing event: {}"
+msgstr "解析事件: {}"
+
+msgid "Unhandled update type in update"
+msgstr "更新中处理的类型未知"
+
+msgid "No update_id field in JSON"
+msgstr "JSON中没有update_id字段"
+
+msgid "Failed to parse event: {}. JSON: {}"
+msgstr "解析事件失败: {}. JSON: {}"
+
+msgid "Successfully parsed event"
+msgstr "事件解析成功"
+
+msgid "Failed to parse event: {}"
+msgstr "事件解析失败: {}"
+
+msgid "Extracted message_id: {}"
+msgstr "提取message_id: {}"
+
+msgid "Extracted user_id: {}"
+msgstr "提取user_id: {}"
+
+msgid "Extracted chat_id: {}"
+msgstr "提取chat_id: {}"
+
+msgid "Extracted message text: {}"
+msgstr "提取消息文本: {}"
+
+msgid "Extracted file_id: {}"
+msgstr "提取file_id: {}"
+
+msgid "Extracted photo file_id: {}"
+msgstr "提取照片file_id: {}"
+
+msgid "Extracted sticker file_id: {}"
+msgstr "提取贴纸file_id: {}"
+
+msgid "Extracted video file_id: {}"
+msgstr "提取视频file_id: {}"
+
+msgid "Extracted animation file_id: {}"
+msgstr "提取动画file_id: {}"
+
+msgid "Extracted document file_id: {}"
+msgstr "提取文档file_id: {}"
+
+msgid "Extracted audio file_id: {}"
+msgstr "提取音频file_id: {}"
+
+msgid "Extracted voice file_id: {}"
+msgstr "提取语音file_id: {}"
+
+msgid "Extracted video_note file_id: {}"
+msgstr "提取视频笔记file_id: {}"
+
+msgid "Chat type: {}"
+msgstr "聊天类型: {}"
+
+msgid "Set group_id: {}"
+msgstr "设置group_id: {}"
+
+msgid "Set private chat"
+msgstr "设置私聊"
+
+msgid "Marked as edit message: message_id={}"
+msgstr "标记为编辑消息: message_id={}"
+
+msgid "Successfully parsed callback query event"
+msgstr "回调查询事件解析成功"
+
+msgid "Failed to parse callback query event: {}"
+msgstr "回调查询事件解析失败: {}"
+
+msgid "Added reply message ID: {}"
+msgstr "添加回复消息ID: {}"
+
+msgid "sendSticker added reply message ID: {}"
+msgstr "sendSticker添加回复消息ID: {}"
+
+msgid "sendVideo added reply message ID: {}"
+msgstr "sendVideo添加回复消息ID: {}"
+
+msgid "sendVideoNote added reply message ID: {}"
+msgstr "sendVideoNote添加回复消息ID: {}"
+
+msgid "sendAudio added reply message ID: {}"
+msgstr "sendAudio添加回复消息ID: {}"
+
+msgid "sendVoice added reply message ID: {}"
+msgstr "sendVoice添加回复消息ID: {}"
+
+msgid "sendDocument added reply message ID: {}"
+msgstr "sendDocument添加回复消息ID: {}"
+
+msgid "Start polling, interval: {}ms"
+msgstr "开始轮询，间隔: {}ms"
+
+msgid "Stop polling"
+msgstr "停止轮询"
+
+msgid "Polling failed: {}"
+msgstr "轮询失败: {}"
+
+msgid "Polling coroutine exited"
+msgstr "轮询协程已退出"
+
+msgid "Received updates: {}"
+msgstr "收到更新: {}"
+
+msgid "Processing {} updates"
+msgstr "处理{}个更新"
+
+msgid "Processing single update: {}"
+msgstr "处理单个更新: {}"
+
+msgid "Dispatching event"
+msgstr "分派事件"
+
+msgid "Failed to parse event from update"
+msgstr "从更新中解析事件失败"
+
+msgid "Event callback not set"
+msgstr "事件回调未设置"
+
+msgid "Sending action: {}"
+msgstr "发送操作: {}"
+
+msgid "API request failed: {}"
+msgstr "API请求失败: {}"
+
+msgid "Download file failed: {}"
+msgstr "下载文件失败: {}"
+
+msgid "Download file content failed: {}"
+msgstr "下载文件内容失败: {}"
+
+msgid "Plugin loaded: {}"
+msgstr "插件已加载: {}"
+
+msgid "Plugin load failed: {}"
+msgstr "插件加载失败: {}"
+
+msgid "Plugin initialized: {}"
+msgstr "插件已初始化: {}"
+
+msgid "Plugin initialization failed: {}"
+msgstr "插件初始化失败: {}"
+
+msgid "Message conversion start"
+msgstr "消息转换开始"
+
+msgid "Message conversion success"
+msgstr "消息转换成功"
+
+msgid "Message conversion failed: {}"
+msgstr "消息转换失败: {}"
+
+msgid "Loading config: {}"
+msgstr "加载配置: {}"
+
+msgid "Config loaded successfully"
+msgstr "配置加载成功"
+
+msgid "Config load failed: {}"
+msgstr "配置加载失败: {}"
+
+msgid "Database connection failed: {}"
+msgstr "数据库连接失败: {}"
+
+msgid "Database query failed: {}"
+msgstr "数据库查询失败: {}"
+
+msgid "Bot started"
+msgstr "机器人已启动"
+
+msgid "Bot stopped"
+msgstr "机器人已停止"
+
+msgid "Bot error: {}"
+msgstr "机器人错误: {}"
+
+msgid "Operation success"
+msgstr "操作成功"
+
+msgid "Operation failed: {}"
+msgstr "操作失败: {}"
+
+msgid "Invalid parameter: {}"
+msgstr "无效参数: {}"
