@@ -55,11 +55,11 @@ public:
    */
   void stop() {
     if (!stopped_) {
-      OBCX_INFO("正在停止 TaskScheduler...");
+      OBCX_I18N_INFO(common::LogMessageKey::TASK_SCHEDULER_STOPPING);
       thread_pool_.stop();
       thread_pool_.join();
       stopped_ = true;
-      OBCX_INFO("TaskScheduler 已停止");
+      OBCX_I18N_INFO(common::LogMessageKey::TASK_SCHEDULER_STOPPED);
     }
   }
 

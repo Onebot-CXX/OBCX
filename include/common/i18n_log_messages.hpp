@@ -113,12 +113,18 @@ enum class LogMessageKey {
 
   // Task scheduler messages
   TASK_SCHEDULER_CREATED,
+  TASK_SCHEDULER_STOPPING,
+  TASK_SCHEDULER_STOPPED,
 
   // Bot initialization messages
   QQBOT_INSTANCE_CREATED,
   QQBOT_STARTING_EVENT_LOOP,
+  QQBOT_EVENT_LOOP_ENDED,
+  QQBOT_REQUESTING_STOP,
   TELEGRAMBOT_INSTANCE_CREATED,
   TELEGRAMBOT_STARTING_EVENT_LOOP,
+  TELEGRAMBOT_EVENT_LOOP_ENDED,
+  TELEGRAMBOT_REQUESTING_STOP,
 
   // Connection type messages
   CONNECTING_WITH_TYPE,
@@ -216,6 +222,7 @@ private:
   static std::string current_locale_;
   static std::string locale_dir_;
   static bool initialized_;
+  static std::locale current_locale_obj_;
 
   static void setup_message_keys();
 };

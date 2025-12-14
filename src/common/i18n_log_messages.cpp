@@ -7,6 +7,7 @@ I18nLogMessages::MessageMap I18nLogMessages::message_keys_;
 std::string I18nLogMessages::current_locale_ = "en_US";
 std::string I18nLogMessages::locale_dir_;
 bool I18nLogMessages::initialized_ = false;
+std::locale I18nLogMessages::current_locale_obj_;
 
 void I18nLogMessages::initialize(const std::string &locale_dir) {
   if (initialized_) {
@@ -15,9 +16,8 @@ void I18nLogMessages::initialize(const std::string &locale_dir) {
 
   // Set locale directory
   if (locale_dir.empty()) {
-    // Try to find the locale directory relative to the executable or use
-    // default
-    locale_dir_ = "locales";
+    // Use build directory for compiled .mo files
+    locale_dir_ = "build/locales";
   } else {
     locale_dir_ = locale_dir;
   }
@@ -27,9 +27,22 @@ void I18nLogMessages::initialize(const std::string &locale_dir) {
 
   // Try to initialize Boost.Locale with the locale directory
   try {
-    std::locale::global(boost::locale::generator().generate(current_locale_));
+    boost::locale::generator gen;
+    gen.add_messages_path(locale_dir_);
+    gen.add_messages_domain("messages");
+
+    // Try with .UTF-8 suffix
+    std::string locale_name = current_locale_;
+    if (locale_name.find(".UTF-8") == std::string::npos &&
+        locale_name.find(".utf8") == std::string::npos) {
+      locale_name += ".UTF-8";
+    }
+
+    current_locale_obj_ = gen(locale_name);
+    std::locale::global(current_locale_obj_);
   } catch (const std::exception &) {
     // Fallback: just use C locale
+    current_locale_obj_ = std::locale::classic();
   }
 
   initialized_ = true;
@@ -43,9 +56,22 @@ void I18nLogMessages::set_locale(const std::string &locale) {
 
   // Try to set Boost.Locale
   try {
-    std::locale::global(boost::locale::generator().generate(locale));
+    boost::locale::generator gen;
+    gen.add_messages_path(locale_dir_);
+    gen.add_messages_domain("messages");
+
+    // Try with .UTF-8 suffix first, then without
+    std::string locale_name = locale;
+    if (locale_name.find(".UTF-8") == std::string::npos &&
+        locale_name.find(".utf8") == std::string::npos) {
+      locale_name += ".UTF-8";
+    }
+
+    current_locale_obj_ = gen(locale_name);
+    std::locale::global(current_locale_obj_);
   } catch (const std::exception &) {
     // Fallback: just update the current_locale_ string
+    current_locale_obj_ = std::locale::classic();
   }
 }
 
@@ -63,25 +89,10 @@ std::string I18nLogMessages::get_message(LogMessageKey key) {
 
   // Try to load translated message from .mo file using Boost.Locale
   try {
-    boost::locale::generator gen;
-    gen.add_messages_path(locale_dir_);
-    gen.add_messages_domain("messages");
-
-    std::locale loc = gen(current_locale_);
-
-    // Create a message facet for translation
-    if (std::has_facet<boost::locale::message_format<char>>(loc)) {
-      const auto &facet =
-          std::use_facet<boost::locale::message_format<char>>(loc);
-      // domain_id 0 is the default domain
-      const char *translated = facet.get(0, "", msg.c_str());
-      if (translated) {
-        return {translated};
-      }
-    }
-
-    return msg;
-  } catch (const std::exception &) {
+    // Use the cached locale object
+    std::string translated = boost::locale::translate(msg).str(current_locale_obj_);
+    return translated;
+  } catch (const std::exception &e) {
     // Fallback: return the original English message
     return msg;
   }
@@ -203,16 +214,28 @@ void I18nLogMessages::setup_message_keys() {
   // Task scheduler messages
   message_keys_[LogMessageKey::TASK_SCHEDULER_CREATED] =
       "TaskScheduler created with thread pool size: {}";
+  message_keys_[LogMessageKey::TASK_SCHEDULER_STOPPING] =
+      "Stopping TaskScheduler...";
+  message_keys_[LogMessageKey::TASK_SCHEDULER_STOPPED] =
+      "TaskScheduler stopped";
 
   // Bot initialization messages
   message_keys_[LogMessageKey::QQBOT_INSTANCE_CREATED] =
       "QQBot instance created, all core components initialized";
   message_keys_[LogMessageKey::QQBOT_STARTING_EVENT_LOOP] =
       "QQBot starting event loop...";
+  message_keys_[LogMessageKey::QQBOT_EVENT_LOOP_ENDED] =
+      "QQBot event loop ended";
+  message_keys_[LogMessageKey::QQBOT_REQUESTING_STOP] =
+      "Requesting QQBot to stop...";
   message_keys_[LogMessageKey::TELEGRAMBOT_INSTANCE_CREATED] =
       "TelegramBot instance created, all core components initialized";
   message_keys_[LogMessageKey::TELEGRAMBOT_STARTING_EVENT_LOOP] =
       "TelegramBot starting event loop...";
+  message_keys_[LogMessageKey::TELEGRAMBOT_EVENT_LOOP_ENDED] =
+      "TelegramBot event loop ended";
+  message_keys_[LogMessageKey::TELEGRAMBOT_REQUESTING_STOP] =
+      "Requesting TelegramBot to stop...";
 
   // Connection type messages
   message_keys_[LogMessageKey::CONNECTING_WITH_TYPE] =

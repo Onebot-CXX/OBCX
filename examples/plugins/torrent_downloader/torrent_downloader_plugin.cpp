@@ -27,12 +27,12 @@ using json = nlohmann::json;
 namespace plugins {
 
 TorrentDownloaderPlugin::TorrentDownloaderPlugin() {
-  OBCX_DEBUG("TorrentDownloaderPlugin constructor called");
+  PLUGIN_DEBUG(get_name(), "TorrentDownloaderPlugin constructor called");
 }
 
 TorrentDownloaderPlugin::~TorrentDownloaderPlugin() {
   shutdown();
-  OBCX_DEBUG("TorrentDownloaderPlugin destructor called");
+  PLUGIN_DEBUG(get_name(), "TorrentDownloaderPlugin destructor called");
 }
 
 std::string TorrentDownloaderPlugin::get_name() const {
@@ -48,10 +48,10 @@ std::string TorrentDownloaderPlugin::get_description() const {
 
 bool TorrentDownloaderPlugin::initialize() {
   try {
-    OBCX_INFO("Initializing Torrent Downloader Plugin (qBittorrent)...");
+    PLUGIN_INFO(get_name(), "Initializing Torrent Downloader Plugin (qBittorrent)...");
 
     if (!load_configuration()) {
-      OBCX_ERROR("Failed to load plugin configuration");
+      PLUGIN_ERROR(get_name(), "Failed to load plugin configuration");
       return false;
     }
 
@@ -70,20 +70,20 @@ bool TorrentDownloaderPlugin::initialize() {
                   -> boost::asio::awaitable<void> {
                 co_await handle_tg_message(bot, event);
               });
-          OBCX_INFO(
+          PLUGIN_INFO(get_name(), 
               "Registered Telegram message callback for Torrent Downloader");
           break;
         }
       }
     } catch (const std::exception &e) {
-      OBCX_ERROR("Failed to register callbacks: {}", e.what());
+      PLUGIN_ERROR(get_name(), "Failed to register callbacks: {}", e.what());
       return false;
     }
 
-    OBCX_INFO("Torrent Downloader Plugin initialized successfully");
+    PLUGIN_INFO(get_name(), "Torrent Downloader Plugin initialized successfully");
     return true;
   } catch (const std::exception &e) {
-    OBCX_ERROR("Exception during Torrent Downloader Plugin initialization: {}",
+    PLUGIN_ERROR(get_name(), "Exception during Torrent Downloader Plugin initialization: {}",
                e.what());
     return false;
   }
@@ -91,14 +91,14 @@ bool TorrentDownloaderPlugin::initialize() {
 
 void TorrentDownloaderPlugin::deinitialize() {
   try {
-    OBCX_INFO("Deinitializing Torrent Downloader Plugin...");
+    PLUGIN_INFO(get_name(), "Deinitializing Torrent Downloader Plugin...");
 
     // Save tasks before shutdown
     save_tasks_to_file();
 
-    OBCX_INFO("Torrent Downloader Plugin deinitialized successfully");
+    PLUGIN_INFO(get_name(), "Torrent Downloader Plugin deinitialized successfully");
   } catch (const std::exception &e) {
-    OBCX_ERROR(
+    PLUGIN_ERROR(get_name(), 
         "Exception during Torrent Downloader Plugin deinitialization: {}",
         e.what());
   }
@@ -106,70 +106,70 @@ void TorrentDownloaderPlugin::deinitialize() {
 
 void TorrentDownloaderPlugin::shutdown() {
   try {
-    OBCX_INFO("Shutting down Torrent Downloader Plugin...");
-    OBCX_INFO("Torrent Downloader Plugin shutdown complete");
+    PLUGIN_INFO(get_name(), "Shutting down Torrent Downloader Plugin...");
+    PLUGIN_INFO(get_name(), "Torrent Downloader Plugin shutdown complete");
   } catch (const std::exception &e) {
-    OBCX_ERROR("Exception during Torrent Downloader Plugin shutdown: {}",
+    PLUGIN_ERROR(get_name(), "Exception during Torrent Downloader Plugin shutdown: {}",
                e.what());
   }
 }
 
 bool TorrentDownloaderPlugin::load_configuration() {
   try {
-    OBCX_INFO("Loading torrent_downloader plugin configuration...");
-    OBCX_INFO("Plugin name from get_name(): '{}'", get_name());
+    PLUGIN_INFO(get_name(), "Loading torrent_downloader plugin configuration...");
+    PLUGIN_INFO(get_name(), "Plugin name from get_name(): '{}'", get_name());
 
     // Debug: Try to get config section directly
     auto config_section = get_config_section("config");
     if (config_section) {
-      OBCX_INFO("Found config section via get_config_section()");
+      PLUGIN_INFO(get_name(), "Found config section via get_config_section()");
     } else {
-      OBCX_WARN("config section not found via get_config_section()");
+      PLUGIN_WARN(get_name(), "config section not found via get_config_section()");
     }
 
     // Debug: Check if plugin config exists
     auto &config_loader = obcx::common::ConfigLoader::instance();
     auto plugin_config = config_loader.get_plugin_config(get_name());
     if (!plugin_config) {
-      OBCX_ERROR("Plugin config section not found for plugin: {}", get_name());
-      OBCX_ERROR("Make sure [plugins.{}] section exists in config file",
+      PLUGIN_ERROR(get_name(), "Plugin config section not found for plugin: {}", get_name());
+      PLUGIN_ERROR(get_name(), "Make sure [plugins.{}] section exists in config file",
                  get_name());
       return false;
     }
-    OBCX_INFO("Plugin config section found, enabled={}",
+    PLUGIN_INFO(get_name(), "Plugin config section found, enabled={}",
               plugin_config->enabled);
 
     // qBittorrent settings
     auto qbt_host_opt = get_config_value<std::string>("qbt_host");
     config_.qbt_host = qbt_host_opt.value_or("127.0.0.1");
-    OBCX_INFO("  qbt_host: {} ({})", config_.qbt_host,
+    PLUGIN_INFO(get_name(), "  qbt_host: {} ({})", config_.qbt_host,
               qbt_host_opt.has_value() ? "from config" : "default");
 
     auto qbt_port_opt = get_config_value<int64_t>("qbt_port");
     config_.qbt_port = static_cast<int>(qbt_port_opt.value_or(8080));
-    OBCX_INFO("  qbt_port: {} ({})", config_.qbt_port,
+    PLUGIN_INFO(get_name(), "  qbt_port: {} ({})", config_.qbt_port,
               qbt_port_opt.has_value() ? "from config" : "default");
 
     auto qbt_use_ssl_opt = get_config_value<bool>("qbt_use_ssl");
     config_.qbt_use_ssl = qbt_use_ssl_opt.value_or(false);
-    OBCX_INFO("  qbt_use_ssl: {} ({})", config_.qbt_use_ssl,
+    PLUGIN_INFO(get_name(), "  qbt_use_ssl: {} ({})", config_.qbt_use_ssl,
               qbt_use_ssl_opt.has_value() ? "from config" : "default");
 
     auto qbt_username_opt = get_config_value<std::string>("qbt_username");
     config_.qbt_username = qbt_username_opt.value_or("admin");
-    OBCX_INFO("  qbt_username: {} ({})", config_.qbt_username,
+    PLUGIN_INFO(get_name(), "  qbt_username: {} ({})", config_.qbt_username,
               qbt_username_opt.has_value() ? "from config" : "default");
 
     auto qbt_password_opt = get_config_value<std::string>("qbt_password");
     config_.qbt_password = qbt_password_opt.value_or("");
-    OBCX_INFO("  qbt_password: {} ({})",
+    PLUGIN_INFO(get_name(), "  qbt_password: {} ({})",
               config_.qbt_password.empty() ? "<empty>" : "***",
               qbt_password_opt.has_value() ? "from config" : "default");
 
     auto qbt_download_path_opt =
         get_config_value<std::string>("qbt_download_path");
     config_.qbt_download_path = qbt_download_path_opt.value_or("");
-    OBCX_INFO("  qbt_download_path: {} ({})",
+    PLUGIN_INFO(get_name(), "  qbt_download_path: {} ({})",
               config_.qbt_download_path.empty() ? "<default>"
                                                 : config_.qbt_download_path,
               qbt_download_path_opt.has_value() ? "from config" : "default");
@@ -177,17 +177,17 @@ bool TorrentDownloaderPlugin::load_configuration() {
     // rclone settings
     auto rclone_remote_opt = get_config_value<std::string>("rclone_remote");
     config_.rclone_remote = rclone_remote_opt.value_or("gdrive:");
-    OBCX_INFO("  rclone_remote: {} ({})", config_.rclone_remote,
+    PLUGIN_INFO(get_name(), "  rclone_remote: {} ({})", config_.rclone_remote,
               rclone_remote_opt.has_value() ? "from config" : "default");
 
     auto rclone_path_opt = get_config_value<std::string>("rclone_path");
     config_.rclone_path = rclone_path_opt.value_or("Torrents");
-    OBCX_INFO("  rclone_path: {} ({})", config_.rclone_path,
+    PLUGIN_INFO(get_name(), "  rclone_path: {} ({})", config_.rclone_path,
               rclone_path_opt.has_value() ? "from config" : "default");
 
     auto rclone_proxy_opt = get_config_value<std::string>("rclone_proxy");
     config_.rclone_proxy = rclone_proxy_opt.value_or("");
-    OBCX_INFO("  rclone_proxy: {} ({})",
+    PLUGIN_INFO(get_name(), "  rclone_proxy: {} ({})",
               config_.rclone_proxy.empty() ? "<none>" : config_.rclone_proxy,
               rclone_proxy_opt.has_value() ? "from config" : "default");
 
@@ -196,7 +196,7 @@ bool TorrentDownloaderPlugin::load_configuration() {
         get_config_value<int64_t>("max_concurrent_downloads");
     config_.max_concurrent_downloads =
         static_cast<int>(max_downloads_opt.value_or(3));
-    OBCX_INFO("  max_concurrent_downloads: {} ({})",
+    PLUGIN_INFO(get_name(), "  max_concurrent_downloads: {} ({})",
               config_.max_concurrent_downloads,
               max_downloads_opt.has_value() ? "from config" : "default");
 
@@ -204,7 +204,7 @@ bool TorrentDownloaderPlugin::load_configuration() {
         get_config_value<int64_t>("progress_check_interval");
     config_.progress_check_interval =
         static_cast<int>(check_interval_opt.value_or(5));
-    OBCX_INFO("  progress_check_interval: {} ({})",
+    PLUGIN_INFO(get_name(), "  progress_check_interval: {} ({})",
               config_.progress_check_interval,
               check_interval_opt.has_value() ? "from config" : "default");
 
@@ -212,10 +212,10 @@ bool TorrentDownloaderPlugin::load_configuration() {
     rclone_client_ = std::make_unique<RcloneClient>(
         config_.rclone_remote, config_.rclone_path, config_.rclone_proxy);
 
-    OBCX_INFO("Configuration loaded successfully");
+    PLUGIN_INFO(get_name(), "Configuration loaded successfully");
     return true;
   } catch (const std::exception &e) {
-    OBCX_ERROR("Failed to load configuration: {}", e.what());
+    PLUGIN_ERROR(get_name(), "Failed to load configuration: {}", e.what());
     return false;
   }
 }
@@ -264,7 +264,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::handle_tg_message(
     // Check for magnet link
     std::string magnet_link = extract_magnet_link(event.raw_message);
     if (!magnet_link.empty()) {
-      OBCX_INFO("Detected magnet link in message from chat {}", chat_id);
+      PLUGIN_INFO(get_name(), "Detected magnet link in message from chat {}", chat_id);
 
       obcx::common::Message reply = {
           {{.type = {"text"}, .data = {{"text", "开始下载磁力链接..."}}}}};
@@ -286,7 +286,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::handle_tg_message(
         if (it != segment.data.end()) {
           std::string filename = it->get<std::string>();
           if (filename.ends_with(".torrent")) {
-            OBCX_INFO("Detected torrent file in message from chat {}", chat_id);
+            PLUGIN_INFO(get_name(), "Detected torrent file in message from chat {}", chat_id);
 
             obcx::common::Message reply = {
                 {{.type = {"text"},
@@ -313,7 +313,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::handle_tg_message(
     }
 
   } catch (const std::exception &e) {
-    OBCX_ERROR("Error handling torrent message: {}", e.what());
+    PLUGIN_ERROR(get_name(), "Error handling torrent message: {}", e.what());
     error_msg = e.what();
     has_error = true;
   }
@@ -396,11 +396,11 @@ TorrentDownloaderPlugin::download_torrent_file(obcx::core::TGBot &bot,
     file.write(file_content.data(), file_content.size());
     file.close();
 
-    OBCX_INFO("Downloaded torrent file to {}", temp_path);
+    PLUGIN_INFO(get_name(), "Downloaded torrent file to {}", temp_path);
     co_return temp_path;
 
   } catch (const std::exception &e) {
-    OBCX_ERROR("Failed to download torrent file: {}", e.what());
+    PLUGIN_ERROR(get_name(), "Failed to download torrent file: {}", e.what());
     throw std::runtime_error(fmt::format("下载种子文件失败: {}", e.what()));
   }
 }
@@ -438,7 +438,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::start_download(
 
     // Check if torrent already existed - if so, reject the task
     if (add_result.already_existed) {
-      OBCX_WARN(
+      PLUGIN_WARN(get_name(), 
           "Torrent already exists in qBittorrent (hash: {}), rejecting task",
           add_result.hash);
       error_text = fmt::format(
@@ -465,7 +465,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::start_download(
       active_downloads_[task_id] = task;
       save_tasks_to_file(); // Save new task
 
-      OBCX_INFO("Started download task {} with hash {}", task_id,
+      PLUGIN_INFO(get_name(), "Started download task {} with hash {}", task_id,
                 add_result.hash);
 
       // Monitor download in background
@@ -478,7 +478,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::start_download(
     }
 
   } catch (const std::exception &e) {
-    OBCX_ERROR("Error starting download: {}", e.what());
+    PLUGIN_ERROR(get_name(), "Error starting download: {}", e.what());
     error_text = fmt::format("启动下载失败: {}", e.what());
     has_error = true;
   }
@@ -546,7 +546,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::monitor_download(
       // Check if completed
       if (task.state == "uploading" || task.state == "pausedUP" ||
           task.progress_percent >= 100) {
-        OBCX_INFO("Download task {} completed", task_id);
+        PLUGIN_INFO(get_name(), "Download task {} completed", task_id);
         break;
       }
 
@@ -573,7 +573,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::monitor_download(
     task.save_path = props["save_path"].get<std::string>();
     save_tasks_to_file(); // Save save_path
 
-    OBCX_INFO("Using save_path for upload: {}", task.save_path);
+    PLUGIN_INFO(get_name(), "Using save_path for upload: {}", task.save_path);
 
     std::string download_path = task.save_path;
 
@@ -587,7 +587,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::monitor_download(
       upload_success = true;
     } catch (const std::exception &upload_error) {
       // Upload failed - save to failed_downloads for retry
-      OBCX_ERROR("Upload failed for task {}: {}", task_id, upload_error.what());
+      PLUGIN_ERROR(get_name(), "Upload failed for task {}: {}", task_id, upload_error.what());
       error_text = fmt::format("上传失败: {}\n使用 /reupload {} 重试",
                                upload_error.what(), task_id);
       task.error_message = upload_error.what();
@@ -607,7 +607,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::monitor_download(
 
       // Only delete if torrent was added by us (not pre-existing)
       if (task.torrent_already_existed) {
-        OBCX_INFO("Torrent {} already existed before we added it, NOT deleting "
+        PLUGIN_INFO(get_name(), "Torrent {} already existed before we added it, NOT deleting "
                   "files or task",
                   hash);
       } else {
@@ -615,9 +615,9 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::monitor_download(
         if (is_path_safe_to_delete(download_path)) {
           // Delete torrent and files from qBittorrent
           co_await qbt_client.delete_torrent(cookie, hash, true);
-          OBCX_INFO("Deleted torrent {} and its files", hash);
+          PLUGIN_INFO(get_name(), "Deleted torrent {} and its files", hash);
         } else {
-          OBCX_ERROR("Path {} is not safe to delete, skipping deletion",
+          PLUGIN_ERROR(get_name(), "Path {} is not safe to delete, skipping deletion",
                      download_path);
         }
       }
@@ -629,7 +629,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::monitor_download(
 
   } catch (const std::exception &e) {
     // Download error (before completion)
-    OBCX_ERROR("Error during download {}: {}", task_id, e.what());
+    PLUGIN_ERROR(get_name(), "Error during download {}: {}", task_id, e.what());
     error_text = fmt::format("下载错误: {}", e.what());
     has_error = true;
     active_downloads_.erase(task_id);
@@ -648,13 +648,13 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::monitor_download(
     if (!task.download_completed) {
       try {
         co_await qbt_client.delete_torrent(cookie, hash, true);
-        OBCX_INFO("Cleaned up failed download torrent {}", hash);
+        PLUGIN_INFO(get_name(), "Cleaned up failed download torrent {}", hash);
       } catch (const std::exception &cleanup_error) {
-        OBCX_WARN("Failed to cleanup torrent {}: {}", hash,
+        PLUGIN_WARN(get_name(), "Failed to cleanup torrent {}: {}", hash,
                   cleanup_error.what());
       }
     } else {
-      OBCX_INFO("Keeping files for task {} for potential reupload", task_id);
+      PLUGIN_INFO(get_name(), "Keeping files for task {} for potential reupload", task_id);
     }
   }
 
@@ -694,7 +694,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::handle_reupload_command(
                                   ? (task.save_path + "/" + task.filename)
                                   : task.save_path;
 
-  OBCX_INFO("Reupload using path: {}", download_path);
+  PLUGIN_INFO(get_name(), "Reupload using path: {}", download_path);
 
   std::string error_text;
   bool success = false;
@@ -714,7 +714,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::handle_reupload_command(
 
     // Only delete if torrent was added by us (not pre-existing)
     if (task.torrent_already_existed) {
-      OBCX_INFO("Torrent {} already existed, NOT deleting files or task after "
+      PLUGIN_INFO(get_name(), "Torrent {} already existed, NOT deleting files or task after "
                 "reupload",
                 task.qbt_hash);
     } else {
@@ -726,9 +726,9 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::handle_reupload_command(
                                      config_.qbt_password);
         std::string cookie = co_await qbt_client.login();
         co_await qbt_client.delete_torrent(cookie, task.qbt_hash, true);
-        OBCX_INFO("Deleted torrent {} and files after reupload", task.qbt_hash);
+        PLUGIN_INFO(get_name(), "Deleted torrent {} and files after reupload", task.qbt_hash);
       } else {
-        OBCX_ERROR("Path {} is not safe to delete, skipping deletion",
+        PLUGIN_ERROR(get_name(), "Path {} is not safe to delete, skipping deletion",
                    download_path);
       }
     }
@@ -739,7 +739,7 @@ boost::asio::awaitable<void> TorrentDownloaderPlugin::handle_reupload_command(
     success = true;
 
   } catch (const std::exception &e) {
-    OBCX_ERROR("Reupload failed for task {}: {}", task_id, e.what());
+    PLUGIN_ERROR(get_name(), "Reupload failed for task {}: {}", task_id, e.what());
     error_text = fmt::format("重新上传失败: {}\n稍后可再次尝试 /reupload {}",
                              e.what(), task_id);
     task.error_message = e.what(); // Update error message
@@ -929,13 +929,13 @@ void TorrentDownloaderPlugin::save_tasks_to_file() {
     if (file.is_open()) {
       file << j.dump(2);
       file.close();
-      OBCX_DEBUG("Tasks saved to {}", get_tasks_file_path());
+      PLUGIN_DEBUG(get_name(), "Tasks saved to {}", get_tasks_file_path());
     } else {
-      OBCX_ERROR("Failed to open tasks file for writing: {}",
+      PLUGIN_ERROR(get_name(), "Failed to open tasks file for writing: {}",
                  get_tasks_file_path());
     }
   } catch (const std::exception &e) {
-    OBCX_ERROR("Failed to save tasks: {}", e.what());
+    PLUGIN_ERROR(get_name(), "Failed to save tasks: {}", e.what());
   }
 }
 
@@ -944,13 +944,13 @@ void TorrentDownloaderPlugin::load_tasks_from_file() {
     std::string file_path = get_tasks_file_path();
 
     if (!std::filesystem::exists(file_path)) {
-      OBCX_INFO("No saved tasks file found at {}", file_path);
+      PLUGIN_INFO(get_name(), "No saved tasks file found at {}", file_path);
       return;
     }
 
     std::ifstream file(file_path);
     if (!file.is_open()) {
-      OBCX_ERROR("Failed to open tasks file for reading: {}", file_path);
+      PLUGIN_ERROR(get_name(), "Failed to open tasks file for reading: {}", file_path);
       return;
     }
 
@@ -978,7 +978,7 @@ void TorrentDownloaderPlugin::load_tasks_from_file() {
 
         active_downloads_[task.task_id] = task;
       }
-      OBCX_INFO("Loaded {} active downloads", active_downloads_.size());
+      PLUGIN_INFO(get_name(), "Loaded {} active downloads", active_downloads_.size());
     }
 
     // Load failed downloads
@@ -1001,17 +1001,17 @@ void TorrentDownloaderPlugin::load_tasks_from_file() {
 
         failed_downloads_[task.task_id] = task;
       }
-      OBCX_INFO("Loaded {} failed downloads", failed_downloads_.size());
+      PLUGIN_INFO(get_name(), "Loaded {} failed downloads", failed_downloads_.size());
     }
 
     // Load counter
     if (j.contains("download_counter")) {
       download_counter_ = j["download_counter"].get<int>();
-      OBCX_INFO("Loaded download counter: {}", download_counter_);
+      PLUGIN_INFO(get_name(), "Loaded download counter: {}", download_counter_);
     }
 
   } catch (const std::exception &e) {
-    OBCX_ERROR("Failed to load tasks: {}", e.what());
+    PLUGIN_ERROR(get_name(), "Failed to load tasks: {}", e.what());
   }
 }
 
@@ -1037,13 +1037,13 @@ bool TorrentDownloaderPlugin::is_path_safe_to_delete(
     bool is_safe = path_str.find(download_path_str) == 0;
 
     if (!is_safe) {
-      OBCX_WARN("Path {} is NOT under download path {}, refusing to delete",
+      PLUGIN_WARN(get_name(), "Path {} is NOT under download path {}, refusing to delete",
                 path_str, download_path_str);
     }
 
     return is_safe;
   } catch (const std::exception &e) {
-    OBCX_ERROR("Error validating path {}: {}", path, e.what());
+    PLUGIN_ERROR(get_name(), "Error validating path {}: {}", path, e.what());
     return false; // Fail-safe: don't delete if we can't verify
   }
 }

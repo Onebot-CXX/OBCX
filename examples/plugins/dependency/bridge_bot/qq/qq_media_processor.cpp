@@ -41,7 +41,7 @@ auto QQMediaProcessor::convert_qq_segment_to_telegram(
       co_return segment;
     }
   } catch (const std::exception &e) {
-    OBCX_ERROR("转换QQ消息段失败: {}", e.what());
+    PLUGIN_ERROR("qq_to_tg", "转换QQ消息段失败: {}", e.what());
     co_return std::nullopt;
   }
 }
@@ -57,7 +57,7 @@ auto QQMediaProcessor::process_image_segment(
   std::string file_name = segment.data.value("file", "");
   std::string url = segment.data.value("url", "");
 
-  OBCX_DEBUG("处理QQ图片: file={}, url={}", file_name, url);
+  PLUGIN_DEBUG("qq_to_tg", "处理QQ图片: file={}, url={}", file_name, url);
 
   co_return converted;
 }
@@ -67,7 +67,7 @@ auto QQMediaProcessor::process_record_segment(
     -> boost::asio::awaitable<obcx::common::MessageSegment> {
 
   obcx::common::MessageSegment converted = segment;
-  OBCX_DEBUG("转发QQ语音文件: {}", segment.data.value("file", "unknown"));
+  PLUGIN_DEBUG("qq_to_tg", "转发QQ语音文件: {}", segment.data.value("file", "unknown"));
   co_return converted;
 }
 
@@ -76,7 +76,7 @@ auto QQMediaProcessor::process_video_segment(
     -> boost::asio::awaitable<obcx::common::MessageSegment> {
 
   obcx::common::MessageSegment converted = segment;
-  OBCX_DEBUG("转发QQ视频文件: {}", segment.data.value("file", "unknown"));
+  PLUGIN_DEBUG("qq_to_tg", "转发QQ视频文件: {}", segment.data.value("file", "unknown"));
   co_return converted;
 }
 
@@ -86,7 +86,7 @@ auto QQMediaProcessor::process_file_segment(
 
   obcx::common::MessageSegment converted = segment;
   converted.type = "document";
-  OBCX_DEBUG("转发QQ文件: {}", segment.data.value("file", "unknown"));
+  PLUGIN_DEBUG("qq_to_tg", "转发QQ文件: {}", segment.data.value("file", "unknown"));
   co_return converted;
 }
 
@@ -98,7 +98,7 @@ auto QQMediaProcessor::process_face_segment(
   converted.type = "text";
   std::string face_id = segment.data.value("id", "0");
   converted.data["text"] = fmt::format("[QQ表情:{}]", face_id);
-  OBCX_DEBUG("转换QQ表情为文本提示: face_id={}", face_id);
+  PLUGIN_DEBUG("qq_to_tg", "转换QQ表情为文本提示: face_id={}", face_id);
   co_return converted;
 }
 
@@ -110,7 +110,7 @@ auto QQMediaProcessor::process_at_segment(
   converted.type = "text";
   std::string qq_user_id = segment.data.value("qq", "unknown");
   converted.data["text"] = fmt::format("[@{}] ", qq_user_id);
-  OBCX_DEBUG("转换QQ@消息: {}", qq_user_id);
+  PLUGIN_DEBUG("qq_to_tg", "转换QQ@消息: {}", qq_user_id);
   co_return converted;
 }
 
@@ -121,7 +121,7 @@ auto QQMediaProcessor::process_shake_segment(
   obcx::common::MessageSegment converted;
   converted.type = "text";
   converted.data["text"] = "[戳一戳]";
-  OBCX_DEBUG("转换QQ戳一戳为文本提示");
+  PLUGIN_DEBUG("qq_to_tg", "转换QQ戳一戳为文本提示");
   co_return converted;
 }
 
@@ -133,7 +133,7 @@ auto QQMediaProcessor::process_music_segment(
   converted.type = "text";
   std::string title = segment.data.value("title", "未知音乐");
   converted.data["text"] = fmt::format("[音乐分享: {}]", title);
-  OBCX_DEBUG("转换QQ音乐分享为文本: title={}", title);
+  PLUGIN_DEBUG("qq_to_tg", "转换QQ音乐分享为文本: title={}", title);
   co_return converted;
 }
 
@@ -146,7 +146,7 @@ auto QQMediaProcessor::process_share_segment(
   std::string url = segment.data.value("url", "");
   std::string title = segment.data.value("title", "链接分享");
   converted.data["text"] = fmt::format("[{}]\t{}", title, url);
-  OBCX_DEBUG("转换QQ链接分享为文本: title={}, url={}", title, url);
+  PLUGIN_DEBUG("qq_to_tg", "转换QQ链接分享为文本: title={}, url={}", title, url);
   co_return converted;
 }
 
@@ -162,14 +162,14 @@ auto QQMediaProcessor::process_json_segment(
     if (!json_data.empty()) {
       std::string parsed_info = parse_miniapp_json(json_data);
       converted.data["text"] = parsed_info;
-      OBCX_DEBUG("转换QQ小程序JSON: {}", parsed_info);
+      PLUGIN_DEBUG("qq_to_tg", "转换QQ小程序JSON: {}", parsed_info);
     } else {
       converted.data["text"] = "📱 [小程序-无数据]";
-      OBCX_DEBUG("QQ小程序JSON消息无数据");
+      PLUGIN_DEBUG("qq_to_tg", "QQ小程序JSON消息无数据");
     }
   } catch (const std::exception &e) {
     converted.data["text"] = "📱 [小程序解析错误]";
-    OBCX_ERROR("处理QQ小程序JSON时出错: {}", e.what());
+    PLUGIN_ERROR("qq_to_tg", "处理QQ小程序JSON时出错: {}", e.what());
   }
 
   co_return converted;
@@ -186,10 +186,10 @@ auto QQMediaProcessor::process_app_segment(
     std::string title = segment.data.value("title", "应用分享");
     std::string url = segment.data.value("url", "");
     converted.data["text"] = fmt::format("📱 [{}]\t{}", title, url);
-    OBCX_DEBUG("转换QQ应用分享: title={}", title);
+    PLUGIN_DEBUG("qq_to_tg", "转换QQ应用分享: title={}", title);
   } catch (const std::exception &e) {
     converted.data["text"] = "📱 [应用分享解析错误]";
-    OBCX_ERROR("处理QQ应用分享时出错: {}", e.what());
+    PLUGIN_ERROR("qq_to_tg", "处理QQ应用分享时出错: {}", e.what());
   }
 
   co_return converted;
@@ -202,7 +202,7 @@ auto QQMediaProcessor::process_ark_segment(
   obcx::common::MessageSegment converted;
   converted.type = "text";
   converted.data["text"] = "📋 [ARK卡片消息]";
-  OBCX_DEBUG("转换QQ ARK卡片为文本提示");
+  PLUGIN_DEBUG("qq_to_tg", "转换QQ ARK卡片为文本提示");
   co_return converted;
 }
 
@@ -213,7 +213,7 @@ auto QQMediaProcessor::parse_miniapp_json(const std::string &json_data)
     // 这里应该包含小程序JSON解析逻辑，但为了简化先返回基本信息
     return "📱 [小程序]";
   } catch (const std::exception &e) {
-    OBCX_ERROR("解析小程序JSON失败: {}", e.what());
+    PLUGIN_ERROR("qq_to_tg", "解析小程序JSON失败: {}", e.what());
     return "📱 [小程序解析失败]";
   }
 }

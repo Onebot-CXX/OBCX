@@ -11,13 +11,13 @@ namespace obcx::storage {
 
 DatabaseManager::DatabaseManager(const std::string &db_path)
     : db_path_(db_path), db_(nullptr) {
-  OBCX_DEBUG("DatabaseManager constructed with path: {}", db_path_);
+  PLUGIN_DEBUG("bridge", "DatabaseManager constructed with path: {}", db_path_);
 }
 
 DatabaseManager::~DatabaseManager() {
   if (db_) {
     sqlite3_close(db_);
-    OBCX_DEBUG("Database closed");
+    PLUGIN_DEBUG("bridge", "Database closed");
   }
 }
 
@@ -26,11 +26,11 @@ bool DatabaseManager::initialize() {
 
   int rc = sqlite3_open(db_path_.c_str(), &db_);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Cannot open database: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Cannot open database: {}", sqlite3_errmsg(db_));
     return false;
   }
 
-  OBCX_INFO("Database opened successfully: {}", db_path_);
+  PLUGIN_INFO("bridge", "Database opened successfully: {}", db_path_);
 
   // 启用外键约束
   if (!execute_sql("PRAGMA foreign_keys = ON;")) {
@@ -221,7 +221,7 @@ bool DatabaseManager::create_tables() {
     return false;
   }
 
-  OBCX_INFO("Database tables created successfully");
+  PLUGIN_INFO("bridge", "Database tables created successfully");
   return true;
 }
 
@@ -230,7 +230,7 @@ bool DatabaseManager::execute_sql(const std::string &sql) {
   int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &error_msg);
 
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("SQL error: {}", error_msg);
+    PLUGIN_ERROR("bridge", "SQL error: {}", error_msg);
     sqlite3_free(error_msg);
     return false;
   }
@@ -251,7 +251,7 @@ bool DatabaseManager::save_message(const MessageInfo &message_info) {
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare statement: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to prepare statement: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -293,11 +293,11 @@ bool DatabaseManager::save_message(const MessageInfo &message_info) {
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to insert message: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to insert message: {}", sqlite3_errmsg(db_));
     return false;
   }
 
-  OBCX_DEBUG("Message saved: {}:{}", message_info.platform,
+  PLUGIN_DEBUG("bridge", "Message saved: {}:{}", message_info.platform,
              message_info.message_id);
   return true;
 }
@@ -315,7 +315,7 @@ std::optional<MessageInfo> DatabaseManager::get_message(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare statement: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to prepare statement: {}", sqlite3_errmsg(db_));
     return std::nullopt;
   }
 
@@ -384,7 +384,7 @@ bool DatabaseManager::update_message_forwarding(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare statement: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to prepare statement: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -397,11 +397,11 @@ bool DatabaseManager::update_message_forwarding(
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to update message forwarding: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to update message forwarding: {}", sqlite3_errmsg(db_));
     return false;
   }
 
-  OBCX_DEBUG("Message forwarding updated: {}:{} -> {}:{}", platform, message_id,
+  PLUGIN_DEBUG("bridge", "Message forwarding updated: {}:{} -> {}:{}", platform, message_id,
              forwarded_to_platform, forwarded_message_id);
   return true;
 }
@@ -418,7 +418,7 @@ bool DatabaseManager::save_or_update_user(const UserInfo &user_info) {
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare statement: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to prepare statement: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -435,11 +435,11 @@ bool DatabaseManager::save_or_update_user(const UserInfo &user_info) {
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to save user: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to save user: {}", sqlite3_errmsg(db_));
     return false;
   }
 
-  OBCX_DEBUG("User saved: {}:{}:{}", user_info.platform, user_info.user_id,
+  PLUGIN_DEBUG("bridge", "User saved: {}:{}:{}", user_info.platform, user_info.user_id,
              user_info.group_id);
   return true;
 }
@@ -457,7 +457,7 @@ std::optional<UserInfo> DatabaseManager::get_user(const std::string &platform,
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare statement: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to prepare statement: {}", sqlite3_errmsg(db_));
     return std::nullopt;
   }
 
@@ -606,13 +606,13 @@ bool DatabaseManager::add_message_mapping(const MessageMapping &mapping) {
 
   // 验证消息ID不为空
   if (mapping.source_message_id.empty() || mapping.target_message_id.empty()) {
-    OBCX_ERROR(
+    PLUGIN_ERROR("bridge", 
         "Invalid message mapping - empty message IDs: source={}, target={}",
         mapping.source_message_id, mapping.target_message_id);
     return false;
   }
 
-  OBCX_DEBUG("Adding message mapping: {}:{} -> {}:{}", mapping.source_platform,
+  PLUGIN_DEBUG("bridge", "Adding message mapping: {}:{} -> {}:{}", mapping.source_platform,
              mapping.source_message_id, mapping.target_platform,
              mapping.target_message_id);
 
@@ -625,7 +625,7 @@ bool DatabaseManager::add_message_mapping(const MessageMapping &mapping) {
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare statement: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to prepare statement: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -642,11 +642,11 @@ bool DatabaseManager::add_message_mapping(const MessageMapping &mapping) {
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to add message mapping: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to add message mapping: {}", sqlite3_errmsg(db_));
     return false;
   }
 
-  OBCX_DEBUG("Message mapping added: {}:{} -> {}:{}", mapping.source_platform,
+  PLUGIN_DEBUG("bridge", "Message mapping added: {}:{} -> {}:{}", mapping.source_platform,
              mapping.source_message_id, mapping.target_platform,
              mapping.target_message_id);
   return true;
@@ -659,12 +659,12 @@ std::optional<std::string> DatabaseManager::get_target_message_id(
 
   // 验证参数不为空
   if (source_message_id.empty()) {
-    OBCX_DEBUG("Empty source message ID for query: {}:{} -> {}",
+    PLUGIN_DEBUG("bridge", "Empty source message ID for query: {}:{} -> {}",
                source_platform, source_message_id, target_platform);
     return std::nullopt;
   }
 
-  OBCX_DEBUG("Querying target message ID: {}:{} -> {}", source_platform,
+  PLUGIN_DEBUG("bridge", "Querying target message ID: {}:{} -> {}", source_platform,
              source_message_id, target_platform);
 
   const std::string sql = R"(
@@ -675,7 +675,7 @@ std::optional<std::string> DatabaseManager::get_target_message_id(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare statement: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to prepare statement: {}", sqlite3_errmsg(db_));
     return std::nullopt;
   }
 
@@ -688,12 +688,12 @@ std::optional<std::string> DatabaseManager::get_target_message_id(
     std::string result =
         reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
     sqlite3_finalize(stmt);
-    OBCX_DEBUG("Found target message ID: {}", result);
+    PLUGIN_DEBUG("bridge", "Found target message ID: {}", result);
     return result;
   }
 
   sqlite3_finalize(stmt);
-  OBCX_DEBUG("No target message ID found");
+  PLUGIN_DEBUG("bridge", "No target message ID found");
   return std::nullopt;
 }
 
@@ -704,12 +704,12 @@ std::optional<std::string> DatabaseManager::get_source_message_id(
 
   // 验证参数不为空
   if (target_message_id.empty()) {
-    OBCX_DEBUG("Empty target message ID for query: {}:{} <- {}",
+    PLUGIN_DEBUG("bridge", "Empty target message ID for query: {}:{} <- {}",
                target_platform, target_message_id, source_platform);
     return std::nullopt;
   }
 
-  OBCX_DEBUG("Querying source message ID: {}:{} <- {}", target_platform,
+  PLUGIN_DEBUG("bridge", "Querying source message ID: {}:{} <- {}", target_platform,
              target_message_id, source_platform);
 
   const std::string sql = R"(
@@ -720,7 +720,7 @@ std::optional<std::string> DatabaseManager::get_source_message_id(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare statement: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to prepare statement: {}", sqlite3_errmsg(db_));
     return std::nullopt;
   }
 
@@ -733,12 +733,12 @@ std::optional<std::string> DatabaseManager::get_source_message_id(
     std::string result =
         reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
     sqlite3_finalize(stmt);
-    OBCX_DEBUG("Found source message ID: {}", result);
+    PLUGIN_DEBUG("bridge", "Found source message ID: {}", result);
     return result;
   }
 
   sqlite3_finalize(stmt);
-  OBCX_DEBUG("No source message ID found");
+  PLUGIN_DEBUG("bridge", "No source message ID found");
   return std::nullopt;
 }
 
@@ -755,7 +755,7 @@ bool DatabaseManager::delete_message_mapping(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare delete statement: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to prepare delete statement: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -767,11 +767,11 @@ bool DatabaseManager::delete_message_mapping(
   sqlite3_finalize(stmt);
 
   if (rc == SQLITE_DONE) {
-    OBCX_DEBUG("消息映射删除成功: {}:{} -> {}", source_platform,
+    PLUGIN_DEBUG("bridge", "消息映射删除成功: {}:{} -> {}", source_platform,
                source_message_id, target_platform);
     return true;
   } else {
-    OBCX_ERROR("Failed to delete message mapping: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to delete message mapping: {}", sqlite3_errmsg(db_));
     return false;
   }
 }
@@ -791,7 +791,7 @@ bool DatabaseManager::update_message_mapping(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare update statement: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to prepare update statement: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -804,11 +804,11 @@ bool DatabaseManager::update_message_mapping(
   sqlite3_finalize(stmt);
 
   if (rc == SQLITE_DONE) {
-    OBCX_DEBUG("消息映射更新成功: {}:{} -> {}:{}", source_platform,
+    PLUGIN_DEBUG("bridge", "消息映射更新成功: {}:{} -> {}:{}", source_platform,
                source_message_id, target_platform, new_target_message_id);
     return true;
   } else {
-    OBCX_ERROR("Failed to update message mapping: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to update message mapping: {}", sqlite3_errmsg(db_));
     return false;
   }
 }
@@ -930,7 +930,7 @@ bool DatabaseManager::save_sticker_cache(const StickerCacheInfo &cache_info) {
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
 
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare save sticker cache statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare save sticker cache statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -990,11 +990,11 @@ bool DatabaseManager::save_sticker_cache(const StickerCacheInfo &cache_info) {
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to save sticker cache: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to save sticker cache: {}", sqlite3_errmsg(db_));
     return false;
   }
 
-  OBCX_DEBUG("Sticker cache saved successfully: {} - {}", cache_info.platform,
+  PLUGIN_DEBUG("bridge", "Sticker cache saved successfully: {} - {}", cache_info.platform,
              cache_info.sticker_hash);
   return true;
 }
@@ -1015,7 +1015,7 @@ std::optional<StickerCacheInfo> DatabaseManager::get_sticker_cache(
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
 
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare get sticker cache statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare get sticker cache statement: {}",
                sqlite3_errmsg(db_));
     return std::nullopt;
   }
@@ -1080,7 +1080,7 @@ std::optional<StickerCacheInfo> DatabaseManager::get_sticker_cache(
 
   sqlite3_finalize(stmt);
 
-  OBCX_DEBUG("Sticker cache found: {} - {}", platform, sticker_hash);
+  PLUGIN_DEBUG("bridge", "Sticker cache found: {} - {}", platform, sticker_hash);
   return cache_info;
 }
 
@@ -1098,7 +1098,7 @@ bool DatabaseManager::update_sticker_last_used(
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
 
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare update sticker last used statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare update sticker last used statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1112,7 +1112,7 @@ bool DatabaseManager::update_sticker_last_used(
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to update sticker last used: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to update sticker last used: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -1135,7 +1135,7 @@ auto DatabaseManager::update_sticker_conversion(
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
 
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare update sticker conversion statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare update sticker conversion statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1155,7 +1155,7 @@ auto DatabaseManager::update_sticker_conversion(
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to update sticker conversion: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to update sticker conversion: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -1177,7 +1177,7 @@ bool DatabaseManager::save_qq_sticker_mapping(const QQStickerMapping &mapping) {
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
 
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare save qq sticker mapping statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare save qq sticker mapping statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1215,7 +1215,7 @@ bool DatabaseManager::save_qq_sticker_mapping(const QQStickerMapping &mapping) {
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to save qq sticker mapping: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to save qq sticker mapping: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -1236,7 +1236,7 @@ auto DatabaseManager::get_qq_sticker_mapping(const std::string &qq_sticker_hash)
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
 
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare get qq sticker mapping statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare get qq sticker mapping statement: {}",
                sqlite3_errmsg(db_));
     return std::nullopt;
   }
@@ -1274,7 +1274,7 @@ auto DatabaseManager::get_qq_sticker_mapping(const std::string &qq_sticker_hash)
     sqlite3_finalize(stmt);
     return mapping;
   } else if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to get qq sticker mapping: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to get qq sticker mapping: {}", sqlite3_errmsg(db_));
   }
 
   sqlite3_finalize(stmt);
@@ -1295,7 +1295,7 @@ bool DatabaseManager::update_qq_sticker_last_used(
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
 
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare update qq sticker last used statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare update qq sticker last used statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1308,7 +1308,7 @@ bool DatabaseManager::update_qq_sticker_last_used(
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to update qq sticker last used: {}",
+    PLUGIN_ERROR("bridge", "Failed to update qq sticker last used: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1319,18 +1319,18 @@ bool DatabaseManager::update_qq_sticker_last_used(
 std::string DatabaseManager::calculate_hash(const std::string &input) {
   EVP_MD_CTX *context = EVP_MD_CTX_new();
   if (!context) {
-    OBCX_ERROR("无法创建EVP_MD_CTX");
+    PLUGIN_ERROR("bridge", "无法创建EVP_MD_CTX");
     return "";
   }
 
   if (EVP_DigestInit_ex(context, EVP_sha256(), nullptr) != 1) {
-    OBCX_ERROR("EVP_DigestInit_ex失败");
+    PLUGIN_ERROR("bridge", "EVP_DigestInit_ex失败");
     EVP_MD_CTX_free(context);
     return "";
   }
 
   if (EVP_DigestUpdate(context, input.c_str(), input.length()) != 1) {
-    OBCX_ERROR("EVP_DigestUpdate失败");
+    PLUGIN_ERROR("bridge", "EVP_DigestUpdate失败");
     EVP_MD_CTX_free(context);
     return "";
   }
@@ -1338,7 +1338,7 @@ std::string DatabaseManager::calculate_hash(const std::string &input) {
   unsigned char hash[EVP_MAX_MD_SIZE];
   unsigned int hash_len;
   if (EVP_DigestFinal_ex(context, hash, &hash_len) != 1) {
-    OBCX_ERROR("EVP_DigestFinal_ex失败");
+    PLUGIN_ERROR("bridge", "EVP_DigestFinal_ex失败");
     EVP_MD_CTX_free(context);
     return "";
   }
@@ -1357,7 +1357,7 @@ int DatabaseManager::cleanup_old_image_type_cache(int max_age_days) {
   std::lock_guard lock(db_mutex_);
 
   if (!db_) {
-    OBCX_ERROR("数据库连接未初始化");
+    PLUGIN_ERROR("bridge", "数据库连接未初始化");
     return -1;
   }
 
@@ -1376,7 +1376,7 @@ int DatabaseManager::cleanup_old_image_type_cache(int max_age_days) {
 
     sqlite3_stmt *stmt;
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-      OBCX_ERROR("清理缓存SQL准备失败: {}", sqlite3_errmsg(db_));
+      PLUGIN_ERROR("bridge", "清理缓存SQL准备失败: {}", sqlite3_errmsg(db_));
       return -1;
     }
 
@@ -1387,17 +1387,17 @@ int DatabaseManager::cleanup_old_image_type_cache(int max_age_days) {
 
     if (result == SQLITE_DONE) {
       deleted_count = sqlite3_changes(db_);
-      OBCX_INFO("清理了{}条超过{}天未使用的图片类型缓存记录", deleted_count,
+      PLUGIN_INFO("bridge", "清理了{}条超过{}天未使用的图片类型缓存记录", deleted_count,
                 max_age_days);
     } else {
-      OBCX_ERROR("清理缓存执行失败: {}", sqlite3_errmsg(db_));
+      PLUGIN_ERROR("bridge", "清理缓存执行失败: {}", sqlite3_errmsg(db_));
     }
 
     sqlite3_finalize(stmt);
     return deleted_count;
 
   } catch (const std::exception &e) {
-    OBCX_ERROR("清理图片类型缓存异常: {}", e.what());
+    PLUGIN_ERROR("bridge", "清理图片类型缓存异常: {}", e.what());
     return -1;
   }
 }
@@ -1500,7 +1500,7 @@ bool DatabaseManager::add_message_retry(const MessageRetryInfo &retry_info) {
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare message retry statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare message retry statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1532,7 +1532,7 @@ bool DatabaseManager::add_message_retry(const MessageRetryInfo &retry_info) {
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to insert message retry: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to insert message retry: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -1557,7 +1557,7 @@ std::vector<MessageRetryInfo> DatabaseManager::get_pending_message_retries(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare get pending message retries statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare get pending message retries statement: {}",
                sqlite3_errmsg(db_));
     return retries;
   }
@@ -1623,7 +1623,7 @@ bool DatabaseManager::update_message_retry(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare update message retry statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare update message retry statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1641,7 +1641,7 @@ bool DatabaseManager::update_message_retry(
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to update message retry: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to update message retry: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -1661,7 +1661,7 @@ bool DatabaseManager::remove_message_retry(const std::string &source_platform,
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare remove message retry statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare remove message retry statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1674,7 +1674,7 @@ bool DatabaseManager::remove_message_retry(const std::string &source_platform,
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to remove message retry: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to remove message retry: {}", sqlite3_errmsg(db_));
     return false;
   }
 
@@ -1698,7 +1698,7 @@ bool DatabaseManager::add_media_download_retry(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare media download retry statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare media download retry statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1724,7 +1724,7 @@ bool DatabaseManager::add_media_download_retry(
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to insert media download retry: {}",
+    PLUGIN_ERROR("bridge", "Failed to insert media download retry: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1750,7 +1750,7 @@ DatabaseManager::get_pending_media_download_retries(int limit) {
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR(
+    PLUGIN_ERROR("bridge", 
         "Failed to prepare get pending media download retries statement: {}",
         sqlite3_errmsg(db_));
     return retries;
@@ -1807,7 +1807,7 @@ bool DatabaseManager::update_media_download_retry(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare update media download retry statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare update media download retry statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1825,7 +1825,7 @@ bool DatabaseManager::update_media_download_retry(
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to update media download retry: {}",
+    PLUGIN_ERROR("bridge", "Failed to update media download retry: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1845,7 +1845,7 @@ bool DatabaseManager::remove_media_download_retry(const std::string &platform,
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare remove media download retry statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare remove media download retry statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1857,7 +1857,7 @@ bool DatabaseManager::remove_media_download_retry(const std::string &platform,
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to remove media download retry: {}",
+    PLUGIN_ERROR("bridge", "Failed to remove media download retry: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1880,7 +1880,7 @@ bool DatabaseManager::update_platform_heartbeat(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare update platform heartbeat statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare update platform heartbeat statement: {}",
                sqlite3_errmsg(db_));
     return false;
   }
@@ -1896,11 +1896,11 @@ bool DatabaseManager::update_platform_heartbeat(
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    OBCX_ERROR("Failed to update platform heartbeat: {}", sqlite3_errmsg(db_));
+    PLUGIN_ERROR("bridge", "Failed to update platform heartbeat: {}", sqlite3_errmsg(db_));
     return false;
   }
 
-  OBCX_DEBUG("Platform heartbeat updated: {}", platform);
+  PLUGIN_DEBUG("bridge", "Platform heartbeat updated: {}", platform);
   return true;
 }
 
@@ -1917,7 +1917,7 @@ std::optional<PlatformHeartbeatInfo> DatabaseManager::get_platform_heartbeat(
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    OBCX_ERROR("Failed to prepare get platform heartbeat statement: {}",
+    PLUGIN_ERROR("bridge", "Failed to prepare get platform heartbeat statement: {}",
                sqlite3_errmsg(db_));
     return std::nullopt;
   }

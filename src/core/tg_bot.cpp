@@ -78,11 +78,11 @@ void TGBot::run() {
 
   OBCX_I18N_INFO(common::LogMessageKey::TELEGRAMBOT_STARTING_EVENT_LOOP);
   io_context_->run();
-  OBCX_INFO("TelegramBot 事件循环已结束。");
+  OBCX_I18N_INFO(common::LogMessageKey::TELEGRAMBOT_EVENT_LOOP_ENDED);
 }
 
 void TGBot::stop() {
-  OBCX_INFO("正在请求停止 TelegramBot...");
+  OBCX_I18N_INFO(common::LogMessageKey::TELEGRAMBOT_REQUESTING_STOP);
 
   // 首先断开连接
   if (connection_manager_) {

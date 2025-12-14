@@ -185,3 +185,137 @@ private:
   OBCX_I18N_LOG_IMPL(critical, __key, ##__VA_ARGS__)
 
 } // namespace obcx::common
+
+/*
+ * \if CHINESE
+ * Plugin专用日志宏定义
+ * 这些宏允许plugin使用自己的logger名称，而不是默认的"obcx"
+ * 使用方式：PLUGIN_INFO(get_name(), "message")
+ * \endif
+ * \if ENGLISH
+ * Plugin-specific logging macro definitions
+ * These macros allow plugins to use their own logger name instead of the default "obcx"
+ * Usage: PLUGIN_INFO(get_name(), "message")
+ * \endif
+ */
+
+#ifdef OBCX_DEBUG_TRACE
+/*
+ * \if CHINESE
+ * 带位置信息的Plugin日志宏
+ * \endif
+ * \if ENGLISH
+ * Plugin logging macros with location information
+ * \endif
+ */
+#define PLUGIN_LOG_IMPL(__plugin_name, __level, __fmt_str, ...)               \
+  do {                                                                         \
+    auto __logger = obcx::common::Logger::get(__plugin_name);                  \
+    if (__logger && __logger->should_log(spdlog::level::__level)) {            \
+      __logger->log(spdlog::level::__level,                                    \
+                    fmt::format("{} " __fmt_str,                               \
+                                fmt::styled(fmt::format("[{}:{}]", __FILE__,   \
+                                                        __LINE__),             \
+                                            fmt::fg(fmt::color::dark_orange)), \
+                                ##__VA_ARGS__));                               \
+    }                                                                          \
+  } while (false)
+
+#define PLUGIN_TRACE(__plugin_name, __fmt, ...)                                \
+  PLUGIN_LOG_IMPL(__plugin_name, trace, __fmt, ##__VA_ARGS__)
+#define PLUGIN_DEBUG(__plugin_name, __fmt, ...)                                \
+  PLUGIN_LOG_IMPL(__plugin_name, debug, __fmt, ##__VA_ARGS__)
+#define PLUGIN_INFO(__plugin_name, __fmt, ...)                                 \
+  PLUGIN_LOG_IMPL(__plugin_name, info, __fmt, ##__VA_ARGS__)
+#define PLUGIN_WARN(__plugin_name, __fmt, ...)                                 \
+  PLUGIN_LOG_IMPL(__plugin_name, warn, __fmt, ##__VA_ARGS__)
+#define PLUGIN_ERROR(__plugin_name, __fmt, ...)                                \
+  PLUGIN_LOG_IMPL(__plugin_name, err, __fmt, ##__VA_ARGS__)
+#define PLUGIN_CRITICAL(__plugin_name, __fmt, ...)                             \
+  PLUGIN_LOG_IMPL(__plugin_name, critical, __fmt, ##__VA_ARGS__)
+
+#else
+/*
+ * \if CHINESE
+ * 正常模式下的Plugin日志宏
+ * \endif
+ * \if ENGLISH
+ * Plugin logging macros for normal mode
+ * \endif
+ */
+#define PLUGIN_TRACE(__plugin_name, ...)                                       \
+  do {                                                                         \
+    auto __logger = obcx::common::Logger::get(__plugin_name);                  \
+    if (__logger)                                                              \
+      __logger->trace(__VA_ARGS__);                                            \
+  } while (false)
+
+#define PLUGIN_DEBUG(__plugin_name, ...)                                       \
+  do {                                                                         \
+    auto __logger = obcx::common::Logger::get(__plugin_name);                  \
+    if (__logger)                                                              \
+      __logger->debug(__VA_ARGS__);                                            \
+  } while (false)
+
+#define PLUGIN_INFO(__plugin_name, ...)                                        \
+  do {                                                                         \
+    auto __logger = obcx::common::Logger::get(__plugin_name);                  \
+    if (__logger)                                                              \
+      __logger->info(__VA_ARGS__);                                             \
+  } while (false)
+
+#define PLUGIN_WARN(__plugin_name, ...)                                        \
+  do {                                                                         \
+    auto __logger = obcx::common::Logger::get(__plugin_name);                  \
+    if (__logger)                                                              \
+      __logger->warn(__VA_ARGS__);                                             \
+  } while (false)
+
+#define PLUGIN_ERROR(__plugin_name, ...)                                       \
+  do {                                                                         \
+    auto __logger = obcx::common::Logger::get(__plugin_name);                  \
+    if (__logger)                                                              \
+      __logger->error(__VA_ARGS__);                                            \
+  } while (false)
+
+#define PLUGIN_CRITICAL(__plugin_name, ...)                                    \
+  do {                                                                         \
+    auto __logger = obcx::common::Logger::get(__plugin_name);                  \
+    if (__logger)                                                              \
+      __logger->critical(__VA_ARGS__);                                         \
+  } while (false)
+
+#endif
+
+/*
+ * \if CHINESE
+ * Plugin专用国际化日志宏定义
+ * 使用方式：PLUGIN_I18N_INFO(get_name(), LogMessageKey::XXX, args...)
+ * \endif
+ * \if ENGLISH
+ * Plugin-specific internationalized logging macro definitions
+ * Usage: PLUGIN_I18N_INFO(get_name(), LogMessageKey::XXX, args...)
+ * \endif
+ */
+#define PLUGIN_I18N_LOG_IMPL(__plugin_name, __level, __key, ...)              \
+  do {                                                                         \
+    auto __logger = obcx::common::Logger::get(__plugin_name);                  \
+    if (__logger && __logger->should_log(spdlog::level::__level)) {            \
+      std::string __msg =                                                      \
+          obcx::common::I18nLogMessages::format_message(__key, ##__VA_ARGS__); \
+      __logger->log(spdlog::level::__level, __msg);                            \
+    }                                                                          \
+  } while (false)
+
+#define PLUGIN_I18N_TRACE(__plugin_name, __key, ...)                           \
+  PLUGIN_I18N_LOG_IMPL(__plugin_name, trace, __key, ##__VA_ARGS__)
+#define PLUGIN_I18N_DEBUG(__plugin_name, __key, ...)                           \
+  PLUGIN_I18N_LOG_IMPL(__plugin_name, debug, __key, ##__VA_ARGS__)
+#define PLUGIN_I18N_INFO(__plugin_name, __key, ...)                            \
+  PLUGIN_I18N_LOG_IMPL(__plugin_name, info, __key, ##__VA_ARGS__)
+#define PLUGIN_I18N_WARN(__plugin_name, __key, ...)                            \
+  PLUGIN_I18N_LOG_IMPL(__plugin_name, warn, __key, ##__VA_ARGS__)
+#define PLUGIN_I18N_ERROR(__plugin_name, __key, ...)                           \
+  PLUGIN_I18N_LOG_IMPL(__plugin_name, err, __key, ##__VA_ARGS__)
+#define PLUGIN_I18N_CRITICAL(__plugin_name, __key, ...)                        \
+  PLUGIN_I18N_LOG_IMPL(__plugin_name, critical, __key, ##__VA_ARGS__)

@@ -12,19 +12,19 @@ RetryQueueManager::RetryQueueManager(
     : db_manager_(db_manager), io_context_(io_context),
       retry_timer_(std::make_unique<boost::asio::steady_timer>(io_context)),
       running_(false) {
-  OBCX_INFO("RetryQueueManager initialized");
+  PLUGIN_INFO("bridge", "RetryQueueManager initialized");
 }
 
 RetryQueueManager::~RetryQueueManager() { stop(); }
 
 void RetryQueueManager::start() {
   if (running_) {
-    OBCX_WARN("RetryQueueManager already running");
+    PLUGIN_WARN("bridge", "RetryQueueManager already running");
     return;
   }
 
   running_ = true;
-  OBCX_INFO("Starting RetryQueueManager");
+  PLUGIN_INFO("bridge", "Starting RetryQueueManager");
 
   // 启动重试队列处理
   boost::asio::co_spawn(io_context_, process_retry_queues(),
@@ -36,7 +36,7 @@ void RetryQueueManager::stop() {
     return;
   }
 
-  OBCX_INFO("Stopping RetryQueueManager");
+  PLUGIN_INFO("bridge", "Stopping RetryQueueManager");
   running_ = false;
 
   if (retry_timer_) {
@@ -68,10 +68,10 @@ void RetryQueueManager::add_message_retry(
       calculate_next_retry_time(0, DEFAULT_MESSAGE_RETRY_INTERVAL_SECONDS);
 
   if (db_manager_->add_message_retry(retry_info)) {
-    OBCX_INFO("Added message retry: {} -> {} (msg_id: {})", source_platform,
+    PLUGIN_INFO("bridge", "Added message retry: {} -> {} (msg_id: {})", source_platform,
               target_platform, source_message_id);
   } else {
-    OBCX_ERROR("Failed to add message retry: {} -> {} (msg_id: {})",
+    PLUGIN_ERROR("bridge", "Failed to add message retry: {} -> {} (msg_id: {})",
                source_platform, target_platform, source_message_id);
   }
 }
@@ -97,10 +97,10 @@ void RetryQueueManager::add_media_download_retry(
       calculate_next_retry_time(0, DEFAULT_MEDIA_RETRY_INTERVAL_SECONDS);
 
   if (db_manager_->add_media_download_retry(retry_info)) {
-    OBCX_INFO("Added media download retry: {} (file_id: {}, use_proxy: {})",
+    PLUGIN_INFO("bridge", "Added media download retry: {} (file_id: {}, use_proxy: {})",
               platform, file_id, use_proxy);
   } else {
-    OBCX_ERROR("Failed to add media download retry: {} (file_id: {})", platform,
+    PLUGIN_ERROR("bridge", "Failed to add media download retry: {} (file_id: {})", platform,
                file_id);
   }
 }
@@ -108,14 +108,14 @@ void RetryQueueManager::add_media_download_retry(
 void RetryQueueManager::register_message_send_callback(
     const std::string &target_platform, MessageSendCallback callback) {
   message_send_callbacks_[target_platform] = callback;
-  OBCX_DEBUG("Registered message send callback for platform: {}",
+  PLUGIN_DEBUG("bridge", "Registered message send callback for platform: {}",
              target_platform);
 }
 
 void RetryQueueManager::register_media_download_callback(
     const std::string &platform, MediaDownloadCallback callback) {
   media_download_callbacks_[platform] = callback;
-  OBCX_DEBUG("Registered media download callback for platform: {}", platform);
+  PLUGIN_DEBUG("bridge", "Registered media download callback for platform: {}", platform);
 }
 
 boost::asio::awaitable<void> RetryQueueManager::process_retry_queues() {
@@ -134,12 +134,12 @@ boost::asio::awaitable<void> RetryQueueManager::process_retry_queues() {
 
     } catch (const boost::system::system_error &e) {
       if (e.code() == boost::asio::error::operation_aborted) {
-        OBCX_INFO("Retry queue processing cancelled");
+        PLUGIN_INFO("bridge", "Retry queue processing cancelled");
         break;
       }
-      OBCX_ERROR("Error in retry queue processing: {}", e.what());
+      PLUGIN_ERROR("bridge", "Error in retry queue processing: {}", e.what());
     } catch (const std::exception &e) {
-      OBCX_ERROR("Exception in retry queue processing: {}", e.what());
+      PLUGIN_ERROR("bridge", "Exception in retry queue processing: {}", e.what());
     }
 
     // 短暂等待后继续
@@ -154,7 +154,7 @@ boost::asio::awaitable<void> RetryQueueManager::process_retry_queues() {
     }
   }
 
-  OBCX_INFO("Retry queue processing stopped");
+  PLUGIN_INFO("bridge", "Retry queue processing stopped");
 }
 
 boost::asio::awaitable<void> RetryQueueManager::process_message_retries() {
@@ -164,7 +164,7 @@ boost::asio::awaitable<void> RetryQueueManager::process_message_retries() {
     co_return;
   }
 
-  OBCX_DEBUG("Processing {} message retries", pending_retries.size());
+  PLUGIN_DEBUG("bridge", "Processing {} message retries", pending_retries.size());
 
   for (const auto &retry_info : pending_retries) {
     try {
@@ -172,7 +172,7 @@ boost::asio::awaitable<void> RetryQueueManager::process_message_retries() {
       auto callback_it =
           message_send_callbacks_.find(retry_info.target_platform);
       if (callback_it == message_send_callbacks_.end()) {
-        OBCX_WARN("No callback registered for target platform: {}",
+        PLUGIN_WARN("bridge", "No callback registered for target platform: {}",
                   retry_info.target_platform);
         continue;
       }
@@ -180,7 +180,7 @@ boost::asio::awaitable<void> RetryQueueManager::process_message_retries() {
       // 反序列化消息内容
       auto message_opt = deserialize_message(retry_info.message_content);
       if (!message_opt.has_value()) {
-        OBCX_ERROR("Failed to deserialize message for retry: {} -> {}",
+        PLUGIN_ERROR("bridge", "Failed to deserialize message for retry: {} -> {}",
                    retry_info.source_platform, retry_info.target_platform);
         // 删除无效的重试记录
         db_manager_->remove_message_retry(retry_info.source_platform,
@@ -190,7 +190,7 @@ boost::asio::awaitable<void> RetryQueueManager::process_message_retries() {
       }
 
       // 尝试发送消息
-      OBCX_INFO("Retrying message send: {} -> {} (attempt {})",
+      PLUGIN_INFO("bridge", "Retrying message send: {} -> {} (attempt {})",
                 retry_info.source_platform, retry_info.target_platform,
                 retry_info.retry_count + 1);
 
@@ -211,7 +211,7 @@ boost::asio::awaitable<void> RetryQueueManager::process_message_retries() {
                                           retry_info.source_message_id,
                                           retry_info.target_platform);
 
-        OBCX_INFO("Message retry successful: {} -> {} (msg_id: {})",
+        PLUGIN_INFO("bridge", "Message retry successful: {} -> {} (msg_id: {})",
                   retry_info.source_platform, retry_info.target_platform,
                   result.value());
       } else {
@@ -223,7 +223,7 @@ boost::asio::awaitable<void> RetryQueueManager::process_message_retries() {
           db_manager_->remove_message_retry(retry_info.source_platform,
                                             retry_info.source_message_id,
                                             retry_info.target_platform);
-          OBCX_WARN("Message retry failed after {} attempts: {} -> {}",
+          PLUGIN_WARN("bridge", "Message retry failed after {} attempts: {} -> {}",
                     retry_info.max_retry_count, retry_info.source_platform,
                     retry_info.target_platform);
         } else {
@@ -235,14 +235,14 @@ boost::asio::awaitable<void> RetryQueueManager::process_message_retries() {
               retry_info.target_platform, new_retry_count, next_retry_time,
               "Send failed");
 
-          OBCX_DEBUG("Updated message retry count to {}, next retry at: {}",
+          PLUGIN_DEBUG("bridge", "Updated message retry count to {}, next retry at: {}",
                      new_retry_count,
                      std::chrono::system_clock::to_time_t(next_retry_time));
         }
       }
 
     } catch (const std::exception &e) {
-      OBCX_ERROR("Error processing message retry: {}", e.what());
+      PLUGIN_ERROR("bridge", "Error processing message retry: {}", e.what());
     }
   }
 }
@@ -255,20 +255,20 @@ RetryQueueManager::process_media_download_retries() {
     co_return;
   }
 
-  OBCX_DEBUG("Processing {} media download retries", pending_retries.size());
+  PLUGIN_DEBUG("bridge", "Processing {} media download retries", pending_retries.size());
 
   for (const auto &retry_info : pending_retries) {
     try {
       // 查找对应的回调函数
       auto callback_it = media_download_callbacks_.find(retry_info.platform);
       if (callback_it == media_download_callbacks_.end()) {
-        OBCX_WARN("No callback registered for platform: {}",
+        PLUGIN_WARN("bridge", "No callback registered for platform: {}",
                   retry_info.platform);
         continue;
       }
 
       // 尝试下载媒体文件
-      OBCX_INFO("Retrying media download: {} (attempt {}, use_proxy: {})",
+      PLUGIN_INFO("bridge", "Retrying media download: {} (attempt {}, use_proxy: {})",
                 retry_info.file_id, retry_info.retry_count + 1,
                 retry_info.use_proxy);
 
@@ -279,7 +279,7 @@ RetryQueueManager::process_media_download_retries() {
         // 下载成功，删除重试记录
         db_manager_->remove_media_download_retry(retry_info.platform,
                                                  retry_info.file_id);
-        OBCX_INFO("Media download retry successful: {} -> {}",
+        PLUGIN_INFO("bridge", "Media download retry successful: {} -> {}",
                   retry_info.file_id, result.value());
       } else {
         // 下载失败，更新重试信息
@@ -290,7 +290,7 @@ RetryQueueManager::process_media_download_retries() {
           // 如果之前使用代理失败，尝试直连一次
           if (retry_info.use_proxy &&
               new_retry_count == retry_info.max_retry_count) {
-            OBCX_INFO("Proxy download failed, trying direct connection: {}",
+            PLUGIN_INFO("bridge", "Proxy download failed, trying direct connection: {}",
                       retry_info.file_id);
             auto next_retry_time = calculate_next_retry_time(
                 new_retry_count, DEFAULT_MEDIA_RETRY_INTERVAL_SECONDS);
@@ -302,7 +302,7 @@ RetryQueueManager::process_media_download_retries() {
             // 彻底失败，删除记录
             db_manager_->remove_media_download_retry(retry_info.platform,
                                                      retry_info.file_id);
-            OBCX_WARN("Media download retry failed after {} attempts: {}",
+            PLUGIN_WARN("bridge", "Media download retry failed after {} attempts: {}",
                       retry_info.max_retry_count, retry_info.file_id);
           }
         } else {
@@ -313,7 +313,7 @@ RetryQueueManager::process_media_download_retries() {
               retry_info.platform, retry_info.file_id, new_retry_count,
               next_retry_time, "Download failed", retry_info.use_proxy);
 
-          OBCX_DEBUG(
+          PLUGIN_DEBUG("bridge", 
               "Updated media download retry count to {}, next retry at: {}",
               new_retry_count,
               std::chrono::system_clock::to_time_t(next_retry_time));
@@ -321,7 +321,7 @@ RetryQueueManager::process_media_download_retries() {
       }
 
     } catch (const std::exception &e) {
-      OBCX_ERROR("Error processing media download retry: {}", e.what());
+      PLUGIN_ERROR("bridge", "Error processing media download retry: {}", e.what());
     }
   }
 }
@@ -374,7 +374,7 @@ std::optional<obcx::common::Message> RetryQueueManager::deserialize_message(
 
     return message;
   } catch (const std::exception &e) {
-    OBCX_ERROR("Failed to deserialize message: {}", e.what());
+    PLUGIN_ERROR("bridge", "Failed to deserialize message: {}", e.what());
     return std::nullopt;
   }
 }

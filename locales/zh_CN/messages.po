@@ -222,17 +222,35 @@ msgstr "无效参数: {}"
 msgid "TaskScheduler created with thread pool size: {}"
 msgstr "TaskScheduler 已创建，线程池大小: {}"
 
+msgid "Stopping TaskScheduler..."
+msgstr "正在停止 TaskScheduler..."
+
+msgid "TaskScheduler stopped"
+msgstr "TaskScheduler 已停止"
+
 msgid "QQBot instance created, all core components initialized"
 msgstr "QQBot 实例已创建，所有核心组件已初始化"
 
 msgid "QQBot starting event loop..."
 msgstr "QQBot 开始运行事件循环..."
 
+msgid "QQBot event loop ended"
+msgstr "QQBot 事件循环已结束"
+
+msgid "Requesting QQBot to stop..."
+msgstr "正在请求停止 QQBot..."
+
 msgid "TelegramBot instance created, all core components initialized"
 msgstr "TelegramBot 实例已创建，所有核心组件已初始化"
 
 msgid "TelegramBot starting event loop..."
 msgstr "TelegramBot 开始运行事件循环..."
+
+msgid "TelegramBot event loop ended"
+msgstr "TelegramBot 事件循环已结束"
+
+msgid "Requesting TelegramBot to stop..."
+msgstr "正在请求停止 TelegramBot..."
 
 msgid "Connecting to {}:{} using {} connection type"
 msgstr "使用{}连接类型连接到 {}:{}"

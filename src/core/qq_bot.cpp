@@ -58,11 +58,11 @@ void QQBot::run() {
   }
   OBCX_I18N_INFO(common::LogMessageKey::QQBOT_STARTING_EVENT_LOOP);
   io_context_->run();
-  OBCX_INFO("QQBot 事件循环已结束。");
+  OBCX_I18N_INFO(common::LogMessageKey::QQBOT_EVENT_LOOP_ENDED);
 }
 
 void QQBot::stop() {
-  OBCX_INFO("正在请求停止 Bot...");
+  OBCX_I18N_INFO(common::LogMessageKey::QQBOT_REQUESTING_STOP);
 
   // 首先断开连接
   if (connection_manager_) {

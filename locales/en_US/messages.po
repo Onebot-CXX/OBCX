@@ -222,17 +222,35 @@ msgstr "Invalid parameter: {}"
 msgid "TaskScheduler created with thread pool size: {}"
 msgstr "TaskScheduler created with thread pool size: {}"
 
+msgid "Stopping TaskScheduler..."
+msgstr "Stopping TaskScheduler..."
+
+msgid "TaskScheduler stopped"
+msgstr "TaskScheduler stopped"
+
 msgid "QQBot instance created, all core components initialized"
 msgstr "QQBot instance created, all core components initialized"
 
 msgid "QQBot starting event loop..."
 msgstr "QQBot starting event loop..."
 
+msgid "QQBot event loop ended"
+msgstr "QQBot event loop ended"
+
+msgid "Requesting QQBot to stop..."
+msgstr "Requesting QQBot to stop..."
+
 msgid "TelegramBot instance created, all core components initialized"
 msgstr "TelegramBot instance created, all core components initialized"
 
 msgid "TelegramBot starting event loop..."
 msgstr "TelegramBot starting event loop..."
+
+msgid "TelegramBot event loop ended"
+msgstr "TelegramBot event loop ended"
+
+msgid "Requesting TelegramBot to stop..."
+msgstr "Requesting TelegramBot to stop..."
 
 msgid "Connecting to {}:{} using {} connection type"
 msgstr "Connecting to {}:{} using {} connection type"
