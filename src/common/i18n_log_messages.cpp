@@ -199,6 +199,39 @@ void I18nLogMessages::setup_message_keys() {
   message_keys_[LogMessageKey::BOT_STARTED] = "Bot started";
   message_keys_[LogMessageKey::BOT_STOPPED] = "Bot stopped";
   message_keys_[LogMessageKey::BOT_ERROR] = "Bot error: {}";
+
+  // Task scheduler messages
+  message_keys_[LogMessageKey::TASK_SCHEDULER_CREATED] =
+      "TaskScheduler created with thread pool size: {}";
+
+  // Bot initialization messages
+  message_keys_[LogMessageKey::QQBOT_INSTANCE_CREATED] =
+      "QQBot instance created, all core components initialized";
+  message_keys_[LogMessageKey::QQBOT_STARTING_EVENT_LOOP] =
+      "QQBot starting event loop...";
+  message_keys_[LogMessageKey::TELEGRAMBOT_INSTANCE_CREATED] =
+      "TelegramBot instance created, all core components initialized";
+  message_keys_[LogMessageKey::TELEGRAMBOT_STARTING_EVENT_LOOP] =
+      "TelegramBot starting event loop...";
+
+  // Connection type messages
+  message_keys_[LogMessageKey::CONNECTING_WITH_TYPE] =
+      "Connecting to {}:{} using {} connection type";
+
+  // Network connection messages
+  message_keys_[LogMessageKey::HTTP_CONNECTION_ESTABLISHED] =
+      "HTTP connection established to {}:{}";
+  message_keys_[LogMessageKey::WEBSOCKET_ATTEMPTING_CONNECTION] =
+      "Attempting to connect to ws://{}:{}";
+  message_keys_[LogMessageKey::WEBSOCKET_CONNECTION_ESTABLISHED] =
+      "WebSocket connection established";
+  message_keys_[LogMessageKey::WEBSOCKET_CONNECTED_SUCCESSFULLY] =
+      "WebSocket connected successfully to ws://{}:{}";
+
+  // Message sending messages
+  message_keys_[LogMessageKey::MESSAGE_SENT_SUCCESSFULLY] =
+      "Message sent successfully: {}";
+
   message_keys_[LogMessageKey::OPERATION_SUCCESS] = "Operation success";
   message_keys_[LogMessageKey::OPERATION_FAILED] = "Operation failed: {}";
   message_keys_[LogMessageKey::INVALID_PARAMETER] = "Invalid parameter: {}";

@@ -18,7 +18,7 @@ namespace obcx::core {
 TGBot::TGBot(adapter::telegram::ProtocolAdapter adapter)
     : IBot{std::make_unique<adapter::telegram::ProtocolAdapter>(
           std::move(adapter))} {
-  OBCX_INFO("TelegramBot 实例已创建，所有核心组件已初始化。");
+  OBCX_I18N_INFO(common::LogMessageKey::TELEGRAMBOT_INSTANCE_CREATED);
 }
 
 TGBot::~TGBot() { OBCX_INFO("TelegramBot 实例已销毁。"); }
@@ -39,9 +39,8 @@ void TGBot::connect(network::ConnectionManagerFactory::ConnectionType type,
 
   connection_manager_->connect(config);
 
-  OBCX_INFO("使用{}连接类型连接到 {}:{}",
-            connection_manager_->get_connection_type(), config.host,
-            config.port);
+  OBCX_I18N_INFO(common::LogMessageKey::CONNECTING_WITH_TYPE, config.host,
+                 config.port, connection_manager_->get_connection_type());
 }
 
 void TGBot::connect_ws(std::string_view host, uint16_t port,
@@ -77,7 +76,7 @@ void TGBot::run() {
       [this]() -> asio::awaitable<void> { co_await this->poll_updates(); },
       asio::detached);
 
-  OBCX_INFO("TelegramBot 开始运行事件循环...");
+  OBCX_I18N_INFO(common::LogMessageKey::TELEGRAMBOT_STARTING_EVENT_LOOP);
   io_context_->run();
   OBCX_INFO("TelegramBot 事件循环已结束。");
 }

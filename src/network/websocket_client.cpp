@@ -80,7 +80,8 @@ auto WebsocketClient::run(std::string host, std::string port,
         }));
     co_await ws_.async_handshake(host_, "/", asio::use_awaitable);
 
-    OBCX_INFO("WebSocket 已成功连接到 ws://{}:{}", host_, port_str);
+    OBCX_I18N_INFO(common::LogMessageKey::WEBSOCKET_CONNECTED_SUCCESSFULLY, host_,
+                   port_str);
 
     // 启动写入器协程
     start_writer();
@@ -242,7 +243,8 @@ auto WebsocketClient::writer_coro() -> asio::awaitable<void> {
         // 通知写入完成
         request->promise.set_value();
 
-        OBCX_DEBUG("消息已成功发送: {}", request->message);
+        OBCX_I18N_DEBUG(common::LogMessageKey::MESSAGE_SENT_SUCCESSFULLY,
+                        request->message);
       } catch (const std::exception &e) {
         OBCX_ERROR("写入消息时发生错误: {}", e.what());
 

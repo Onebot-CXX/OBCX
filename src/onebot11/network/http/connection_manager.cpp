@@ -28,7 +28,8 @@ void HttpConnectionManager::connect(const common::ConnectionConfig &config) {
   is_connected_ = true;
   start_polling();
 
-  OBCX_INFO("HTTP连接已建立到 {}:{}", config_.host, config_.port);
+  OBCX_I18N_INFO(common::LogMessageKey::HTTP_CONNECTION_ESTABLISHED,
+                 config_.host, config_.port);
 }
 
 void HttpConnectionManager::disconnect() {

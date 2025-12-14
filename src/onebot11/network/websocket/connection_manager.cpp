@@ -80,7 +80,8 @@ void WebSocketConnectionManager::connect_ws(std::string host, uint16_t port,
 void WebSocketConnectionManager::do_connect() {
   asio::post(send_strand_, [this]() {
     ws_client_ = std::make_shared<WebsocketClient>(ioc_);
-    OBCX_INFO("正在尝试连接到 ws://{}:{}", host_, port_);
+    OBCX_I18N_INFO(common::LogMessageKey::WEBSOCKET_ATTEMPTING_CONNECTION, host_,
+                   port_);
 
     asio::co_spawn(send_strand_,
                    ws_client_->run(host_, std::to_string(port_), access_token_,
@@ -106,7 +107,7 @@ void WebSocketConnectionManager::on_ws_message(const beast::error_code &ec,
   }
 
   if (message.empty()) {
-    OBCX_INFO("WebSocket 连接已建立");
+    OBCX_I18N_INFO(common::LogMessageKey::WEBSOCKET_CONNECTION_ESTABLISHED);
     {
       is_connected_.store(true, std::memory_order_release);
     }

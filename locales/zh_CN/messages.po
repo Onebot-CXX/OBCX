@@ -218,3 +218,36 @@ msgstr "操作失败: {}"
 
 msgid "Invalid parameter: {}"
 msgstr "无效参数: {}"
+
+msgid "TaskScheduler created with thread pool size: {}"
+msgstr "TaskScheduler 已创建，线程池大小: {}"
+
+msgid "QQBot instance created, all core components initialized"
+msgstr "QQBot 实例已创建，所有核心组件已初始化"
+
+msgid "QQBot starting event loop..."
+msgstr "QQBot 开始运行事件循环..."
+
+msgid "TelegramBot instance created, all core components initialized"
+msgstr "TelegramBot 实例已创建，所有核心组件已初始化"
+
+msgid "TelegramBot starting event loop..."
+msgstr "TelegramBot 开始运行事件循环..."
+
+msgid "Connecting to {}:{} using {} connection type"
+msgstr "使用{}连接类型连接到 {}:{}"
+
+msgid "HTTP connection established to {}:{}"
+msgstr "HTTP连接已建立到 {}:{}"
+
+msgid "Attempting to connect to ws://{}:{}"
+msgstr "正在尝试连接到 ws://{}:{}"
+
+msgid "WebSocket connection established"
+msgstr "WebSocket 连接已建立"
+
+msgid "WebSocket connected successfully to ws://{}:{}"
+msgstr "WebSocket 已成功连接到 ws://{}:{}"
+
+msgid "Message sent successfully: {}"
+msgstr "消息已成功发送: {}"

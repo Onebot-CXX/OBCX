@@ -218,3 +218,36 @@ msgstr "Operation failed: {}"
 
 msgid "Invalid parameter: {}"
 msgstr "Invalid parameter: {}"
+
+msgid "TaskScheduler created with thread pool size: {}"
+msgstr "TaskScheduler created with thread pool size: {}"
+
+msgid "QQBot instance created, all core components initialized"
+msgstr "QQBot instance created, all core components initialized"
+
+msgid "QQBot starting event loop..."
+msgstr "QQBot starting event loop..."
+
+msgid "TelegramBot instance created, all core components initialized"
+msgstr "TelegramBot instance created, all core components initialized"
+
+msgid "TelegramBot starting event loop..."
+msgstr "TelegramBot starting event loop..."
+
+msgid "Connecting to {}:{} using {} connection type"
+msgstr "Connecting to {}:{} using {} connection type"
+
+msgid "HTTP connection established to {}:{}"
+msgstr "HTTP connection established to {}:{}"
+
+msgid "Attempting to connect to ws://{}:{}"
+msgstr "Attempting to connect to ws://{}:{}"
+
+msgid "WebSocket connection established"
+msgstr "WebSocket connection established"
+
+msgid "WebSocket connected successfully to ws://{}:{}"
+msgstr "WebSocket connected successfully to ws://{}:{}"
+
+msgid "Message sent successfully: {}"
+msgstr "Message sent successfully: {}"

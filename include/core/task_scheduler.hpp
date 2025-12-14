@@ -33,7 +33,7 @@ public:
   explicit TaskScheduler(
       std::size_t thread_count = std::thread::hardware_concurrency())
       : thread_pool_(thread_count) {
-    OBCX_INFO("TaskScheduler 已创建，线程池大小: {}", thread_count);
+    OBCX_I18N_INFO(common::LogMessageKey::TASK_SCHEDULER_CREATED, thread_count);
   }
 
   /**

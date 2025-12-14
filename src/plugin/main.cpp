@@ -1,4 +1,5 @@
 #include "common/config_loader.hpp"
+#include "common/i18n_log_messages.hpp"
 #include "common/logger.hpp"
 #include "common/plugin_manager.hpp"
 #include "core/qq_bot.hpp"
@@ -256,6 +257,14 @@ auto main(int argc, char *argv[]) -> int {
     std::cerr << "Failed to load configuration from: " << config_path << '\n';
     return 1;
   }
+
+  // Set log locale from configuration (default: en_US)
+  auto locale = config_loader.get_value<std::string>("global.locale");
+  if (locale.has_value()) {
+    common::I18nLogMessages::set_locale(*locale);
+    OBCX_INFO("Log locale set to: {}", *locale);
+  }
+  // If not specified, keep default en_US (no need to explicitly set)
 
   OBCX_INFO("OBCX Robot Framework starting...");
   OBCX_INFO("Configuration loaded from: {}", config_path);
