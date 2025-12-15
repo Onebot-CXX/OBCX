@@ -76,7 +76,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
     message(STATUS "Using libc++ standard library with Clang")
 endif ()
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

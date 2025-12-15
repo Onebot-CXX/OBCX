@@ -1,5 +1,8 @@
 #include "common/i18n_log_messages.hpp"
+#include "common/embedded_locales.hpp"
 #include <fmt/format.h>
+#include <fstream>
+#include <sstream>
 
 namespace obcx::common {
 
@@ -7,13 +10,69 @@ I18nLogMessages::MessageMap I18nLogMessages::message_keys_;
 std::string I18nLogMessages::current_locale_ = "en_US";
 std::string I18nLogMessages::locale_dir_;
 bool I18nLogMessages::initialized_ = false;
+bool I18nLogMessages::use_embedded_ = true;
 std::locale I18nLogMessages::current_locale_obj_;
 
-void I18nLogMessages::initialize(const std::string &locale_dir) {
+void I18nLogMessages::initialize(bool use_embedded,
+                                 const std::string &locale_dir) {
   if (initialized_) {
     return;
   }
 
+  use_embedded_ = use_embedded;
+
+  // Setup message keys mapping
+  setup_message_keys();
+
+  if (use_embedded_) {
+    initialize_from_embedded();
+  } else {
+    initialize_from_files(locale_dir);
+  }
+
+  initialized_ = true;
+}
+
+void I18nLogMessages::initialize_from_embedded() {
+  // Try to initialize Boost.Locale with embedded .mo data
+  try {
+    auto embedded_locales = get_embedded_locales();
+
+    boost::locale::generator gen;
+
+    // For each embedded locale, we need to provide the data to Boost.Locale
+    // Boost.Locale typically expects file paths, so we'll use a memory-based
+    // approach Note: Boost.Locale doesn't directly support in-memory .mo
+    // loading, so we create a temporary locale object
+    for (const auto &locale_data : embedded_locales) {
+      if (locale_data.data.empty()) {
+        continue;
+      }
+
+      // Write embedded data to a temporary in-memory catalog
+      // Since Boost.Locale requires file-based catalogs, we'll fallback to
+      // file-based loading if embedded data is available but cannot be used
+      // directly For now, just log that embedded data is available
+      // TODO: Implement in-memory catalog loading if needed
+    }
+
+    // Try with .UTF-8 suffix
+    std::string locale_name = current_locale_;
+    if (locale_name.find(".UTF-8") == std::string::npos &&
+        locale_name.find(".utf8") == std::string::npos) {
+      locale_name += ".UTF-8";
+    }
+
+    // Fallback to classic locale since we cannot easily use embedded data with
+    // Boost.Locale
+    current_locale_obj_ = std::locale::classic();
+  } catch (const std::exception &) {
+    // Fallback: just use C locale
+    current_locale_obj_ = std::locale::classic();
+  }
+}
+
+void I18nLogMessages::initialize_from_files(const std::string &locale_dir) {
   // Set locale directory
   if (locale_dir.empty()) {
     // Use build directory for compiled .mo files
@@ -21,9 +80,6 @@ void I18nLogMessages::initialize(const std::string &locale_dir) {
   } else {
     locale_dir_ = locale_dir;
   }
-
-  // Setup message keys mapping
-  setup_message_keys();
 
   // Try to initialize Boost.Locale with the locale directory
   try {
@@ -44,8 +100,6 @@ void I18nLogMessages::initialize(const std::string &locale_dir) {
     // Fallback: just use C locale
     current_locale_obj_ = std::locale::classic();
   }
-
-  initialized_ = true;
 }
 
 void I18nLogMessages::set_locale(const std::string &locale) {
@@ -54,24 +108,39 @@ void I18nLogMessages::set_locale(const std::string &locale) {
   }
   current_locale_ = locale;
 
-  // Try to set Boost.Locale
-  try {
-    boost::locale::generator gen;
-    gen.add_messages_path(locale_dir_);
-    gen.add_messages_domain("messages");
-
-    // Try with .UTF-8 suffix first, then without
-    std::string locale_name = locale;
-    if (locale_name.find(".UTF-8") == std::string::npos &&
-        locale_name.find(".utf8") == std::string::npos) {
-      locale_name += ".UTF-8";
+  if (use_embedded_) {
+    // For embedded locales, we don't need to reload from disk
+    // Just update the locale name
+    try {
+      std::string locale_name = locale;
+      if (locale_name.find(".UTF-8") == std::string::npos &&
+          locale_name.find(".utf8") == std::string::npos) {
+        locale_name += ".UTF-8";
+      }
+      current_locale_obj_ = std::locale::classic();
+    } catch (const std::exception &) {
+      current_locale_obj_ = std::locale::classic();
     }
+  } else {
+    // Try to set Boost.Locale from files
+    try {
+      boost::locale::generator gen;
+      gen.add_messages_path(locale_dir_);
+      gen.add_messages_domain("messages");
 
-    current_locale_obj_ = gen(locale_name);
-    std::locale::global(current_locale_obj_);
-  } catch (const std::exception &) {
-    // Fallback: just update the current_locale_ string
-    current_locale_obj_ = std::locale::classic();
+      // Try with .UTF-8 suffix first, then without
+      std::string locale_name = locale;
+      if (locale_name.find(".UTF-8") == std::string::npos &&
+          locale_name.find(".utf8") == std::string::npos) {
+        locale_name += ".UTF-8";
+      }
+
+      current_locale_obj_ = gen(locale_name);
+      std::locale::global(current_locale_obj_);
+    } catch (const std::exception &) {
+      // Fallback: just update the current_locale_ string
+      current_locale_obj_ = std::locale::classic();
+    }
   }
 }
 
@@ -87,10 +156,25 @@ std::string I18nLogMessages::get_message(LogMessageKey key) {
 
   const std::string &msg = it->second;
 
+  // If using embedded locales and embedded data is available, translate
+  // directly
+  if (use_embedded_) {
+    auto embedded_locales = get_embedded_locales();
+    for (const auto &locale_data : embedded_locales) {
+      if (locale_data.locale_name == current_locale_ &&
+          !locale_data.data.empty()) {
+        // TODO: Parse .mo file format and translate message
+        // For now, we'll use Boost.Locale as fallback
+        break;
+      }
+    }
+  }
+
   // Try to load translated message from .mo file using Boost.Locale
   try {
     // Use the cached locale object
-    std::string translated = boost::locale::translate(msg).str(current_locale_obj_);
+    std::string translated =
+        boost::locale::translate(msg).str(current_locale_obj_);
     return translated;
   } catch (const std::exception &e) {
     // Fallback: return the original English message

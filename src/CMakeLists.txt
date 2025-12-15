@@ -2,6 +2,7 @@ add_library(
         obcx_core SHARED
         common/logger.cpp
         common/i18n_log_messages.cpp
+        common/embedded_locales.cpp
         common/json_utils.cpp
         common/message_type.cpp
         common/media_converter.cpp
@@ -39,6 +40,11 @@ target_link_libraries(
         tomlplusplus::tomlplusplus)
 
 target_compile_features(obcx_core PUBLIC cxx_std_20)
+
+# Make obcx_core depend on i18n target to ensure .mo files are built first
+if (TARGET i18n)
+    add_dependencies(obcx_core i18n)
+endif ()
 
 # Enable position independent code for shared library compatibility
 set_target_properties(obcx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

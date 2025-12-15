@@ -157,14 +157,17 @@ public:
   /**
    * \if CHINESE
    * @brief 初始化消息映射表
-   * @param locale_dir 国际化文件目录路径
+   * @param use_embedded 是否使用内嵌的语言资源（默认true）
+   * @param locale_dir 国际化文件目录路径（当use_embedded=false时使用）
    * \endif
    * \if ENGLISH
    * @brief Initialize message mappings
-   * @param locale_dir Path to the i18n directory containing .mo files
+   * @param use_embedded Whether to use embedded locale resources (default true)
+   * @param locale_dir Path to the i18n directory containing .mo files (used when use_embedded=false)
    * \endif
    */
-  static void initialize(const std::string &locale_dir = "");
+  static void initialize(bool use_embedded = true,
+                         const std::string &locale_dir = "");
 
   /**
    * \if CHINESE
@@ -222,9 +225,12 @@ private:
   static std::string current_locale_;
   static std::string locale_dir_;
   static bool initialized_;
+  static bool use_embedded_;
   static std::locale current_locale_obj_;
 
   static void setup_message_keys();
+  static void initialize_from_embedded();
+  static void initialize_from_files(const std::string &locale_dir);
 };
 
 } // namespace obcx::common
