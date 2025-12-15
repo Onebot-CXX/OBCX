@@ -1,5 +1,6 @@
 #include "common/i18n_log_messages.hpp"
 #include "common/embedded_locales.hpp"
+#include <boost/locale/gnu_gettext.hpp>
 #include <fmt/format.h>
 #include <fstream>
 #include <sstream>
@@ -12,6 +13,21 @@ std::string I18nLogMessages::locale_dir_;
 bool I18nLogMessages::initialized_ = false;
 bool I18nLogMessages::use_embedded_ = true;
 std::locale I18nLogMessages::current_locale_obj_;
+
+// 内存中的 .mo 文件数据缓存（用于 callback）
+static std::span<const std::byte> cached_mo_data_;
+
+// Boost.Locale callback: 从内存返回 .mo 文件数据
+static auto embedded_mo_loader(const std::string & /*file_name*/,
+                               const std::string & /*encoding*/)
+    -> std::vector<char> {
+  if (cached_mo_data_.empty()) {
+    return {};
+  }
+  // 将 std::byte span 转换为 std::vector<char>
+  const auto *data_ptr = reinterpret_cast<const char *>(cached_mo_data_.data());
+  return std::vector<char>(data_ptr, data_ptr + cached_mo_data_.size());
+}
 
 void I18nLogMessages::initialize(bool use_embedded,
                                  const std::string &locale_dir) {
@@ -34,40 +50,66 @@ void I18nLogMessages::initialize(bool use_embedded,
 }
 
 void I18nLogMessages::initialize_from_embedded() {
-  // Try to initialize Boost.Locale with embedded .mo data
+  // 使用 Boost.Locale gnu_gettext callback 机制从内存加载 .mo 文件
   try {
     auto embedded_locales = get_embedded_locales();
 
-    boost::locale::generator gen;
-
-    // For each embedded locale, we need to provide the data to Boost.Locale
-    // Boost.Locale typically expects file paths, so we'll use a memory-based
-    // approach Note: Boost.Locale doesn't directly support in-memory .mo
-    // loading, so we create a temporary locale object
+    // 查找当前 locale 的嵌入数据
     for (const auto &locale_data : embedded_locales) {
-      if (locale_data.data.empty()) {
-        continue;
+      if (locale_data.locale_name == current_locale_ &&
+          !locale_data.data.empty()) {
+        cached_mo_data_ = locale_data.data;
+        break;
       }
-
-      // Write embedded data to a temporary in-memory catalog
-      // Since Boost.Locale requires file-based catalogs, we'll fallback to
-      // file-based loading if embedded data is available but cannot be used
-      // directly For now, just log that embedded data is available
-      // TODO: Implement in-memory catalog loading if needed
     }
 
-    // Try with .UTF-8 suffix
+    if (cached_mo_data_.empty()) {
+      // 没有找到对应的嵌入数据，使用 classic locale
+      current_locale_obj_ = std::locale::classic();
+      return;
+    }
+
+    // 解析 locale 名称（如 "zh_CN" -> language="zh", country="CN"）
+    std::string language;
+    std::string country;
+    auto underscore_pos = current_locale_.find('_');
+    if (underscore_pos != std::string::npos) {
+      language = current_locale_.substr(0, underscore_pos);
+      country = current_locale_.substr(underscore_pos + 1);
+      // 移除可能的 .UTF-8 后缀
+      auto dot_pos = country.find('.');
+      if (dot_pos != std::string::npos) {
+        country = country.substr(0, dot_pos);
+      }
+    } else {
+      language = current_locale_;
+    }
+
+    // 配置 messages_info
+    namespace blg = boost::locale::gnu_gettext;
+    blg::messages_info info;
+    info.language = language;
+    info.country = country;
+    info.encoding = "UTF-8";
+    info.paths.push_back(""); // 需要一个路径（即使为空）
+    info.domains.push_back(blg::messages_info::domain("messages"));
+    info.callback = embedded_mo_loader;
+
+    // 创建基础 locale
+    boost::locale::generator gen;
     std::string locale_name = current_locale_;
     if (locale_name.find(".UTF-8") == std::string::npos &&
         locale_name.find(".utf8") == std::string::npos) {
       locale_name += ".UTF-8";
     }
+    std::locale base_locale = gen(locale_name);
 
-    // Fallback to classic locale since we cannot easily use embedded data with
-    // Boost.Locale
-    current_locale_obj_ = std::locale::classic();
+    // 安装消息 facet
+    current_locale_obj_ =
+        std::locale(base_locale, blg::create_messages_facet<char>(info));
+    std::locale::global(current_locale_obj_);
   } catch (const std::exception &) {
-    // Fallback: just use C locale
+    // Fallback: 使用 C locale
     current_locale_obj_ = std::locale::classic();
   }
 }
@@ -109,15 +151,62 @@ void I18nLogMessages::set_locale(const std::string &locale) {
   current_locale_ = locale;
 
   if (use_embedded_) {
-    // For embedded locales, we don't need to reload from disk
-    // Just update the locale name
+    // 使用 Boost.Locale gnu_gettext callback 机制从内存重新加载 locale
     try {
+      auto embedded_locales = get_embedded_locales();
+
+      // 查找新 locale 的嵌入数据
+      cached_mo_data_ = {}; // 清空缓存
+      for (const auto &locale_data : embedded_locales) {
+        if (locale_data.locale_name == locale && !locale_data.data.empty()) {
+          cached_mo_data_ = locale_data.data;
+          break;
+        }
+      }
+
+      if (cached_mo_data_.empty()) {
+        current_locale_obj_ = std::locale::classic();
+        return;
+      }
+
+      // 解析 locale 名称
+      std::string language;
+      std::string country;
+      auto underscore_pos = locale.find('_');
+      if (underscore_pos != std::string::npos) {
+        language = locale.substr(0, underscore_pos);
+        country = locale.substr(underscore_pos + 1);
+        auto dot_pos = country.find('.');
+        if (dot_pos != std::string::npos) {
+          country = country.substr(0, dot_pos);
+        }
+      } else {
+        language = locale;
+      }
+
+      // 配置 messages_info
+      namespace blg = boost::locale::gnu_gettext;
+      blg::messages_info info;
+      info.language = language;
+      info.country = country;
+      info.encoding = "UTF-8";
+      info.paths.push_back("");
+      info.domains.push_back(blg::messages_info::domain("messages"));
+      info.callback = embedded_mo_loader;
+
+      // 创建基础 locale
+      boost::locale::generator gen;
       std::string locale_name = locale;
       if (locale_name.find(".UTF-8") == std::string::npos &&
           locale_name.find(".utf8") == std::string::npos) {
         locale_name += ".UTF-8";
       }
-      current_locale_obj_ = std::locale::classic();
+      std::locale base_locale = gen(locale_name);
+
+      // 安装消息 facet
+      current_locale_obj_ =
+          std::locale(base_locale, blg::create_messages_facet<char>(info));
+      std::locale::global(current_locale_obj_);
     } catch (const std::exception &) {
       current_locale_obj_ = std::locale::classic();
     }
@@ -156,28 +245,13 @@ std::string I18nLogMessages::get_message(LogMessageKey key) {
 
   const std::string &msg = it->second;
 
-  // If using embedded locales and embedded data is available, translate
-  // directly
-  if (use_embedded_) {
-    auto embedded_locales = get_embedded_locales();
-    for (const auto &locale_data : embedded_locales) {
-      if (locale_data.locale_name == current_locale_ &&
-          !locale_data.data.empty()) {
-        // TODO: Parse .mo file format and translate message
-        // For now, we'll use Boost.Locale as fallback
-        break;
-      }
-    }
-  }
-
-  // Try to load translated message from .mo file using Boost.Locale
+  // 使用 Boost.Locale 翻译消息（无论是 embedded 还是 file 模式）
   try {
-    // Use the cached locale object
     std::string translated =
         boost::locale::translate(msg).str(current_locale_obj_);
     return translated;
-  } catch (const std::exception &e) {
-    // Fallback: return the original English message
+  } catch (const std::exception &) {
+    // Fallback: 返回原始英文消息
     return msg;
   }
 }
