@@ -4,8 +4,9 @@
 namespace obcx::common {
 
 // C++26 embed directive to embed .mo files
-// Note: #embed expands to a comma-separated list of integer-constant-expressions
-// We store as unsigned char array and cast at runtime via std::span
+// Note: #embed expands to a comma-separated list of
+// integer-constant-expressions We store as unsigned char array and cast at
+// runtime via std::span
 
 #ifdef __has_embed
 
@@ -45,18 +46,15 @@ static constexpr bool has_zh_CN = false;
 static constexpr bool has_en_US = false;
 #endif
 
-// Static array of embedded locales (constructed at runtime due to reinterpret_cast)
+// Static array of embedded locales (constructed at runtime due to
+// reinterpret_cast)
 static const std::array embedded_locale_list = {
-    EmbeddedLocaleData{
-        "zh_CN",
-        std::span{
-            reinterpret_cast<const std::byte *>(zh_CN_mo_data_raw),
-            zh_CN_mo_size}},
-    EmbeddedLocaleData{
-        "en_US",
-        std::span{
-            reinterpret_cast<const std::byte *>(en_US_mo_data_raw),
-            en_US_mo_size}},
+    EmbeddedLocaleData{"zh_CN", std::span{reinterpret_cast<const std::byte *>(
+                                              zh_CN_mo_data_raw),
+                                          zh_CN_mo_size}},
+    EmbeddedLocaleData{"en_US", std::span{reinterpret_cast<const std::byte *>(
+                                              en_US_mo_data_raw),
+                                          en_US_mo_size}},
 };
 
 auto get_embedded_locales() -> std::span<const EmbeddedLocaleData> {

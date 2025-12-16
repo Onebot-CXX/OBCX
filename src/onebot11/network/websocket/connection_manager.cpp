@@ -80,8 +80,8 @@ void WebSocketConnectionManager::connect_ws(std::string host, uint16_t port,
 void WebSocketConnectionManager::do_connect() {
   asio::post(send_strand_, [this]() {
     ws_client_ = std::make_shared<WebsocketClient>(ioc_);
-    OBCX_I18N_INFO(common::LogMessageKey::WEBSOCKET_ATTEMPTING_CONNECTION, host_,
-                   port_);
+    OBCX_I18N_INFO(common::LogMessageKey::WEBSOCKET_ATTEMPTING_CONNECTION,
+                   host_, port_);
 
     asio::co_spawn(send_strand_,
                    ws_client_->run(host_, std::to_string(port_), access_token_,

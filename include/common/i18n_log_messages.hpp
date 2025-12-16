@@ -163,7 +163,8 @@ public:
    * \if ENGLISH
    * @brief Initialize message mappings
    * @param use_embedded Whether to use embedded locale resources (default true)
-   * @param locale_dir Path to the i18n directory containing .mo files (used when use_embedded=false)
+   * @param locale_dir Path to the i18n directory containing .mo files (used
+   * when use_embedded=false)
    * \endif
    */
   static void initialize(bool use_embedded = true,

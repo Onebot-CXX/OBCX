@@ -80,8 +80,8 @@ auto WebsocketClient::run(std::string host, std::string port,
         }));
     co_await ws_.async_handshake(host_, "/", asio::use_awaitable);
 
-    OBCX_I18N_INFO(common::LogMessageKey::WEBSOCKET_CONNECTED_SUCCESSFULLY, host_,
-                   port_str);
+    OBCX_I18N_INFO(common::LogMessageKey::WEBSOCKET_CONNECTED_SUCCESSFULLY,
+                   host_, port_str);
 
     // 启动写入器协程
     start_writer();

@@ -5,7 +5,7 @@
 # and then specific check groups are re-enabled.
 
 # Only check headers from the project source directories
-HeaderFilterRegex: '^.*/OBCX/(include|src|examples|tests)/.*$'
+HeaderFilterRegex: "^.*/OBCX/(include|src|examples|tests)/.*$"
 
 Checks: >
   -*,
@@ -31,4 +31,5 @@ CheckOptions:
     value: "0"
   - key: cppcoreguidelines-avoid-do-while.IgnoreMacros
     value: "1"
-
+  - key: cppcoreguidelines-avoid-non-const-global-variables.AllowInternalLinkage
+    value: true

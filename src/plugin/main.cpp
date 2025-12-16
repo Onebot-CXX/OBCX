@@ -7,11 +7,13 @@
 #include "interfaces/connection_manager.hpp"
 #include "onebot11/adapter/protocol_adapter.hpp"
 #include "telegram/adapter/protocol_adapter.hpp"
+#include <atomic>
 #include <boost/date_time/posix_time/time_formatters.hpp>
 #include <csignal>
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <spdlog/common.h>
 #include <thread>
 #include <vector>
@@ -19,8 +21,11 @@
 using namespace obcx;
 
 namespace {
-volatile sig_atomic_t g_should_stop = 0;
-volatile sig_atomic_t g_shutdown_started = 0;
+bool g_should_stop = false;
+bool g_shutdown_started = false;
+
+std::mutex g_stop_mtx;
+std::condition_variable g_stop_cv;
 
 const uint16_t DEFAULT_PORT = 8080;
 
@@ -42,27 +47,28 @@ void print_help() {
 }
 
 void signal_handler(int signal) {
-  // Use atomic flag to prevent multiple shutdown attempts
-  if (g_shutdown_started == 1) {
+  std::atomic_signal_fence(std::memory_order_acquire);
+  if (g_shutdown_started) {
     OBCX_WARN("Shutdown already in progress, ignoring signal {}", signal);
     return;
   }
-
-  g_shutdown_started = 1;
+  std::atomic_signal_fence(std::memory_order_release);
+  g_shutdown_started = true;
   OBCX_INFO("Received signal {}, shutting down gracefully...", signal);
-  g_should_stop = 1;
+  g_should_stop = true;
+  g_stop_cv.notify_one();
 }
 } // namespace
 
 class ComponentManager {
 public:
-  static ComponentManager &instance() {
+  static auto instance() -> ComponentManager & {
     static ComponentManager instance;
     return instance;
   }
 
-  static std::unique_ptr<core::IBot> create_bot(
-      const common::BotConfig &config) {
+  static auto create_bot(const common::BotConfig &config)
+      -> std::unique_ptr<core::IBot> {
     if (config.type == "qq") {
       return std::make_unique<core::QQBot>(
           adapter::onebot11::ProtocolAdapter{});
@@ -76,8 +82,9 @@ public:
     return nullptr;
   }
 
-  static network::ConnectionManagerFactory::ConnectionType get_connection_type(
-      const std::string &type, const std::string &bot_type) {
+  static auto get_connection_type(const std::string &type,
+                                  const std::string &bot_type)
+      -> network::ConnectionManagerFactory::ConnectionType {
     if (bot_type == "qq") {
       if (type == "websocket" || type == "ws") {
         return network::ConnectionManagerFactory::ConnectionType::
@@ -100,8 +107,8 @@ public:
     return network::ConnectionManagerFactory::ConnectionType::Onebot11HTTP;
   }
 
-  static common::ConnectionConfig create_connection_config(
-      const toml::table &conn_table) {
+  static auto create_connection_config(const toml::table &conn_table)
+      -> common::ConnectionConfig {
     common::ConnectionConfig config;
 
     if (const auto *host = conn_table.get("host")) {
@@ -184,8 +191,8 @@ public:
     return config;
   }
 
-  bool setup_bot(core::IBot &bot, const common::BotConfig &config,
-                 common::PluginManager &plugin_manager) {
+  auto setup_bot(core::IBot &bot, const common::BotConfig &config,
+                 common::PluginManager &plugin_manager) -> bool {
     try {
       // Load and initialize plugins for this bot
       for (const auto &plugin_name : config.plugins) {
@@ -297,7 +304,7 @@ auto main(int argc, char *argv[]) -> int {
   // Create and setup bot components
   std::vector<std::unique_ptr<core::IBot>> bots;
   std::vector<std::thread> bot_threads;
-  std::mutex bots_mutex; // 互斥锁保护bot vector
+  std::mutex bots_mutex;
 
   interface::IPlugin::set_bots(&bots, &bots_mutex);
 
@@ -346,8 +353,9 @@ auto main(int argc, char *argv[]) -> int {
   OBCX_INFO("All components started successfully. OBCX Framework running...");
 
   // Wait for shutdown signal
-  while (g_should_stop == 0) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  {
+    std::unique_lock lock(g_stop_mtx);
+    g_stop_cv.wait(lock, []() { return g_should_stop; });
   }
 
   OBCX_INFO("Shutting down OBCX Framework...");

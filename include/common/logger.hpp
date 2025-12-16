@@ -194,8 +194,8 @@ private:
  * \endif
  * \if ENGLISH
  * Plugin-specific logging macro definitions
- * These macros allow plugins to use their own logger name instead of the default "obcx"
- * Usage: PLUGIN_INFO(get_name(), "message")
+ * These macros allow plugins to use their own logger name instead of the
+ * default "obcx" Usage: PLUGIN_INFO(get_name(), "message")
  * \endif
  */
 
@@ -208,16 +208,16 @@ private:
  * Plugin logging macros with location information
  * \endif
  */
-#define PLUGIN_LOG_IMPL(__plugin_name, __level, __fmt_str, ...)               \
+#define PLUGIN_LOG_IMPL(__plugin_name, __level, __fmt_str, ...)                \
   do {                                                                         \
     auto __logger = obcx::common::Logger::get(__plugin_name);                  \
     if (__logger && __logger->should_log(spdlog::level::__level)) {            \
-      __logger->log(spdlog::level::__level,                                    \
-                    fmt::format("{} " __fmt_str,                               \
-                                fmt::styled(fmt::format("[{}:{}]", __FILE__,   \
-                                                        __LINE__),             \
-                                            fmt::fg(fmt::color::dark_orange)), \
-                                ##__VA_ARGS__));                               \
+      __logger->log(                                                           \
+          spdlog::level::__level,                                              \
+          fmt::format("{} " __fmt_str,                                         \
+                      fmt::styled(fmt::format("[{}:{}]", __FILE__, __LINE__),  \
+                                  fmt::fg(fmt::color::dark_orange)),           \
+                      ##__VA_ARGS__));                                         \
     }                                                                          \
   } while (false)
 
@@ -297,7 +297,7 @@ private:
  * Usage: PLUGIN_I18N_INFO(get_name(), LogMessageKey::XXX, args...)
  * \endif
  */
-#define PLUGIN_I18N_LOG_IMPL(__plugin_name, __level, __key, ...)              \
+#define PLUGIN_I18N_LOG_IMPL(__plugin_name, __level, __key, ...)               \
   do {                                                                         \
     auto __logger = obcx::common::Logger::get(__plugin_name);                  \
     if (__logger && __logger->should_log(spdlog::level::__level)) {            \
