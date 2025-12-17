@@ -62,7 +62,7 @@ auto get_value(const json &j, const std::string &key,
  * @return An std::optional-wrapped value.
  */
 template <typename T>
-std::optional<T> get_optional(const json &j, const std::string &key) {
+auto get_optional(const json &j, const std::string &key) -> std::optional<T> {
   if (j.contains(key) && !j[key].is_null()) {
     try {
       return j[key].get<T>();
@@ -170,8 +170,9 @@ void set_optional(json &j, const std::string &key,
  * @param required_fields A list of required fields.
  * @return True if all required fields are present, false otherwise.
  */
-bool validate_required_fields(const json &j,
-                              const std::vector<std::string> &required_fields);
+auto validate_required_fields(const json &j,
+                              const std::vector<std::string> &required_fields)
+    -> bool;
 
 /**
  * \~chinese
@@ -214,7 +215,7 @@ auto pretty_print(const json &j, int indent = 2) -> std::string;
  * @param str The JSON string.
  * @return An optional containing the parsed result.
  */
-std::optional<json> parse(const std::string &str);
+auto parse(const std::string &str) -> std::optional<json>;
 
 /**
  * \~chinese
@@ -257,6 +258,7 @@ auto get_by_path(const json &j, const std::string &path,
       return j[ptr].get<T>();
     }
   } catch (const json::exception &) {
+    // FIXME: add warning log
     // \~chinese 忽略路径错误
     // \~english Ignore path errors
   }

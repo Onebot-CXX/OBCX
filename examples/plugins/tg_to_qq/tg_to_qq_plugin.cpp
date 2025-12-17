@@ -11,7 +11,9 @@
 #include "../dependency/bridge_bot/telegram_handler.hpp"
 
 namespace plugins {
-TGToQQPlugin::TGToQQPlugin() { PLUGIN_DEBUG("tg_to_qq", "TGToQQPlugin constructor called"); }
+TGToQQPlugin::TGToQQPlugin() {
+  PLUGIN_DEBUG("tg_to_qq", "TGToQQPlugin constructor called");
+}
 
 TGToQQPlugin::~TGToQQPlugin() {
   shutdown();
@@ -73,7 +75,9 @@ bool TGToQQPlugin::initialize() {
                   -> boost::asio::awaitable<void> {
                 co_await handle_tg_message(bot, event);
               });
-          PLUGIN_INFO(get_name(), "Registered Telegram message callback for TG to QQ plugin");
+          PLUGIN_INFO(
+              get_name(),
+              "Registered Telegram message callback for TG to QQ plugin");
           break;
         }
       }
@@ -85,7 +89,9 @@ bool TGToQQPlugin::initialize() {
     PLUGIN_INFO(get_name(), "TG to QQ Plugin initialized successfully");
     return true;
   } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Exception during TG to QQ Plugin initialization: {}", e.what());
+    PLUGIN_ERROR(get_name(),
+                 "Exception during TG to QQ Plugin initialization: {}",
+                 e.what());
     return false;
   }
 }
@@ -97,8 +103,9 @@ void TGToQQPlugin::deinitialize() {
     // unloaded If needed, specific cleanup can be added here
     PLUGIN_INFO(get_name(), "TG to QQ Plugin deinitialized successfully");
   } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Exception during TG to QQ Plugin deinitialization: {}",
-               e.what());
+    PLUGIN_ERROR(get_name(),
+                 "Exception during TG to QQ Plugin deinitialization: {}",
+                 e.what());
   }
 }
 
@@ -107,7 +114,8 @@ void TGToQQPlugin::shutdown() {
     PLUGIN_INFO(get_name(), "Shutting down TG to QQ Plugin...");
     PLUGIN_INFO(get_name(), "TG to QQ Plugin shutdown complete");
   } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Exception during TG to QQ Plugin shutdown: {}", e.what());
+    PLUGIN_ERROR(get_name(), "Exception during TG to QQ Plugin shutdown: {}",
+                 e.what());
   }
 }
 
@@ -115,8 +123,9 @@ boost::asio::awaitable<void> TGToQQPlugin::handle_tg_message(
     obcx::core::IBot &bot, const obcx::common::MessageEvent &event) {
   // 确保这是Telegram bot的消息
   if (auto *tg_bot = dynamic_cast<obcx::core::TGBot *>(&bot)) {
-    PLUGIN_INFO(get_name(), "TG to QQ Plugin: Processing Telegram message from chat {}",
-              event.group_id.value_or("unknown"));
+    PLUGIN_INFO(get_name(),
+                "TG to QQ Plugin: Processing Telegram message from chat {}",
+                event.group_id.value_or("unknown"));
 
     try {
       // 获取所有bot实例的带锁访问
@@ -139,16 +148,21 @@ boost::asio::awaitable<void> TGToQQPlugin::handle_tg_message(
                           event.data["is_edited"].get<bool>());
 
         if (is_edited) {
-          PLUGIN_INFO(get_name(), "Detected edited message, handling as edit event");
+          PLUGIN_INFO(get_name(),
+                      "Detected edited message, handling as edit event");
           co_await telegram_handler_->handle_message_edited(*tg_bot, *qq_bot_,
                                                             event);
         } else {
-          PLUGIN_INFO(get_name(), "Found QQ bot, performing TG->QQ message forwarding using "
-                    "TelegramHandler");
+          PLUGIN_INFO(
+              get_name(),
+              "Found QQ bot, performing TG->QQ message forwarding using "
+              "TelegramHandler");
           co_await telegram_handler_->forward_to_qq(*tg_bot, *qq_bot_, event);
         }
       } else {
-        PLUGIN_WARN(get_name(), "QQ bot or TelegramHandler not found for TG->QQ forwarding");
+        PLUGIN_WARN(
+            get_name(),
+            "QQ bot or TelegramHandler not found for TG->QQ forwarding");
       }
     } catch (const std::exception &e) {
       PLUGIN_ERROR(get_name(), "Error accessing bot list: {}", e.what());
@@ -165,11 +179,13 @@ bool TGToQQPlugin::load_configuration() {
     config_.enable_retry_queue =
         get_config_value<bool>("enable_retry_queue").value_or(false);
 
-    PLUGIN_INFO(get_name(), "TG to QQ configuration loaded: database={}, retry_queue={}",
-              config_.database_file, config_.enable_retry_queue);
+    PLUGIN_INFO(get_name(),
+                "TG to QQ configuration loaded: database={}, retry_queue={}",
+                config_.database_file, config_.enable_retry_queue);
     return true;
   } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Failed to load TG to QQ configuration: {}", e.what());
+    PLUGIN_ERROR(get_name(), "Failed to load TG to QQ configuration: {}",
+                 e.what());
     return false;
   }
 }

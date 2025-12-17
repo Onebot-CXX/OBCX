@@ -1,10 +1,9 @@
 #include "common/config_loader.hpp"
 #include "common/logger.hpp"
-#include <fstream>
 
 namespace obcx::common {
 
-bool ConfigLoader::load_config(const std::string &config_path) {
+auto ConfigLoader::load_config(const std::string &config_path) -> bool {
   std::lock_guard lock(mutex_);
 
   try {

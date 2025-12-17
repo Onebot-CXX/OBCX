@@ -19,7 +19,7 @@ auto ConnectionManagerFactory::create(ConnectionType type,
   case ConnectionType::Onebot11WebSocket:
     // Cast to OneBot11 adapter
     {
-      auto ob11_adapter =
+      const auto ob11_adapter =
           dynamic_cast<adapter::onebot11::ProtocolAdapter *>(&adapter);
       if (!ob11_adapter) {
         throw std::invalid_argument(
@@ -30,7 +30,7 @@ auto ConnectionManagerFactory::create(ConnectionType type,
   case ConnectionType::Onebot11HTTP:
     // Cast to OneBot11 adapter
     {
-      auto ob11_adapter =
+      const auto ob11_adapter =
           dynamic_cast<adapter::onebot11::ProtocolAdapter *>(&adapter);
       if (!ob11_adapter) {
         throw std::invalid_argument(
@@ -41,7 +41,7 @@ auto ConnectionManagerFactory::create(ConnectionType type,
   case ConnectionType::TelegramHTTP:
     // Cast to Telegram adapter
     {
-      auto telegram_adapter =
+      const auto telegram_adapter =
           dynamic_cast<adapter::telegram::ProtocolAdapter *>(&adapter);
       if (!telegram_adapter) {
         throw std::invalid_argument(

@@ -34,7 +34,8 @@ bool RcloneClient::set_proxy_env(std::string &old_http,
   setenv("http_proxy", proxy_.c_str(), 1);
   setenv("https_proxy", proxy_.c_str(), 1);
 
-  PLUGIN_DEBUG("torrent_downloader", "Set proxy environment variables to {}", proxy_);
+  PLUGIN_DEBUG("torrent_downloader", "Set proxy environment variables to {}",
+               proxy_);
   return true;
 }
 
@@ -63,8 +64,8 @@ boost::asio::awaitable<std::string> RcloneClient::upload(
 
   std::string full_remote = remote_ + remote_path_;
 
-  PLUGIN_INFO("torrent_downloader", "Uploading {} to {} (proxy: {})", local_path, full_remote,
-            proxy_.empty() ? "none" : proxy_);
+  PLUGIN_INFO("torrent_downloader", "Uploading {} to {} (proxy: {})",
+              local_path, full_remote, proxy_.empty() ? "none" : proxy_);
 
   // Set proxy
   std::string old_http_proxy, old_https_proxy;
@@ -83,7 +84,8 @@ boost::asio::awaitable<std::string> RcloneClient::upload(
           local_path.c_str(), full_remote.c_str(), nullptr);
 
     // If execl returns, it failed
-    PLUGIN_ERROR("torrent_downloader", "Failed to exec rclone: {}", strerror(errno));
+    PLUGIN_ERROR("torrent_downloader", "Failed to exec rclone: {}",
+                 strerror(errno));
     _exit(127);
   }
 
@@ -111,7 +113,8 @@ boost::asio::awaitable<std::string> RcloneClient::upload(
 boost::asio::awaitable<std::string> RcloneClient::get_share_link(
     const std::string &remote_full_path) {
 
-  PLUGIN_INFO("torrent_downloader", "Generating share link for {}", remote_full_path);
+  PLUGIN_INFO("torrent_downloader", "Generating share link for {}",
+              remote_full_path);
 
   // Set proxy
   std::string old_http_proxy, old_https_proxy;
@@ -178,8 +181,9 @@ boost::asio::awaitable<std::string> RcloneClient::get_share_link(
     }
   }
 
-  PLUGIN_WARN("torrent_downloader", "Could not generate share link for {}, exit_code: {}",
-            remote_full_path, exit_code);
+  PLUGIN_WARN("torrent_downloader",
+              "Could not generate share link for {}, exit_code: {}",
+              remote_full_path, exit_code);
   co_return fmt::format("文件已上传到: {}", remote_full_path);
 }
 

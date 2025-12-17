@@ -7,7 +7,8 @@ PathManager::PathManager(const std::string &host_base,
                          const std::string &container_base)
     : host_base_(normalize_path(host_base)),
       container_base_(normalize_path(container_base)) {
-  PLUGIN_DEBUG("bridge", 
+  PLUGIN_DEBUG(
+      "bridge",
       "PathManager initialized with host_base: '{}', container_base: '{}'",
       host_base_, container_base_);
 }
@@ -82,8 +83,9 @@ auto PathManager::host_to_container_absolute(
     return to_container_path(relative_part);
   }
 
-  PLUGIN_WARN("bridge", "Host path '{}' is not within the mounted directory '{}'",
-            normalized_host_path, host_base_);
+  PLUGIN_WARN("bridge",
+              "Host path '{}' is not within the mounted directory '{}'",
+              normalized_host_path, host_base_);
   return normalized_host_path; // 返回原路径
 }
 
@@ -106,8 +108,9 @@ auto PathManager::container_to_host_absolute(
     return to_host_path(relative_part);
   }
 
-  PLUGIN_WARN("bridge", "Container path '{}' is not within the mounted directory '{}'",
-            normalized_container_path, container_base_);
+  PLUGIN_WARN("bridge",
+              "Container path '{}' is not within the mounted directory '{}'",
+              normalized_container_path, container_base_);
   return normalized_container_path; // 返回原路径
 }
 
@@ -119,8 +122,9 @@ auto PathManager::ensure_directory(const std::string &relative_path) const
     PLUGIN_DEBUG("bridge", "Ensured directory exists: {}", host_path);
     return true;
   } catch (const std::exception &e) {
-    PLUGIN_ERROR("bridge", "Failed to create directory for relative path '{}': {}",
-               relative_path, e.what());
+    PLUGIN_ERROR("bridge",
+                 "Failed to create directory for relative path '{}': {}",
+                 relative_path, e.what());
     return false;
   }
 }

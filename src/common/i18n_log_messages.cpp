@@ -1,9 +1,7 @@
 #include "common/i18n_log_messages.hpp"
 #include "common/embedded_locales.hpp"
 #include <boost/locale/gnu_gettext.hpp>
-#include <fmt/format.h>
 #include <fstream>
-#include <sstream>
 
 namespace obcx::common {
 

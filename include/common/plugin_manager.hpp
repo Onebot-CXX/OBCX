@@ -36,7 +36,7 @@ public:
     other.destroy_func_ = nullptr;
   }
 
-  SafePluginWrapper &operator=(SafePluginWrapper &&other) noexcept {
+  auto operator=(SafePluginWrapper &&other) noexcept -> SafePluginWrapper & {
     if (this != &other) {
       reset();
       plugin_ptr_ = other.plugin_ptr_;
@@ -49,7 +49,7 @@ public:
     return *this;
   }
 
-  interface::IPlugin *get() const {
+  auto get() const -> interface::IPlugin * {
     return static_cast<interface::IPlugin *>(plugin_ptr_);
   }
 
@@ -111,25 +111,25 @@ public:
 
   bool is_plugin_loaded(const std::string &plugin_name) const;
 
-  interface::IPlugin *get_plugin(const std::string &plugin_name) const;
+  auto get_plugin(const std::string &plugin_name) const -> interface::IPlugin *;
 
-  std::vector<std::string> get_loaded_plugin_names() const;
+  auto get_loaded_plugin_names() const -> std::vector<std::string>;
 
-  bool initialize_plugin(const std::string &plugin_name);
+  auto initialize_plugin(const std::string &plugin_name) const -> bool;
 
-  void deinitialize_plugin(const std::string &plugin_name);
+  void deinitialize_plugin(const std::string &plugin_name) const;
 
-  void shutdown_plugin(const std::string &plugin_name);
+  void shutdown_plugin(const std::string &plugin_name) const;
 
   void initialize_all_plugins();
 
   void shutdown_all_plugins();
 
 private:
-  std::string find_plugin_file(const std::string &plugin_name);
+  auto find_plugin_file(const std::string &plugin_name) const -> std::string;
 
-  std::unique_ptr<SafePluginWrapper> load_plugin_library(
-      const std::string &plugin_path);
+  static auto load_plugin_library(const std::string &plugin_path)
+      -> std::unique_ptr<SafePluginWrapper>;
 
   std::unordered_map<std::string, LoadedPlugin> loaded_plugins_;
   std::vector<std::string> plugin_directories_;

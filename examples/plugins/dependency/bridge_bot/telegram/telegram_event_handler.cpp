@@ -41,15 +41,16 @@ auto TelegramEventHandler::handle_message_edited(
     }
 
     const std::string telegram_group_id = event.group_id.value();
-    PLUGIN_INFO("tg_to_qq", "处理Telegram群 {} 中消息 {} 的编辑事件", telegram_group_id,
-              event.message_id);
+    PLUGIN_INFO("tg_to_qq", "处理Telegram群 {} 中消息 {} 的编辑事件",
+                telegram_group_id, event.message_id);
 
     // 查找对应的QQ消息ID
     auto target_message_id =
         db_manager_->get_target_message_id("telegram", event.message_id, "qq");
 
     if (!target_message_id.has_value()) {
-      PLUGIN_DEBUG("tg_to_qq", "未找到Telegram消息 {} 对应的QQ消息映射", event.message_id);
+      PLUGIN_DEBUG("tg_to_qq", "未找到Telegram消息 {} 对应的QQ消息映射",
+                   event.message_id);
       co_return;
     }
 
@@ -64,11 +65,12 @@ auto TelegramEventHandler::handle_message_edited(
       nlohmann::json recall_json = nlohmann::json::parse(recall_response);
 
       if (recall_json.contains("status") && recall_json["status"] == "ok") {
-        PLUGIN_INFO("tg_to_qq", "成功在QQ撤回消息: {}", target_message_id.value());
+        PLUGIN_INFO("tg_to_qq", "成功在QQ撤回消息: {}",
+                    target_message_id.value());
         recall_success = true;
       } else {
-        PLUGIN_WARN("tg_to_qq", "QQ撤回消息失败: {}, 响应: {}", target_message_id.value(),
-                  recall_response);
+        PLUGIN_WARN("tg_to_qq", "QQ撤回消息失败: {}, 响应: {}",
+                    target_message_id.value(), recall_response);
       }
 
     } catch (const std::exception &e) {
@@ -77,7 +79,7 @@ auto TelegramEventHandler::handle_message_edited(
 
     // 无论撤回是否成功，都尝试重发编辑后的消息
     PLUGIN_INFO("tg_to_qq", "开始重发编辑后的消息到QQ (撤回状态: {})",
-              recall_success ? "成功" : "失败");
+                recall_success ? "成功" : "失败");
 
     try {
       // 标记此消息为编辑消息，以便forward_function_可以识别并更新映射而非创建新映射
@@ -94,7 +96,8 @@ auto TelegramEventHandler::handle_message_edited(
 
       // 如果是撤回成功但重发失败的情况，需要恢复映射或处理
       if (recall_success) {
-        PLUGIN_WARN("tg_to_qq", "撤回成功但重发失败，原QQ消息已被撤回但新消息发送失败");
+        PLUGIN_WARN("tg_to_qq",
+                    "撤回成功但重发失败，原QQ消息已被撤回但新消息发送失败");
       } else {
         // 撤回失败且重发也失败时，删除映射避免数据不一致
         db_manager_->delete_message_mapping("telegram", event.message_id, "qq");

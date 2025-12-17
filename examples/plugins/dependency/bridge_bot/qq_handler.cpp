@@ -133,8 +133,8 @@ MiniAppParseResult parse_miniapp_json(const std::string &json_data) {
     result.urls = found_urls;
     result.success = !found_urls.empty() || !result.title.empty();
 
-    PLUGIN_DEBUG("qq_to_tg", "解析小程序: app={}, title={}, urls_count={}", result.app_name,
-               result.title, result.urls.size());
+    PLUGIN_DEBUG("qq_to_tg", "解析小程序: app={}, title={}, urls_count={}",
+                 result.app_name, result.title, result.urls.size());
 
   } catch (const std::exception &e) {
     PLUGIN_DEBUG("qq_to_tg", "小程序JSON解析失败: {}", e.what());
@@ -221,8 +221,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
 
   // 查找对应的Telegram群ID、topic ID和桥接配置
   auto [tg_id, topic_id] = get_tg_group_and_topic_id(qq_group_id);
-  PLUGIN_DEBUG("qq_to_tg", "QQ群 {} 查找结果: TG群={}, topic_id={}", qq_group_id, tg_id,
-             topic_id);
+  PLUGIN_DEBUG("qq_to_tg", "QQ群 {} 查找结果: TG群={}, topic_id={}",
+               qq_group_id, tg_id, topic_id);
 
   if (tg_id.empty()) {
     PLUGIN_DEBUG("qq_to_tg", "QQ群 {} 没有对应的Telegram群配置", qq_group_id);
@@ -240,8 +240,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
   // 检查是否启用QQ到TG转发
   if (bridge_config->mode == BridgeMode::GROUP_TO_GROUP) {
     if (!bridge_config->enable_qq_to_tg) {
-      PLUGIN_DEBUG("qq_to_tg", "QQ群 {} 到Telegram群 {} 的转发已禁用，跳过", qq_group_id,
-                 telegram_group_id);
+      PLUGIN_DEBUG("qq_to_tg", "QQ群 {} 到Telegram群 {} 的转发已禁用，跳过",
+                   qq_group_id, telegram_group_id);
       co_return;
     }
   } else if (bridge_config->mode == BridgeMode::TOPIC_TO_GROUP) {
@@ -249,8 +249,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
     const TopicBridgeConfig *topic_config =
         get_topic_config(telegram_group_id, topic_id);
     if (!topic_config || !topic_config->enable_qq_to_tg) {
-      PLUGIN_DEBUG("qq_to_tg", "QQ群 {} 到Telegram topic {} 的转发已禁用，跳过", qq_group_id,
-                 topic_id);
+      PLUGIN_DEBUG("qq_to_tg", "QQ群 {} 到Telegram topic {} 的转发已禁用，跳过",
+                   qq_group_id, topic_id);
       co_return;
     }
   }
@@ -272,12 +272,13 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
   // 检查消息是否已转发（避免重复）
   if (db_manager_->get_target_message_id("qq", event.message_id, "telegram")
           .has_value()) {
-    PLUGIN_DEBUG("qq_to_tg", "QQ消息 {} 已转发到Telegram，跳过重复处理", event.message_id);
+    PLUGIN_DEBUG("qq_to_tg", "QQ消息 {} 已转发到Telegram，跳过重复处理",
+                 event.message_id);
     co_return;
   }
 
   PLUGIN_INFO("qq_to_tg", "准备从QQ群 {} 转发消息到Telegram群 {}", qq_group_id,
-            telegram_group_id);
+              telegram_group_id);
 
   try {
     // 保存/更新用户信息
@@ -332,16 +333,16 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
           // 将最优先的名称存储在nickname字段中，便于显示逻辑处理
           if (!card.empty()) {
             user_info.nickname = card;
-            PLUGIN_DEBUG("qq_to_tg", "使用QQ群名片作为显示名称: {} -> {}", event.user_id,
-                       card);
+            PLUGIN_DEBUG("qq_to_tg", "使用QQ群名片作为显示名称: {} -> {}",
+                         event.user_id, card);
           } else if (!title.empty()) {
             user_info.nickname = title;
-            PLUGIN_DEBUG("qq_to_tg", "使用QQ群头衔作为显示名称: {} -> {}", event.user_id,
-                       title);
+            PLUGIN_DEBUG("qq_to_tg", "使用QQ群头衔作为显示名称: {} -> {}",
+                         event.user_id, title);
           } else if (!general_nickname.empty()) {
             user_info.nickname = general_nickname;
-            PLUGIN_DEBUG("qq_to_tg", "使用QQ一般昵称作为显示名称: {} -> {}", event.user_id,
-                       general_nickname);
+            PLUGIN_DEBUG("qq_to_tg", "使用QQ一般昵称作为显示名称: {} -> {}",
+                         event.user_id, general_nickname);
           }
 
           // 同时保存群头衔到title字段供后续使用
@@ -353,8 +354,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
           if (db_manager_->save_or_update_user(user_info)) {
             sender_display_name = db_manager_->get_user_display_name(
                 "qq", event.user_id, event.group_id.value_or(""));
-            PLUGIN_DEBUG("qq_to_tg", "同步获取QQ用户信息成功：{} -> {}", event.user_id,
-                       sender_display_name);
+            PLUGIN_DEBUG("qq_to_tg", "同步获取QQ用户信息成功：{} -> {}",
+                         event.user_id, sender_display_name);
           }
         }
       } catch (const std::exception &e) {
@@ -382,7 +383,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
       sender_segment.type = "text";
       sender_segment.data["text"] = sender_info;
       message_to_send.push_back(sender_segment);
-      PLUGIN_DEBUG("qq_to_tg", "QQ到Telegram转发显示发送者：{}", sender_display_name);
+      PLUGIN_DEBUG("qq_to_tg", "QQ到Telegram转发显示发送者：{}",
+                   sender_display_name);
     } else {
       PLUGIN_DEBUG("qq_to_tg", "QQ到Telegram转发不显示发送者");
     }
@@ -394,7 +396,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
         // 获取被引用的QQ消息ID
         if (segment.data.contains("id")) {
           reply_message_id = segment.data["id"];
-          PLUGIN_DEBUG("qq_to_tg", "检测到QQ引用消息，引用ID: {}", reply_message_id.value());
+          PLUGIN_DEBUG("qq_to_tg", "检测到QQ引用消息，引用ID: {}",
+                       reply_message_id.value());
           break;
         }
       }
@@ -421,11 +424,11 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
       }
 
       PLUGIN_DEBUG("qq_to_tg", "QQ回复消息映射查找: QQ消息ID {} -> TG消息ID {}",
-                 reply_message_id.has_value() ? reply_message_id.value()
-                                              : "已清空",
-                 target_telegram_message_id.has_value()
-                     ? target_telegram_message_id.value()
-                     : "未找到");
+                   reply_message_id.has_value() ? reply_message_id.value()
+                                                : "已清空",
+                   target_telegram_message_id.has_value()
+                       ? target_telegram_message_id.value()
+                       : "未找到");
 
       if (target_telegram_message_id.has_value()) {
         // 创建Telegram引用消息段
@@ -434,9 +437,10 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
         reply_segment.data["id"] = target_telegram_message_id.value();
         message_to_send.push_back(reply_segment);
         PLUGIN_DEBUG("qq_to_tg", "添加Telegram引用消息段，引用ID: {}",
-                   target_telegram_message_id.value());
+                     target_telegram_message_id.value());
       } else {
-        PLUGIN_DEBUG("qq_to_tg", "未找到QQ引用消息对应的Telegram消息ID，可能是原生QQ消息");
+        PLUGIN_DEBUG("qq_to_tg",
+                     "未找到QQ引用消息对应的Telegram消息ID，可能是原生QQ消息");
       }
     }
 
@@ -473,13 +477,16 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
             if (cached_mapping && cached_mapping->is_gif.has_value()) {
               // 使用缓存的结果
               is_gif = cached_mapping->is_gif.value();
-              PLUGIN_DEBUG("qq_to_tg", "使用缓存的图片类型检测结果: {} -> is_gif={}", url,
-                         is_gif);
+              PLUGIN_DEBUG("qq_to_tg",
+                           "使用缓存的图片类型检测结果: {} -> is_gif={}", url,
+                           is_gif);
             } else {
               // 缓存未命中，直接下载文件并进行本地MIME检测
-              PLUGIN_INFO("qq_to_tg", "[图片类型检测] "
-                        "subType=1图片缓存未命中，开始下载文件进行本地检测: {}",
-                        url);
+              PLUGIN_INFO(
+                  "qq_to_tg",
+                  "[图片类型检测] "
+                  "subType=1图片缓存未命中，开始下载文件进行本地检测: {}",
+                  url);
 
               try {
                 PLUGIN_DEBUG("qq_to_tg", "[图片类型检测] 开始下载文件");
@@ -501,7 +508,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                     url_str.substr(host_start, path_start - host_start);
                 std::string path = url_str.substr(path_start);
 
-                PLUGIN_DEBUG("qq_to_tg", 
+                PLUGIN_DEBUG(
+                    "qq_to_tg",
                     "[图片类型检测] QQ文件URL解析完成 - Host: {}, Path: {}",
                     host, path);
 
@@ -518,7 +526,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                 qq_config.proxy_username = "";
                 qq_config.proxy_password = "";
 
-                PLUGIN_DEBUG("qq_to_tg", 
+                PLUGIN_DEBUG(
+                    "qq_to_tg",
                     "[图片类型检测] 创建专用QQ文件下载HttpClient - 主机: {}:{}",
                     host, qq_config.port);
 
@@ -551,11 +560,13 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                             file_header);
                     is_gif = MediaProcessor::is_gif_from_content(file_header);
 
-                    PLUGIN_INFO("qq_to_tg", "[图片类型检测] 文件头部MIME检测成功: {} -> {} "
-                              "(is_gif={}, 读取了{}字节)",
-                              url, detected_mime, is_gif, file_header.size());
-                    PLUGIN_DEBUG("qq_to_tg", "[图片类型检测] 文件头部16进制: {}",
-                               to_hex_string(file_header));
+                    PLUGIN_INFO("qq_to_tg",
+                                "[图片类型检测] 文件头部MIME检测成功: {} -> {} "
+                                "(is_gif={}, 读取了{}字节)",
+                                url, detected_mime, is_gif, file_header.size());
+                    PLUGIN_DEBUG("qq_to_tg",
+                                 "[图片类型检测] 文件头部16进制: {}",
+                                 to_hex_string(file_header));
 
                     // 创建新的缓存记录
                     obcx::storage::QQStickerMapping new_mapping;
@@ -572,28 +583,33 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                     PLUGIN_DEBUG("qq_to_tg", "[图片类型检测] 缓存记录已保存");
                   } else {
                     is_gif = true;
-                    PLUGIN_WARN("qq_to_tg", 
+                    PLUGIN_WARN(
+                        "qq_to_tg",
                         "[图片类型检测] 文件头部内容为空，回退到默认行为: {}",
                         url);
                   }
                 } else {
                   is_gif = true;
-                  PLUGIN_WARN("qq_to_tg", "[图片类型检测] Range请求失败，状态码: {}, "
-                            "回退到默认行为: {}",
-                            response.status_code, url);
+                  PLUGIN_WARN("qq_to_tg",
+                              "[图片类型检测] Range请求失败，状态码: {}, "
+                              "回退到默认行为: {}",
+                              response.status_code, url);
                 }
               } catch (const std::exception &e) {
                 is_gif = true;
-                PLUGIN_ERROR("qq_to_tg", "[图片类型检测] "
-                           "QQ文件Range请求或检测异常，回退到默认行为: {} - {}",
-                           url, e.what());
+                PLUGIN_ERROR(
+                    "qq_to_tg",
+                    "[图片类型检测] "
+                    "QQ文件Range请求或检测异常，回退到默认行为: {} - {}",
+                    url, e.what());
               }
             }
           } catch (const std::exception &e) {
             // 异常情况下回退到旧逻辑
             is_gif = true;
-            PLUGIN_ERROR("qq_to_tg", "图片类型检测异常，回退到默认行为: {} - {}", url,
-                       e.what());
+            PLUGIN_ERROR("qq_to_tg",
+                         "图片类型检测异常，回退到默认行为: {} - {}", url,
+                         e.what());
             PLUGIN_WARN("qq_to_tg", "将该图片作为动图处理以确保正常转发");
           }
         }
@@ -675,12 +691,13 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                                             sticker_message);
               }
 
-              PLUGIN_INFO("qq_to_tg", "使用缓存的QQ表情包发送成功: {} -> {}", qq_sticker_hash,
-                        cached_mapping->telegram_file_id);
+              PLUGIN_INFO("qq_to_tg", "使用缓存的QQ表情包发送成功: {} -> {}",
+                          qq_sticker_hash, cached_mapping->telegram_file_id);
               co_return; // 直接返回，不添加到普通消息中
             }
             // 缓存未命中，使用普通方式发送并保存file_id
-            PLUGIN_INFO("qq_to_tg", "QQ表情包缓存未命中，将上传并缓存: {}", qq_sticker_hash);
+            PLUGIN_INFO("qq_to_tg", "QQ表情包缓存未命中，将上传并缓存: {}",
+                        qq_sticker_hash);
           } catch (const std::exception &e) {
             PLUGIN_ERROR("qq_to_tg", "处理QQ表情包缓存时出错: {}", e.what());
           }
@@ -691,11 +708,13 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
           } else {
             converted_segment.type = "image"; // 使用photo而不是image以启用压缩
           }
-          PLUGIN_DEBUG("qq_to_tg", "检测到QQ表情包，使用压缩模式转发: {}", file_name);
+          PLUGIN_DEBUG("qq_to_tg", "检测到QQ表情包，使用压缩模式转发: {}",
+                       file_name);
         } else if (is_gif) {
           // 普通GIF动图转换为Telegram animation
           converted_segment.type = "animation";
-          PLUGIN_DEBUG("qq_to_tg", "检测到QQ GIF动图，转为Telegram动画: {}", file_name);
+          PLUGIN_DEBUG("qq_to_tg", "检测到QQ GIF动图，转为Telegram动画: {}",
+                       file_name);
         } else {
           // 普通图片保持不变
           PLUGIN_DEBUG("qq_to_tg", "转发QQ图片文件: {}", file_name);
@@ -705,7 +724,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
         std::string file_name = segment.data.value("file", "");
         std::string url = segment.data.value("url", "");
 
-        PLUGIN_DEBUG("qq_to_tg", "转发QQ语音文件: file={}, url={}", file_name, url);
+        PLUGIN_DEBUG("qq_to_tg", "转发QQ语音文件: file={}, url={}", file_name,
+                     url);
 
         // 优先使用URL进行远程下载
         if (!url.empty()) {
@@ -716,7 +736,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
         std::string file_name = segment.data.value("file", "");
         std::string url = segment.data.value("url", "");
 
-        PLUGIN_DEBUG("qq_to_tg", "转发QQ视频文件: file={}, url={}", file_name, url);
+        PLUGIN_DEBUG("qq_to_tg", "转发QQ视频文件: file={}, url={}", file_name,
+                     url);
 
         // 优先使用URL进行远程下载
         if (!url.empty()) {
@@ -742,7 +763,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
           PLUGIN_DEBUG("qq_to_tg", "使用QQ文件URL进行转发: {}", url);
         } else if (!file_id.empty()) {
           // URL为空但有file_id时，使用LLOneBot的文件URL获取API
-          PLUGIN_DEBUG("qq_to_tg", "URL为空，尝试通过file_id获取文件: {}", file_id);
+          PLUGIN_DEBUG("qq_to_tg", "URL为空，尝试通过file_id获取文件: {}",
+                       file_id);
           try {
             std::string response;
             // 根据消息来源选择API：群聊使用get_group_file_url，私聊使用get_private_file_url
@@ -752,13 +774,15 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
               std::string group_id = event.group_id.value();
               response =
                   co_await qq_bot_ptr->get_group_file_url(group_id, file_id);
-              PLUGIN_DEBUG("qq_to_tg", "get_group_file_url API响应: {}", response);
+              PLUGIN_DEBUG("qq_to_tg", "get_group_file_url API响应: {}",
+                           response);
             } else {
               // 私聊文件
               std::string user_id = event.user_id;
               response =
                   co_await qq_bot_ptr->get_private_file_url(user_id, file_id);
-              PLUGIN_DEBUG("qq_to_tg", "get_private_file_url API响应: {}", response);
+              PLUGIN_DEBUG("qq_to_tg", "get_private_file_url API响应: {}",
+                           response);
             }
 
             nlohmann::json response_json = nlohmann::json::parse(response);
@@ -770,7 +794,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
               std::string download_url = response_json["data"]["url"];
               converted_segment.data.erase("file_id");
               converted_segment.data["url"] = download_url;
-              PLUGIN_DEBUG("qq_to_tg", "成功通过API获取文件下载URL: {}", download_url);
+              PLUGIN_DEBUG("qq_to_tg", "成功通过API获取文件下载URL: {}",
+                           download_url);
             } else {
               throw std::runtime_error("API响应中没有找到下载URL");
             }
@@ -811,7 +836,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
         // 如果查询到的显示名称不是用户ID本身，说明有昵称信息
         if (at_display_name != qq_user_id) {
           converted_segment.data["text"] = fmt::format("@{} ", at_display_name);
-          PLUGIN_DEBUG("qq_to_tg", "转换QQ@消息: {} -> @{}", qq_user_id, at_display_name);
+          PLUGIN_DEBUG("qq_to_tg", "转换QQ@消息: {} -> @{}", qq_user_id,
+                       at_display_name);
         } else {
           // 没有昵称信息，回退到原来的格式但尝试获取一次
           if (db_manager_->should_fetch_user_info(
@@ -822,14 +848,16 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                   qq_group_id, qq_user_id, false);
               nlohmann::json response_json = nlohmann::json::parse(response);
 
-              PLUGIN_DEBUG("qq_to_tg", "QQ@用户群成员信息API响应: {}", response);
+              PLUGIN_DEBUG("qq_to_tg", "QQ@用户群成员信息API响应: {}",
+                           response);
 
               if (response_json.contains("status") &&
                   response_json["status"] == "ok" &&
                   response_json.contains("data") &&
                   response_json["data"].is_object()) {
                 auto data = response_json["data"];
-                PLUGIN_DEBUG("qq_to_tg", "QQ@用户群成员信息详细数据: {}", data.dump());
+                PLUGIN_DEBUG("qq_to_tg", "QQ@用户群成员信息详细数据: {}",
+                             data.dump());
                 obcx::storage::UserInfo user_info;
                 user_info.platform = "qq";
                 user_info.user_id = qq_user_id;
@@ -855,16 +883,19 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                 // 将最优先的名称存储在nickname字段中，便于显示逻辑处理
                 if (!card.empty()) {
                   user_info.nickname = card;
-                  PLUGIN_DEBUG("qq_to_tg", "使用QQ@用户群名片作为显示名称: {} -> {}",
-                             qq_user_id, card);
+                  PLUGIN_DEBUG("qq_to_tg",
+                               "使用QQ@用户群名片作为显示名称: {} -> {}",
+                               qq_user_id, card);
                 } else if (!title.empty()) {
                   user_info.nickname = title;
-                  PLUGIN_DEBUG("qq_to_tg", "使用QQ@用户群头衔作为显示名称: {} -> {}",
-                             qq_user_id, title);
+                  PLUGIN_DEBUG("qq_to_tg",
+                               "使用QQ@用户群头衔作为显示名称: {} -> {}",
+                               qq_user_id, title);
                 } else if (!general_nickname.empty()) {
                   user_info.nickname = general_nickname;
-                  PLUGIN_DEBUG("qq_to_tg", "使用QQ@用户一般昵称作为显示名称: {} -> {}",
-                             qq_user_id, general_nickname);
+                  PLUGIN_DEBUG("qq_to_tg",
+                               "使用QQ@用户一般昵称作为显示名称: {} -> {}",
+                               qq_user_id, general_nickname);
                 }
 
                 // 同时保存群头衔到title字段供后续使用
@@ -878,8 +909,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                       "qq", qq_user_id, event.group_id.value_or(""));
                   converted_segment.data["text"] =
                       fmt::format("@{} ", at_display_name);
-                  PLUGIN_DEBUG("qq_to_tg", "实时获取QQ@用户信息成功：{} -> @{}", qq_user_id,
-                             at_display_name);
+                  PLUGIN_DEBUG("qq_to_tg", "实时获取QQ@用户信息成功：{} -> @{}",
+                               qq_user_id, at_display_name);
                 } else {
                   converted_segment.data["text"] =
                       fmt::format("[@{}] ", qq_user_id);
@@ -889,7 +920,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                     fmt::format("[@{}] ", qq_user_id);
               }
             } catch (const std::exception &e) {
-              PLUGIN_DEBUG("qq_to_tg", "获取QQ@用户信息失败：{}, 使用用户ID", e.what());
+              PLUGIN_DEBUG("qq_to_tg", "获取QQ@用户信息失败：{}, 使用用户ID",
+                           e.what());
               converted_segment.data["text"] =
                   fmt::format("[@{}] ", qq_user_id);
             }
@@ -917,7 +949,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
         std::string title = segment.data.value("title", "链接分享");
         converted_segment.data.clear();
         converted_segment.data["text"] = fmt::format("[{}]\t{}", title, url);
-        PLUGIN_DEBUG("qq_to_tg", "转换QQ链接分享为文本: title={}, url={}", title, url);
+        PLUGIN_DEBUG("qq_to_tg", "转换QQ链接分享为文本: title={}, url={}",
+                     title, url);
       } else if (segment.type == "json") {
         // QQ小程序JSON消息处理
         try {
@@ -926,7 +959,7 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
             auto parse_result = parse_miniapp_json(json_data);
             converted_segment = format_miniapp_message(parse_result);
             PLUGIN_DEBUG("qq_to_tg", "转换QQ小程序JSON: success={}, title={}",
-                       parse_result.success, parse_result.title);
+                         parse_result.success, parse_result.title);
           } else {
             converted_segment.type = "text";
             converted_segment.data.clear();
@@ -956,7 +989,7 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
           }
           converted_segment = format_miniapp_message(parse_result);
           PLUGIN_DEBUG("qq_to_tg", "转换QQ应用分享: success={}, title={}",
-                     parse_result.success, parse_result.title);
+                       parse_result.success, parse_result.title);
         } catch (const std::exception &e) {
           converted_segment.type = "text";
           converted_segment.data.clear();
@@ -990,7 +1023,7 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
           }
           converted_segment = format_miniapp_message(parse_result);
           PLUGIN_DEBUG("qq_to_tg", "转换QQ ARK卡片: success={}, title={}",
-                     parse_result.success, parse_result.title);
+                       parse_result.success, parse_result.title);
         } catch (const std::exception &e) {
           converted_segment.type = "text";
           converted_segment.data.clear();
@@ -1013,8 +1046,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
             }
           }
           converted_segment = format_miniapp_message(parse_result);
-          PLUGIN_DEBUG("qq_to_tg", "转换QQ小程序: success={}, title={}", parse_result.success,
-                     parse_result.title);
+          PLUGIN_DEBUG("qq_to_tg", "转换QQ小程序: success={}, title={}",
+                       parse_result.success, parse_result.title);
         } catch (const std::exception &e) {
           converted_segment.type = "text";
           converted_segment.data.clear();
@@ -1027,7 +1060,7 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
       }
 
       PLUGIN_DEBUG("qq_to_tg", "添加转换后的消息段到message_to_send: type={}",
-                 converted_segment.type);
+                   converted_segment.type);
       message_to_send.push_back(converted_segment);
     };
 
@@ -1049,7 +1082,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
 
     // 批量处理图片（如果有多张图片）
     if (image_segments.size() > 1) {
-      PLUGIN_INFO("qq_to_tg", "检测到多张图片({})，进行聚合处理", image_segments.size());
+      PLUGIN_INFO("qq_to_tg", "检测到多张图片({})，进行聚合处理",
+                  image_segments.size());
 
       // 添加多图片提示
       obcx::common::MessageSegment multi_image_tip;
@@ -1170,11 +1204,13 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                 }
               }
 
-              PLUGIN_INFO("qq_to_tg", "成功处理合并转发消息，包含 {} 条消息",
-                        forward_data.value("messages", nlohmann::json::array())
-                            .size());
+              PLUGIN_INFO(
+                  "qq_to_tg", "成功处理合并转发消息，包含 {} 条消息",
+                  forward_data.value("messages", nlohmann::json::array())
+                      .size());
             } else {
-              PLUGIN_WARN("qq_to_tg", "获取合并转发内容失败: {}", forward_response);
+              PLUGIN_WARN("qq_to_tg", "获取合并转发内容失败: {}",
+                          forward_response);
               // 添加失败提示
               obcx::common::MessageSegment error_segment;
               error_segment.type = "text";
@@ -1243,8 +1279,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
             }
 
             message_to_send.push_back(node_segment);
-            PLUGIN_DEBUG("qq_to_tg", "处理node消息段: 用户 {} ({})", node_nickname,
-                       node_user_id);
+            PLUGIN_DEBUG("qq_to_tg", "处理node消息段: 用户 {} ({})",
+                         node_nickname, node_user_id);
           }
         } catch (const std::exception &e) {
           PLUGIN_ERROR("qq_to_tg", "处理node消息段时出错: {}", e.what());
@@ -1270,15 +1306,16 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
         // 群组模式：发送到群组
         response = co_await telegram_bot.send_group_message(telegram_group_id,
                                                             message_to_send);
-        PLUGIN_DEBUG("qq_to_tg", "群组模式：QQ群 {} 转发到Telegram群 {}", qq_group_id,
-                   telegram_group_id);
+        PLUGIN_DEBUG("qq_to_tg", "群组模式：QQ群 {} 转发到Telegram群 {}",
+                     qq_group_id, telegram_group_id);
       } else {
         // Topic模式：发送到特定topic
         auto &tg_bot = static_cast<obcx::core::TGBot &>(telegram_bot);
         response = co_await tg_bot.send_topic_message(
             telegram_group_id, topic_id, message_to_send);
-        PLUGIN_DEBUG("qq_to_tg", "Topic模式：QQ群 {} 转发到Telegram群 {} 的topic {}",
-                   qq_group_id, telegram_group_id, topic_id);
+        PLUGIN_DEBUG("qq_to_tg",
+                     "Topic模式：QQ群 {} 转发到Telegram群 {} 的topic {}",
+                     qq_group_id, telegram_group_id, topic_id);
       }
 
       // 解析响应获取Telegram消息ID
@@ -1300,11 +1337,14 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
           mapping.created_at = std::chrono::system_clock::now();
           db_manager_->add_message_mapping(mapping);
 
-          PLUGIN_INFO("qq_to_tg", "QQ消息 {} 成功转发到Telegram，Telegram消息ID: {}",
-                    event.message_id, telegram_message_id.value());
+          PLUGIN_INFO("qq_to_tg",
+                      "QQ消息 {} 成功转发到Telegram，Telegram消息ID: {}",
+                      event.message_id, telegram_message_id.value());
         } else {
           failure_reason = fmt::format("Invalid response format: {}", response);
-          PLUGIN_WARN("qq_to_tg", "转发QQ消息后，无法解析Telegram消息ID。响应: {}", response);
+          PLUGIN_WARN("qq_to_tg",
+                      "转发QQ消息后，无法解析Telegram消息ID。响应: {}",
+                      response);
         }
       } else {
         failure_reason = "Empty response from Telegram API";
@@ -1318,8 +1358,8 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
     // 如果发送失败且启用了重试队列，添加到重试队列
     if (!telegram_message_id.has_value() && retry_manager_ &&
         config::ENABLE_RETRY_QUEUE) {
-      PLUGIN_INFO("qq_to_tg", "消息发送失败，添加到重试队列: {} -> {}", event.message_id,
-                telegram_group_id);
+      PLUGIN_INFO("qq_to_tg", "消息发送失败，添加到重试队列: {} -> {}",
+                  event.message_id, telegram_group_id);
       retry_manager_->add_message_retry(
           "qq", "telegram", event.message_id, message_to_send,
           telegram_group_id, qq_group_id, topic_id,
@@ -1367,7 +1407,7 @@ auto QQHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
         recalled_message_id = std::to_string(message_id_value.get<int64_t>());
       } else {
         PLUGIN_WARN("qq_to_tg", "撤回事件message_id类型不支持: {}",
-                  message_id_value.type_name());
+                    message_id_value.type_name());
         co_return;
       }
     } else {
@@ -1376,14 +1416,15 @@ auto QQHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
     }
 
     PLUGIN_INFO("qq_to_tg", "处理QQ群 {} 中消息 {} 的撤回事件", qq_group_id,
-              recalled_message_id);
+                recalled_message_id);
 
     // 查找对应的Telegram消息ID
     auto target_message_id = db_manager_->get_target_message_id(
         "qq", recalled_message_id, "telegram");
 
     if (!target_message_id.has_value()) {
-      PLUGIN_DEBUG("qq_to_tg", "未找到QQ消息 {} 对应的Telegram消息映射", recalled_message_id);
+      PLUGIN_DEBUG("qq_to_tg", "未找到QQ消息 {} 对应的Telegram消息映射",
+                   recalled_message_id);
       co_return;
     }
 
@@ -1396,10 +1437,11 @@ auto QQHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
       nlohmann::json response_json = nlohmann::json::parse(response);
 
       if (response_json.contains("ok") && response_json["ok"].get<bool>()) {
-        PLUGIN_INFO("qq_to_tg", "成功在Telegram撤回消息: {}", target_message_id.value());
+        PLUGIN_INFO("qq_to_tg", "成功在Telegram撤回消息: {}",
+                    target_message_id.value());
       } else {
         PLUGIN_WARN("qq_to_tg", "Telegram撤回消息失败: {}, 响应: {}",
-                  target_message_id.value(), response);
+                    target_message_id.value(), response);
       }
 
     } catch (const std::exception &e) {
@@ -1410,11 +1452,11 @@ auto QQHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
     bool deleted = db_manager_->delete_message_mapping(
         "qq", recalled_message_id, "telegram");
     if (deleted) {
-      PLUGIN_DEBUG("qq_to_tg", "已删除消息映射: qq:{} -> telegram:{}", recalled_message_id,
-                 target_message_id.value());
+      PLUGIN_DEBUG("qq_to_tg", "已删除消息映射: qq:{} -> telegram:{}",
+                   recalled_message_id, target_message_id.value());
     } else {
-      PLUGIN_WARN("qq_to_tg", "删除消息映射失败: qq:{} -> telegram:{}", recalled_message_id,
-                target_message_id.value());
+      PLUGIN_WARN("qq_to_tg", "删除消息映射失败: qq:{} -> telegram:{}",
+                  recalled_message_id, target_message_id.value());
     }
 
   } catch (const std::bad_variant_access &e) {
@@ -1512,7 +1554,8 @@ auto QQHandler::handle_checkalive_command(obcx::core::IBot &telegram_bot,
       co_await qq_bot.send_group_message(qq_group_id, reply_message);
       PLUGIN_INFO("qq_to_tg", "/checkalive 命令处理完成");
     } catch (const std::exception &send_e) {
-      PLUGIN_ERROR("qq_to_tg", "/checkalive 命令：发送回复消息失败: {}", send_e.what());
+      PLUGIN_ERROR("qq_to_tg", "/checkalive 命令：发送回复消息失败: {}",
+                   send_e.what());
     }
 
   } catch (const std::exception &e) {

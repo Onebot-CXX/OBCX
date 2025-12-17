@@ -5,7 +5,6 @@
 #include <optional>
 #include <string>
 #include <toml++/toml.hpp>
-#include <unordered_map>
 #include <vector>
 
 namespace obcx::common {
@@ -26,38 +25,39 @@ struct PluginConfig {
 
 class ConfigLoader {
   ConfigLoader() = default;
+  ~ConfigLoader() = default;
   mutable std::mutex mutex_;
   std::unique_ptr<toml::table> config_data_;
   std::string config_path_;
 
 public:
-  static ConfigLoader &instance() {
+  static auto instance() -> ConfigLoader & {
     static ConfigLoader instance;
     return instance;
   }
 
   ConfigLoader(const ConfigLoader &) = delete;
-  ConfigLoader &operator=(const ConfigLoader &) = delete;
+  auto operator=(const ConfigLoader &) -> ConfigLoader & = delete;
   ConfigLoader(ConfigLoader &&) = delete;
-  ConfigLoader &operator=(ConfigLoader &&) = delete;
+  auto operator=(ConfigLoader &&) -> ConfigLoader & = delete;
 
-  bool load_config(const std::string &config_path);
+  auto load_config(const std::string &config_path) -> bool;
 
-  std::vector<BotConfig> get_bot_configs() const;
+  auto get_bot_configs() const -> std::vector<BotConfig>;
 
-  std::optional<PluginConfig> get_plugin_config(
-      const std::string &plugin_name) const;
+  auto get_plugin_config(const std::string &plugin_name) const
+      -> std::optional<PluginConfig>;
 
-  std::vector<PluginConfig> get_all_plugin_configs() const;
+  auto get_all_plugin_configs() const -> std::vector<PluginConfig>;
 
   template <typename T>
-  std::optional<T> get_value(const std::string &key) const {
+  auto get_value(const std::string &key) const -> std::optional<T> {
     std::lock_guard lock(mutex_);
     if (!config_data_) {
       return std::nullopt;
     }
 
-    auto node = config_data_->at_path(key);
+    const auto node = config_data_->at_path(key);
     if (!node) {
       return std::nullopt;
     }
@@ -83,16 +83,17 @@ public:
     return std::nullopt;
   }
 
-  std::optional<toml::table> get_section(const std::string &section_name) const;
+  auto get_section(const std::string &section_name) const
+      -> std::optional<toml::table>;
 
   void reload_config();
 
-  bool is_loaded() const {
+  auto is_loaded() const -> bool {
     std::lock_guard lock(mutex_);
     return config_data_ != nullptr;
   }
 
-  const std::string &get_config_path() const {
+  auto get_config_path() const -> const std::string & {
     std::lock_guard lock(mutex_);
     return config_path_;
   }

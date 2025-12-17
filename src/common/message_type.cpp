@@ -17,7 +17,7 @@ void BaseResponse::to_json(json &j) const {
   j["status"] = (status == MessageStatus::ok)       ? "ok"
                 : (status == MessageStatus::failed) ? "failed"
                                                     : "async";
-  j["retcode"] = retcode;
+  j["retcode"] = ret_code;
   if (message.has_value()) {
     j["message"] = message.value();
   }
@@ -38,7 +38,7 @@ void BaseResponse::from_json(const json &j) {
     status = MessageStatus::failed;
   }
 
-  retcode = JsonUtils::get_value(j, "retcode", -1);
+  ret_code = JsonUtils::get_value(j, "retcode", -1);
   message = JsonUtils::get_optional<std::string>(j, "message");
   wording = JsonUtils::get_optional<std::string>(j, "wording");
   data = JsonUtils::get_value(j, "data", json::object());

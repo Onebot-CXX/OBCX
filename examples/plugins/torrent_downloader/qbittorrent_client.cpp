@@ -23,7 +23,7 @@ QBittorrentClient::QBittorrentClient(const std::string &host, int port,
 
   http_client_ = std::make_unique<obcx::network::HttpClient>(ioc_, config);
   PLUGIN_INFO("torrent_downloader", "HTTP Client initialized for {}://{}:{}",
-            use_ssl ? "https" : "http", host, port);
+              use_ssl ? "https" : "http", host, port);
 
   // Run io_context in a background thread to handle async operations
   ioc_thread_ = std::thread([this]() {
@@ -81,7 +81,8 @@ boost::asio::awaitable<std::string> QBittorrentClient::http_post(
     // Use HttpClient's sync API
     auto response = http_client_->post_sync(path, body, headers);
 
-    PLUGIN_DEBUG("torrent_downloader", "POST {} returned status {}", path, response.status_code);
+    PLUGIN_DEBUG("torrent_downloader", "POST {} returned status {}", path,
+                 response.status_code);
 
     // Check HTTP status code
     if (!response.is_success()) {
@@ -129,7 +130,8 @@ boost::asio::awaitable<std::string> QBittorrentClient::http_get(
     // Use HttpClient's sync API
     auto response = http_client_->get_sync(path, headers);
 
-    PLUGIN_DEBUG("torrent_downloader", "GET {} returned status {}", path, response.status_code);
+    PLUGIN_DEBUG("torrent_downloader", "GET {} returned status {}", path,
+                 response.status_code);
 
     // Check HTTP status code
     if (!response.is_success()) {
@@ -151,7 +153,8 @@ boost::asio::awaitable<std::string> QBittorrentClient::login() {
   std::string body = fmt::format("username={}&password={}",
                                  url_encode(username_), url_encode(password_));
 
-  PLUGIN_INFO("torrent_downloader", "Logging in to qBittorrent at {}:{}", host_, port_);
+  PLUGIN_INFO("torrent_downloader", "Logging in to qBittorrent at {}:{}", host_,
+              port_);
 
   // Retry logic for unstable DDNS resolution
   const int max_retries = 3;
@@ -161,8 +164,8 @@ boost::asio::awaitable<std::string> QBittorrentClient::login() {
     // Delay before retry (except first attempt)
     if (attempt > 1) {
       int delay_s = attempt - 1; // 1s, 2s
-      PLUGIN_WARN("torrent_downloader", "Retrying login in {}s (attempt {}/{})", delay_s, attempt,
-                max_retries);
+      PLUGIN_WARN("torrent_downloader", "Retrying login in {}s (attempt {}/{})",
+                  delay_s, attempt, max_retries);
       boost::asio::steady_timer timer(ioc_, std::chrono::seconds(delay_s));
       co_await timer.async_wait(boost::asio::use_awaitable);
     }
@@ -176,10 +179,12 @@ boost::asio::awaitable<std::string> QBittorrentClient::login() {
       }
 
       if (attempt > 1) {
-        PLUGIN_INFO("torrent_downloader", "Successfully logged in to qBittorrent (attempt {})",
-                  attempt);
+        PLUGIN_INFO("torrent_downloader",
+                    "Successfully logged in to qBittorrent (attempt {})",
+                    attempt);
       } else {
-        PLUGIN_INFO("torrent_downloader", "Successfully logged in to qBittorrent");
+        PLUGIN_INFO("torrent_downloader",
+                    "Successfully logged in to qBittorrent");
       }
       co_return cookie;
 
@@ -198,8 +203,9 @@ boost::asio::awaitable<std::string> QBittorrentClient::login() {
         throw;
       }
 
-      PLUGIN_WARN("torrent_downloader", "Login attempt {}/{} failed (DNS/network issue): {}", attempt,
-                max_retries, last_error);
+      PLUGIN_WARN("torrent_downloader",
+                  "Login attempt {}/{} failed (DNS/network issue): {}", attempt,
+                  max_retries, last_error);
     }
   }
 
@@ -228,8 +234,9 @@ boost::asio::awaitable<AddTorrentResult> QBittorrentClient::add_torrent(
     body += fmt::format("&savepath={}", url_encode(save_path));
   }
 
-  PLUGIN_INFO("torrent_downloader", "Adding torrent to qBittorrent (save_path: {})",
-            save_path.empty() ? "default" : save_path);
+  PLUGIN_INFO("torrent_downloader",
+              "Adding torrent to qBittorrent (save_path: {})",
+              save_path.empty() ? "default" : save_path);
 
   // Small delay to ensure session is ready after login
   boost::asio::steady_timer session_timer(ioc_, std::chrono::milliseconds(500));
@@ -254,7 +261,8 @@ boost::asio::awaitable<AddTorrentResult> QBittorrentClient::add_torrent(
   }
 
   if (is_fail) {
-    PLUGIN_WARN("torrent_downloader", "Torrent add returned 'Fails.' - likely already exists");
+    PLUGIN_WARN("torrent_downloader",
+                "Torrent add returned 'Fails.' - likely already exists");
   } else {
     PLUGIN_INFO("torrent_downloader", "Torrent add request successful");
   }
@@ -275,8 +283,9 @@ boost::asio::awaitable<AddTorrentResult> QBittorrentClient::add_torrent(
       for (const auto &torrent : torrents_after) {
         std::string hash = torrent["hash"].get<std::string>();
         if (existing_hashes.find(hash) == existing_hashes.end()) {
-          PLUGIN_INFO("torrent_downloader", "Found new torrent with hash: {} after {}s wait", hash,
-                    (retry == 0 ? 2 : 2 + retry * 3));
+          PLUGIN_INFO("torrent_downloader",
+                      "Found new torrent with hash: {} after {}s wait", hash,
+                      (retry == 0 ? 2 : 2 + retry * 3));
           co_return AddTorrentResult{hash, false};
         }
       }
@@ -286,8 +295,9 @@ boost::asio::awaitable<AddTorrentResult> QBittorrentClient::add_torrent(
     }
 
     if (retry < 2) {
-      PLUGIN_WARN("torrent_downloader", "New torrent not found yet, waiting longer (retry {}/3)",
-                retry + 1);
+      PLUGIN_WARN("torrent_downloader",
+                  "New torrent not found yet, waiting longer (retry {}/3)",
+                  retry + 1);
     }
   }
 
@@ -314,16 +324,18 @@ boost::asio::awaitable<AddTorrentResult> QBittorrentClient::add_torrent(
                          existing_hash.begin(), ::tolower);
 
           if (existing_hash == extracted_hash) {
-            PLUGIN_INFO("torrent_downloader", "Found existing magnet torrent with hash: {}",
-                      existing_hash);
+            PLUGIN_INFO("torrent_downloader",
+                        "Found existing magnet torrent with hash: {}",
+                        existing_hash);
             co_return AddTorrentResult{existing_hash, true};
           }
         }
 
         // Hash extracted but not found in list - still return it as existing
-        PLUGIN_WARN("torrent_downloader", "Magnet returned 'Fails.' but hash {} not found in list, "
-                  "assuming it exists",
-                  extracted_hash);
+        PLUGIN_WARN("torrent_downloader",
+                    "Magnet returned 'Fails.' but hash {} not found in list, "
+                    "assuming it exists",
+                    extracted_hash);
         co_return AddTorrentResult{extracted_hash, true};
       }
     } else {
@@ -331,8 +343,9 @@ boost::asio::awaitable<AddTorrentResult> QBittorrentClient::add_torrent(
       // Since we can't extract hash from file path, we look for a torrent that
       // existed before This is tricky - the torrent file already exists, so
       // check if any torrent in the current list was also in the before list
-      PLUGIN_WARN("torrent_downloader", "Torrent file returned 'Fails.' - already exists, searching "
-                "for matching hash");
+      PLUGIN_WARN("torrent_downloader",
+                  "Torrent file returned 'Fails.' - already exists, searching "
+                  "for matching hash");
 
       // If there are any torrents that existed before and still exist now,
       // we can't determine which one is ours. Return the first one found.
@@ -344,8 +357,9 @@ boost::asio::awaitable<AddTorrentResult> QBittorrentClient::add_torrent(
           // This torrent existed before - could be the one
           // Check the name to see if it matches
           std::string name = torrent.value("name", "");
-          PLUGIN_INFO("torrent_downloader", "Found potential existing torrent: {} (hash: {})", name,
-                    hash);
+          PLUGIN_INFO("torrent_downloader",
+                      "Found potential existing torrent: {} (hash: {})", name,
+                      hash);
           co_return AddTorrentResult{hash, true};
         }
       }
@@ -353,7 +367,8 @@ boost::asio::awaitable<AddTorrentResult> QBittorrentClient::add_torrent(
       // Fallback: return any hash if we can't determine
       if (!torrents_after.empty()) {
         std::string hash = torrents_after[0]["hash"].get<std::string>();
-        PLUGIN_WARN("torrent_downloader", 
+        PLUGIN_WARN(
+            "torrent_downloader",
             "Cannot determine exact existing torrent, returning first: {}",
             hash);
         co_return AddTorrentResult{hash, true};
@@ -383,14 +398,17 @@ boost::asio::awaitable<AddTorrentResult> QBittorrentClient::add_torrent(
                        existing_hash.begin(), ::tolower);
 
         if (existing_hash == extracted_hash) {
-          PLUGIN_WARN("torrent_downloader", "Torrent already exists with hash: {}", existing_hash);
+          PLUGIN_WARN("torrent_downloader",
+                      "Torrent already exists with hash: {}", existing_hash);
           co_return AddTorrentResult{existing_hash, true};
         }
       }
 
       // Hash extracted but not found - maybe it's still being added
-      PLUGIN_INFO("torrent_downloader", "Extracted hash from magnet but not found in torrents yet: {}",
-                extracted_hash);
+      PLUGIN_INFO(
+          "torrent_downloader",
+          "Extracted hash from magnet but not found in torrents yet: {}",
+          extracted_hash);
       co_return AddTorrentResult{extracted_hash, false};
     }
   }
@@ -410,8 +428,9 @@ boost::asio::awaitable<nlohmann::json> QBittorrentClient::get_torrent_info(
     // Delay before retry (except first attempt)
     if (attempt > 1) {
       int delay_s = attempt - 1; // 指数退避: 1s, 2s
-      PLUGIN_WARN("torrent_downloader", "等待{}s后重试获取种子状态 (尝试 {}/{})", delay_s, attempt,
-                max_retries);
+      PLUGIN_WARN("torrent_downloader",
+                  "等待{}s后重试获取种子状态 (尝试 {}/{})", delay_s, attempt,
+                  max_retries);
       boost::asio::steady_timer timer(ioc_, std::chrono::seconds(delay_s));
       co_await timer.async_wait(boost::asio::use_awaitable);
     }
@@ -425,7 +444,8 @@ boost::asio::awaitable<nlohmann::json> QBittorrentClient::get_torrent_info(
       }
 
       if (attempt > 1) {
-        PLUGIN_INFO("torrent_downloader", "成功获取种子状态 (尝试 {})", attempt);
+        PLUGIN_INFO("torrent_downloader", "成功获取种子状态 (尝试 {})",
+                    attempt);
       }
       co_return json_array[0];
 
@@ -445,8 +465,8 @@ boost::asio::awaitable<nlohmann::json> QBittorrentClient::get_torrent_info(
                                              max_retries, last_error));
       }
 
-      PLUGIN_WARN("torrent_downloader", "获取种子状态失败 (尝试 {}/{}): {}", attempt, max_retries,
-                last_error);
+      PLUGIN_WARN("torrent_downloader", "获取种子状态失败 (尝试 {}/{}): {}",
+                  attempt, max_retries, last_error);
     }
   }
 
@@ -477,8 +497,9 @@ QBittorrentClient::get_torrent_properties(const std::string &cookie,
     // Delay before retry (except first attempt)
     if (attempt > 1) {
       int delay_s = attempt - 1; // 指数退避: 1s, 2s
-      PLUGIN_WARN("torrent_downloader", "等待{}s后重试获取种子属性 (尝试 {}/{})", delay_s, attempt,
-                max_retries);
+      PLUGIN_WARN("torrent_downloader",
+                  "等待{}s后重试获取种子属性 (尝试 {}/{})", delay_s, attempt,
+                  max_retries);
       boost::asio::steady_timer timer(ioc_, std::chrono::seconds(delay_s));
       co_await timer.async_wait(boost::asio::use_awaitable);
     }
@@ -486,7 +507,8 @@ QBittorrentClient::get_torrent_properties(const std::string &cookie,
     try {
       std::string response = co_await http_get(path, cookie);
       if (attempt > 1) {
-        PLUGIN_INFO("torrent_downloader", "成功获取种子属性 (尝试 {})", attempt);
+        PLUGIN_INFO("torrent_downloader", "成功获取种子属性 (尝试 {})",
+                    attempt);
       }
       co_return nlohmann::json::parse(response);
 
@@ -505,8 +527,8 @@ QBittorrentClient::get_torrent_properties(const std::string &cookie,
                                              max_retries, last_error));
       }
 
-      PLUGIN_WARN("torrent_downloader", "获取种子属性失败 (尝试 {}/{}): {}", attempt, max_retries,
-                last_error);
+      PLUGIN_WARN("torrent_downloader", "获取种子属性失败 (尝试 {}/{}): {}",
+                  attempt, max_retries, last_error);
     }
   }
 
@@ -518,10 +540,11 @@ boost::asio::awaitable<nlohmann::json> QBittorrentClient::get_all_torrents(
   std::string path = "/api/v2/torrents/info";
   std::string response = co_await http_get(path, cookie);
 
-  PLUGIN_DEBUG("torrent_downloader", "get_all_torrents response length: {}", response.length());
+  PLUGIN_DEBUG("torrent_downloader", "get_all_torrents response length: {}",
+               response.length());
   if (!response.empty()) {
-    PLUGIN_DEBUG("torrent_downloader", 
-        "First bytes: {:02x} {:02x} {:02x} {:02x}",
+    PLUGIN_DEBUG(
+        "torrent_downloader", "First bytes: {:02x} {:02x} {:02x} {:02x}",
         static_cast<unsigned char>(response[0]),
         response.length() > 1 ? static_cast<unsigned char>(response[1]) : 0,
         response.length() > 2 ? static_cast<unsigned char>(response[2]) : 0,

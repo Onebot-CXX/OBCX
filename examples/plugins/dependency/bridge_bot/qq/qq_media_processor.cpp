@@ -67,7 +67,8 @@ auto QQMediaProcessor::process_record_segment(
     -> boost::asio::awaitable<obcx::common::MessageSegment> {
 
   obcx::common::MessageSegment converted = segment;
-  PLUGIN_DEBUG("qq_to_tg", "转发QQ语音文件: {}", segment.data.value("file", "unknown"));
+  PLUGIN_DEBUG("qq_to_tg", "转发QQ语音文件: {}",
+               segment.data.value("file", "unknown"));
   co_return converted;
 }
 
@@ -76,7 +77,8 @@ auto QQMediaProcessor::process_video_segment(
     -> boost::asio::awaitable<obcx::common::MessageSegment> {
 
   obcx::common::MessageSegment converted = segment;
-  PLUGIN_DEBUG("qq_to_tg", "转发QQ视频文件: {}", segment.data.value("file", "unknown"));
+  PLUGIN_DEBUG("qq_to_tg", "转发QQ视频文件: {}",
+               segment.data.value("file", "unknown"));
   co_return converted;
 }
 
@@ -86,7 +88,8 @@ auto QQMediaProcessor::process_file_segment(
 
   obcx::common::MessageSegment converted = segment;
   converted.type = "document";
-  PLUGIN_DEBUG("qq_to_tg", "转发QQ文件: {}", segment.data.value("file", "unknown"));
+  PLUGIN_DEBUG("qq_to_tg", "转发QQ文件: {}",
+               segment.data.value("file", "unknown"));
   co_return converted;
 }
 
@@ -146,7 +149,8 @@ auto QQMediaProcessor::process_share_segment(
   std::string url = segment.data.value("url", "");
   std::string title = segment.data.value("title", "链接分享");
   converted.data["text"] = fmt::format("[{}]\t{}", title, url);
-  PLUGIN_DEBUG("qq_to_tg", "转换QQ链接分享为文本: title={}, url={}", title, url);
+  PLUGIN_DEBUG("qq_to_tg", "转换QQ链接分享为文本: title={}, url={}", title,
+               url);
   co_return converted;
 }
 

@@ -96,7 +96,7 @@ void TGBot::stop() {
   io_context_->stop();
 }
 
-asio::awaitable<void> TGBot::poll_updates() {
+auto TGBot::poll_updates() -> asio::awaitable<void> {
   int offset = 0;
   while (is_connected()) {
     bool success = false;

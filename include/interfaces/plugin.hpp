@@ -1,7 +1,6 @@
 #pragma once
 
 #include "common/config_loader.hpp"
-#include "common/message_type.hpp"
 #include "interfaces/bot.hpp"
 #include <boost/asio/awaitable.hpp>
 #include <functional>
@@ -9,7 +8,6 @@
 #include <mutex>
 #include <string>
 #include <tuple>
-#include <unordered_map>
 #include <vector>
 
 namespace obcx::interface {
@@ -25,13 +23,18 @@ enum class CallbackType {
 
 class IPlugin {
 public:
+  IPlugin() = default;
+  IPlugin(const IPlugin &) = delete;
+  auto operator=(const IPlugin &) -> IPlugin & = delete;
+  IPlugin(IPlugin &&) = delete;
+  auto operator=(IPlugin &&) -> IPlugin & = delete;
   virtual ~IPlugin() = default;
 
-  virtual auto get_name() const -> std::string = 0;
+  [[nodiscard]] virtual auto get_name() const -> std::string = 0;
 
-  virtual auto get_version() const -> std::string = 0;
+  [[nodiscard]] virtual auto get_version() const -> std::string = 0;
 
-  virtual auto get_description() const -> std::string = 0;
+  [[nodiscard]] virtual auto get_description() const -> std::string = 0;
 
   virtual auto initialize() -> bool = 0;
 
@@ -77,13 +80,13 @@ public:
     return std::nullopt;
   }
 
-  std::optional<toml::table> get_config_section(
-      const std::string &section_name) const;
+  [[nodiscard]] auto get_config_section(const std::string &section_name) const
+      -> std::optional<toml::table>;
 
 protected:
   template <typename EventType>
-  boost::asio::awaitable<void> handle_event_base(core::IBot &bot,
-                                                 const EventType &event) {
+  auto handle_event_base(core::IBot &bot, const EventType &event)
+      -> boost::asio::awaitable<void> {
     co_return;
   }
 

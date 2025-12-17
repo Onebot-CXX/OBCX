@@ -59,7 +59,8 @@ auto MediaProcessor::cleanup_media_file(const std::string &file_path) -> void {
       PLUGIN_DEBUG("bridge", "清理临时媒体文件: {}", file_path);
     }
   } catch (const std::exception &e) {
-    PLUGIN_ERROR("bridge", "清理临时媒体文件失败: {}, 错误: {}", file_path, e.what());
+    PLUGIN_ERROR("bridge", "清理临时媒体文件失败: {}, 错误: {}", file_path,
+                 e.what());
   }
 }
 

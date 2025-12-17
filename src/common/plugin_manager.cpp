@@ -20,7 +20,7 @@ void PluginManager::add_plugin_directory(const std::string &directory) {
   }
 }
 
-bool PluginManager::load_plugin(const std::string &plugin_name) {
+auto PluginManager::load_plugin(const std::string &plugin_name) -> bool {
   if (is_plugin_loaded(plugin_name)) {
     OBCX_WARN("Plugin {} is already loaded", plugin_name);
     return true;
@@ -35,7 +35,8 @@ bool PluginManager::load_plugin(const std::string &plugin_name) {
   return load_plugin_from_path(plugin_path);
 }
 
-bool PluginManager::load_plugin_from_path(const std::string &plugin_path) {
+auto PluginManager::load_plugin_from_path(const std::string &plugin_path)
+    -> bool {
   std::filesystem::path path(plugin_path);
   std::string plugin_name = path.stem().string();
 
@@ -77,14 +78,15 @@ void PluginManager::unload_all_plugins() {
   OBCX_INFO("All plugins unloaded");
 }
 
-bool PluginManager::is_plugin_loaded(const std::string &plugin_name) const {
+auto PluginManager::is_plugin_loaded(const std::string &plugin_name) const
+    -> bool {
   return loaded_plugins_.find(plugin_name) != loaded_plugins_.end();
 }
 
-interface::IPlugin *PluginManager::get_plugin(
-    const std::string &plugin_name) const {
-  auto it = loaded_plugins_.find(plugin_name);
-  if (it != loaded_plugins_.end() && it->second.wrapper) {
+auto PluginManager::get_plugin(const std::string &plugin_name) const
+    -> interface::IPlugin * {
+  if (auto it = loaded_plugins_.find(plugin_name);
+      it != loaded_plugins_.end() && it->second.wrapper) {
     return it->second.wrapper->get();
   }
   return nullptr;
@@ -101,7 +103,7 @@ std::vector<std::string> PluginManager::get_loaded_plugin_names() const {
   return names;
 }
 
-void PluginManager::deinitialize_plugin(const std::string &plugin_name) {
+void PluginManager::deinitialize_plugin(const std::string &plugin_name) const {
   auto *plugin = get_plugin(plugin_name);
   if (!plugin) {
     OBCX_ERROR("Plugin {} not found", plugin_name);
@@ -116,7 +118,8 @@ void PluginManager::deinitialize_plugin(const std::string &plugin_name) {
   }
 }
 
-bool PluginManager::initialize_plugin(const std::string &plugin_name) {
+auto PluginManager::initialize_plugin(const std::string &plugin_name) const
+    -> bool {
   auto *plugin = get_plugin(plugin_name);
   if (!plugin) {
     OBCX_ERROR("Plugin {} not found", plugin_name);
@@ -138,9 +141,8 @@ bool PluginManager::initialize_plugin(const std::string &plugin_name) {
   }
 }
 
-void PluginManager::shutdown_plugin(const std::string &plugin_name) {
-  auto *plugin = get_plugin(plugin_name);
-  if (plugin) {
+void PluginManager::shutdown_plugin(const std::string &plugin_name) const {
+  if (auto *plugin = get_plugin(plugin_name)) {
     try {
       plugin->shutdown();
       OBCX_INFO("Plugin {} shutdown successfully", plugin_name);
@@ -152,20 +154,21 @@ void PluginManager::shutdown_plugin(const std::string &plugin_name) {
 }
 
 void PluginManager::initialize_all_plugins() {
-  for (const auto &[name, plugin] : loaded_plugins_) {
-    initialize_plugin(name);
+  for (const auto &name : loaded_plugins_ | std::views::keys) {
+    initialize_plugin(name); // FIXME: check the initialization!
   }
 }
 
 void PluginManager::shutdown_all_plugins() {
-  for (const auto &[name, plugin] : loaded_plugins_) {
+  for (const auto &name : loaded_plugins_ | std::views::keys) {
     shutdown_plugin(name);
   }
 }
 
-std::string PluginManager::find_plugin_file(const std::string &plugin_name) {
-  std::vector<std::string> possible_names = {
-      plugin_name, "lib" + plugin_name + ".so", plugin_name + ".so"};
+auto PluginManager::find_plugin_file(const std::string &plugin_name) const
+    -> std::string {
+  const std::vector possible_names = {plugin_name, "lib" + plugin_name + ".so",
+                                      plugin_name + ".so"};
 
   for (const auto &directory : plugin_directories_) {
     for (const auto &name : possible_names) {
@@ -179,8 +182,8 @@ std::string PluginManager::find_plugin_file(const std::string &plugin_name) {
   return "";
 }
 
-std::unique_ptr<SafePluginWrapper> PluginManager::load_plugin_library(
-    const std::string &plugin_path) {
+auto PluginManager::load_plugin_library(const std::string &plugin_path)
+    -> std::unique_ptr<SafePluginWrapper> {
   void *handle = dlopen(plugin_path.c_str(), RTLD_LAZY);
   if (!handle) {
     OBCX_ERROR("Failed to load plugin library {}: {}", plugin_path, dlerror());

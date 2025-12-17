@@ -12,7 +12,9 @@
 #include "common/config_loader.hpp"
 
 namespace plugins {
-QQToTGPlugin::QQToTGPlugin() { PLUGIN_DEBUG(get_name(), "QQToTGPlugin constructor called"); }
+QQToTGPlugin::QQToTGPlugin() {
+  PLUGIN_DEBUG(get_name(), "QQToTGPlugin constructor called");
+}
 
 QQToTGPlugin::~QQToTGPlugin() {
   shutdown();
@@ -75,7 +77,8 @@ bool QQToTGPlugin::initialize() {
                   -> boost::asio::awaitable<void> {
                 co_await handle_qq_message(bot, event);
               });
-          PLUGIN_INFO(get_name(), "Registered QQ message callback for QQ to TG plugin");
+          PLUGIN_INFO(get_name(),
+                      "Registered QQ message callback for QQ to TG plugin");
 
           // 注册心跳事件回调
           qq_bot->on_event<obcx::common::HeartbeatEvent>(
@@ -84,7 +87,8 @@ bool QQToTGPlugin::initialize() {
                   -> boost::asio::awaitable<void> {
                 co_await handle_qq_heartbeat(bot, event);
               });
-          PLUGIN_INFO(get_name(), "Registered QQ heartbeat callback for QQ to TG plugin");
+          PLUGIN_INFO(get_name(),
+                      "Registered QQ heartbeat callback for QQ to TG plugin");
 
           break;
         }
@@ -97,7 +101,9 @@ bool QQToTGPlugin::initialize() {
     PLUGIN_INFO(get_name(), "QQ to TG Plugin initialized successfully");
     return true;
   } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Exception during QQ to TG Plugin initialization: {}", e.what());
+    PLUGIN_ERROR(get_name(),
+                 "Exception during QQ to TG Plugin initialization: {}",
+                 e.what());
     return false;
   }
 }
@@ -109,8 +115,9 @@ void QQToTGPlugin::deinitialize() {
     // unloaded If needed, specific cleanup can be added here
     PLUGIN_INFO(get_name(), "QQ to TG Plugin deinitialized successfully");
   } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Exception during QQ to TG Plugin deinitialization: {}",
-               e.what());
+    PLUGIN_ERROR(get_name(),
+                 "Exception during QQ to TG Plugin deinitialization: {}",
+                 e.what());
   }
 }
 
@@ -119,7 +126,8 @@ void QQToTGPlugin::shutdown() {
     PLUGIN_INFO(get_name(), "Shutting down QQ to TG Plugin...");
     PLUGIN_INFO(get_name(), "QQ to TG Plugin shutdown complete");
   } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Exception during QQ to TG Plugin shutdown: {}", e.what());
+    PLUGIN_ERROR(get_name(), "Exception during QQ to TG Plugin shutdown: {}",
+                 e.what());
   }
 }
 
@@ -127,8 +135,9 @@ boost::asio::awaitable<void> QQToTGPlugin::handle_qq_message(
     obcx::core::IBot &bot, const obcx::common::MessageEvent &event) {
   // 确保这是QQ bot的消息
   if (auto *qq_bot = dynamic_cast<obcx::core::QQBot *>(&bot)) {
-    PLUGIN_INFO(get_name(), "QQ to TG Plugin: Processing QQ message from group {}",
-              event.group_id.value_or("unknown"));
+    PLUGIN_INFO(get_name(),
+                "QQ to TG Plugin: Processing QQ message from group {}",
+                event.group_id.value_or("unknown"));
 
     try {
       if (!tg_bot_) {
@@ -143,11 +152,14 @@ boost::asio::awaitable<void> QQToTGPlugin::handle_qq_message(
       }
 
       if (tg_bot_ && qq_handler_) {
-        PLUGIN_INFO(get_name(), "Found Telegram bot, performing QQ->TG message forwarding "
-                  "using QQHandler");
+        PLUGIN_INFO(get_name(),
+                    "Found Telegram bot, performing QQ->TG message forwarding "
+                    "using QQHandler");
         co_await qq_handler_->forward_to_telegram(*tg_bot_, *qq_bot, event);
       } else {
-        PLUGIN_WARN(get_name(), "Telegram bot or QQHandler not found for QQ->TG forwarding");
+        PLUGIN_WARN(
+            get_name(),
+            "Telegram bot or QQHandler not found for QQ->TG forwarding");
       }
     } catch (const std::exception &e) {
       PLUGIN_ERROR(get_name(), "Error accessing bot list: {}", e.what());
@@ -166,7 +178,7 @@ boost::asio::awaitable<void> QQToTGPlugin::handle_qq_heartbeat(
       db_manager_->update_platform_heartbeat("qq",
                                              std::chrono::system_clock::now());
       PLUGIN_DEBUG(get_name(), "QQ platform heartbeat updated, interval: {}ms",
-                 event.interval);
+                   event.interval);
     }
   }
 
@@ -181,11 +193,13 @@ bool QQToTGPlugin::load_configuration() {
     config_.enable_retry_queue =
         get_config_value<bool>("enable_retry_queue").value_or(false);
 
-    PLUGIN_INFO(get_name(), "QQ to TG configuration loaded: database={}, retry_queue={}",
-              config_.database_file, config_.enable_retry_queue);
+    PLUGIN_INFO(get_name(),
+                "QQ to TG configuration loaded: database={}, retry_queue={}",
+                config_.database_file, config_.enable_retry_queue);
     return true;
   } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Failed to load QQ to TG configuration: {}", e.what());
+    PLUGIN_ERROR(get_name(), "Failed to load QQ to TG configuration: {}",
+                 e.what());
     return false;
   }
 }

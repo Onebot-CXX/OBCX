@@ -29,7 +29,7 @@ enum class MessageStatus { ok, failed, async_ };
  */
 struct BaseResponse {
   MessageStatus status;
-  int retcode;
+  int ret_code;
   std::optional<std::string> message;
   std::optional<std::string> wording;
   json data;

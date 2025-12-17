@@ -44,8 +44,8 @@ void load_group_mappings() {
                                      show_qq_to_tg_sender, show_tg_to_qq_sender,
                                      enable_qq_to_tg, enable_tg_to_qq);
             GROUP_MAP[telegram_group_id] = config;
-            PLUGIN_INFO("bridge", "Loaded group mapping: {} -> {}", telegram_group_id,
-                      qq_group_id);
+            PLUGIN_INFO("bridge", "Loaded group mapping: {} -> {}",
+                        telegram_group_id, qq_group_id);
           }
         }
       }
@@ -112,8 +112,8 @@ void load_group_mappings() {
                         topic_show_tg_to_qq, topic_enable_qq_to_tg,
                         topic_enable_tg_to_qq);
                     PLUGIN_INFO("bridge", "Loaded topic mapping: {}:{} -> {}",
-                              telegram_group_id, telegram_topic_id,
-                              qq_group_id);
+                                telegram_group_id, telegram_topic_id,
+                                qq_group_id);
                   }
                 }
               }
@@ -124,15 +124,17 @@ void load_group_mappings() {
                   telegram_group_id, topics, show_qq_to_tg_sender,
                   show_tg_to_qq_sender, enable_qq_to_tg, enable_tg_to_qq);
               GROUP_MAP[telegram_group_id] = config;
-              PLUGIN_INFO("bridge", "Loaded topic group mapping for TG {} with {} topics",
-                        telegram_group_id, topics.size());
+              PLUGIN_INFO("bridge",
+                          "Loaded topic group mapping for TG {} with {} topics",
+                          telegram_group_id, topics.size());
             }
           }
         }
       }
     }
 
-    PLUGIN_INFO("bridge", "Group mappings loaded: {} total mappings", GROUP_MAP.size());
+    PLUGIN_INFO("bridge", "Group mappings loaded: {} total mappings",
+                GROUP_MAP.size());
   } catch (const std::exception &e) {
     PLUGIN_ERROR("bridge", "Failed to load group mappings: {}", e.what());
   }
@@ -233,7 +235,8 @@ void load_config() {
     }
 
     PLUGIN_INFO("bridge", "Configuration loaded successfully");
-    PLUGIN_INFO("bridge", "Telegram Bot Token: {}...", TELEGRAM_BOT_TOKEN.substr(0, 20));
+    PLUGIN_INFO("bridge", "Telegram Bot Token: {}...",
+                TELEGRAM_BOT_TOKEN.substr(0, 20));
     PLUGIN_INFO("bridge", "QQ Host: {}:{}", QQ_HOST, QQ_PORT);
     PLUGIN_INFO("bridge", "Database: {}", DATABASE_FILE);
 

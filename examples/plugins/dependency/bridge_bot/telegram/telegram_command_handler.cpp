@@ -35,8 +35,9 @@ auto TelegramCommandHandler::handle_recall_command(
 
     std::string replied_message_id =
         std::to_string(reply_to_message["message_id"].get<int64_t>());
-    PLUGIN_INFO("tg_to_qq", "/recall 命令：尝试撤回回复的Telegram消息 {} 对应的QQ消息",
-              replied_message_id);
+    PLUGIN_INFO("tg_to_qq",
+                "/recall 命令：尝试撤回回复的Telegram消息 {} 对应的QQ消息",
+                replied_message_id);
 
     // 查找被回复消息对应的QQ消息ID
     std::optional<std::string> target_qq_message_id;
@@ -60,7 +61,7 @@ auto TelegramCommandHandler::handle_recall_command(
     }
 
     PLUGIN_INFO("tg_to_qq", "/recall 命令：找到对应的QQ消息ID: {}",
-              target_qq_message_id.value());
+                target_qq_message_id.value());
 
     // 尝试在QQ撤回消息
     std::string result_message;
@@ -74,13 +75,13 @@ auto TelegramCommandHandler::handle_recall_command(
       if (recall_json.contains("status") && recall_json["status"] == "ok") {
         result_message = "✅ 撤回成功";
         PLUGIN_INFO("tg_to_qq", "/recall 命令：成功在QQ撤回消息 {}",
-                  target_qq_message_id.value());
+                    target_qq_message_id.value());
 
         // 撤回成功，删除数据库映射
         db_manager_->delete_message_mapping("telegram", replied_message_id,
                                             "qq");
-        PLUGIN_DEBUG("tg_to_qq", "已删除消息映射: telegram:{} -> qq:{}", replied_message_id,
-                   target_qq_message_id.value());
+        PLUGIN_DEBUG("tg_to_qq", "已删除消息映射: telegram:{} -> qq:{}",
+                     replied_message_id, target_qq_message_id.value());
 
       } else {
         result_message = "❌ 撤回失败";
@@ -97,7 +98,8 @@ auto TelegramCommandHandler::handle_recall_command(
             result_message += "：" + error_msg;
           }
         }
-        PLUGIN_WARN("tg_to_qq", "/recall 命令：QQ撤回消息失败: {}", recall_response);
+        PLUGIN_WARN("tg_to_qq", "/recall 命令：QQ撤回消息失败: {}",
+                    recall_response);
       }
 
     } catch (const std::exception &e) {
@@ -110,7 +112,8 @@ auto TelegramCommandHandler::handle_recall_command(
       co_await send_reply_message(telegram_bot, telegram_group_id,
                                   event.message_id, result_message);
     } catch (const std::exception &send_e) {
-      PLUGIN_ERROR("tg_to_qq", "/recall 命令：发送结果消息失败: {}", send_e.what());
+      PLUGIN_ERROR("tg_to_qq", "/recall 命令：发送结果消息失败: {}",
+                   send_e.what());
     }
 
   } catch (const std::exception &e) {
