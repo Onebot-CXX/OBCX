@@ -130,7 +130,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
         auto photo = photos.back();
         std::string file_id = photo["file_id"];
 
-        event.raw_message = "[图片]";
+        event.raw_message = common::I18nLogMessages::get_message(
+            common::LogMessageKey::TELEGRAM_MSG_PHOTO);
         OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_PHOTO_FILE_ID,
                         file_id);
 
@@ -150,7 +151,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       auto sticker = message["sticker"];
       std::string file_id = sticker["file_id"];
 
-      event.raw_message = "[贴纸]";
+      event.raw_message = common::I18nLogMessages::get_message(
+          common::LogMessageKey::TELEGRAM_MSG_STICKER);
       OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_STICKER_FILE_ID,
                       file_id);
 
@@ -166,7 +168,9 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       // If the sticker has an emoji, include it in the message
       if (sticker.contains("emoji")) {
         segment.data["emoji"] = sticker["emoji"];
-        event.raw_message = "[" + sticker["emoji"].get<std::string>() + "贴纸]";
+        event.raw_message = common::I18nLogMessages::format_message(
+            common::LogMessageKey::TELEGRAM_MSG_STICKER_WITH_EMOJI,
+            sticker["emoji"].get<std::string>());
       }
       event.message.push_back(segment);
     } else if (message.contains("video")) {
@@ -174,7 +178,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       auto video = message["video"];
       std::string file_id = video["file_id"];
 
-      event.raw_message = "[视频]";
+      event.raw_message = common::I18nLogMessages::get_message(
+          common::LogMessageKey::TELEGRAM_MSG_VIDEO);
       OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_VIDEO_FILE_ID, file_id);
 
       // Create message segments
@@ -204,7 +209,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       auto animation = message["animation"];
       std::string file_id = animation["file_id"];
 
-      event.raw_message = "[动画]";
+      event.raw_message = common::I18nLogMessages::get_message(
+          common::LogMessageKey::TELEGRAM_MSG_ANIMATION);
       OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_ANIMATION_FILE_ID,
                       file_id);
 
@@ -235,7 +241,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       auto document = message["document"];
       std::string file_id = document["file_id"];
 
-      event.raw_message = "[文档]";
+      event.raw_message = common::I18nLogMessages::get_message(
+          common::LogMessageKey::TELEGRAM_MSG_DOCUMENT);
       OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_DOCUMENT_FILE_ID,
                       file_id);
 
@@ -248,8 +255,9 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       }
       if (document.contains("file_name")) {
         segment.data["file_name"] = document["file_name"];
-        event.raw_message =
-            "[文档: " + document["file_name"].get<std::string>() + "]";
+        event.raw_message = common::I18nLogMessages::format_message(
+            common::LogMessageKey::TELEGRAM_MSG_DOCUMENT_WITH_NAME,
+            document["file_name"].get<std::string>());
       }
       if (document.contains("mime_type")) {
         segment.data["mime_type"] = document["mime_type"];
@@ -265,7 +273,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       auto audio = message["audio"];
       std::string file_id = audio["file_id"];
 
-      event.raw_message = "[音频]";
+      event.raw_message = common::I18nLogMessages::get_message(
+          common::LogMessageKey::TELEGRAM_MSG_AUDIO);
       OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_AUDIO_FILE_ID, file_id);
 
       // Create message segments
@@ -280,7 +289,9 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       }
       if (audio.contains("title")) {
         segment.data["title"] = audio["title"];
-        event.raw_message = "[音频: " + audio["title"].get<std::string>() + "]";
+        event.raw_message = common::I18nLogMessages::format_message(
+            common::LogMessageKey::TELEGRAM_MSG_AUDIO_WITH_TITLE,
+            audio["title"].get<std::string>());
       }
       // If the audio has a caption, include it in the message
       if (message.contains("caption")) {
@@ -293,7 +304,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       auto voice = message["voice"];
       std::string file_id = voice["file_id"];
 
-      event.raw_message = "[语音]";
+      event.raw_message = common::I18nLogMessages::get_message(
+          common::LogMessageKey::TELEGRAM_MSG_VOICE);
       OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_VOICE_FILE_ID, file_id);
 
       // Create message segments
@@ -312,7 +324,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       auto video_note = message["video_note"];
       std::string file_id = video_note["file_id"];
 
-      event.raw_message = "[视频消息]";
+      event.raw_message = common::I18nLogMessages::get_message(
+          common::LogMessageKey::TELEGRAM_MSG_VIDEO_NOTE);
       OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_VIDEO_NOTE_FILE_ID,
                       file_id);
 

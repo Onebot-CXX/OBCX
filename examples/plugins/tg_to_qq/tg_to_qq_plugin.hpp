@@ -1,9 +1,9 @@
 #pragma once
 
-#include "interfaces/plugin.hpp"
-#include <memory>
-
 #include "core/qq_bot.hpp"
+#include "interfaces/plugin.hpp"
+
+#include <memory>
 
 // Forward declarations
 namespace bridge {

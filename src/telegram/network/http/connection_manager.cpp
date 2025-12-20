@@ -82,7 +82,8 @@ auto TelegramConnectionManager::send_action_and_wait_async(
     -> asio::awaitable<std::string> {
 
   if (!http_client_) {
-    throw std::runtime_error("HTTP客户端未初始化");
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::HTTP_CLIENT_NOT_INIT));
   }
 
   try {
@@ -112,8 +113,9 @@ auto TelegramConnectionManager::send_action_and_wait_async(
     HttpResponse response = http_client_->post_sync(api_path, body, headers);
 
     if (!response.is_success()) {
-      throw std::runtime_error("HTTP请求失败: " +
-                               std::to_string(response.status_code));
+      throw std::runtime_error(common::I18nLogMessages::format_message(
+          common::LogMessageKey::HTTP_REQUEST_FAILED_STATUS,
+          std::to_string(response.status_code)));
     }
 
     co_return response.body;
@@ -135,7 +137,8 @@ auto TelegramConnectionManager::get_connection_type() const -> std::string {
 auto TelegramConnectionManager::download_file(std::string file_id)
     -> asio::awaitable<std::string> {
   if (!http_client_) {
-    throw std::runtime_error("HTTP客户端未初始化");
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::HTTP_CLIENT_NOT_INIT));
   }
 
   try {
@@ -173,11 +176,13 @@ auto TelegramConnectionManager::download_file(std::string file_id)
                                    config_.access_token + "/" + file_path;
         co_return download_url;
       } else {
-        throw std::runtime_error("getFile响应中没有file_path字段");
+        throw std::runtime_error(common::I18nLogMessages::get_message(
+            common::LogMessageKey::TELEGRAM_GETFILE_NO_PATH));
       }
     } else {
-      throw std::runtime_error("getFile请求失败: " +
-                               std::to_string(response.status_code));
+      throw std::runtime_error(common::I18nLogMessages::format_message(
+          common::LogMessageKey::TELEGRAM_GETFILE_FAILED_STATUS,
+          std::to_string(response.status_code)));
     }
 
   } catch (const std::exception &e) {
@@ -189,7 +194,8 @@ auto TelegramConnectionManager::download_file(std::string file_id)
 auto TelegramConnectionManager::download_file_content(
     std::string_view download_url) -> asio::awaitable<std::string> {
   if (!http_client_) {
-    throw std::runtime_error("HTTP客户端未初始化");
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::HTTP_CLIENT_NOT_INIT));
   }
 
   try {
@@ -197,13 +203,15 @@ auto TelegramConnectionManager::download_file_content(
     std::string url_str(download_url);
     size_t protocol_pos = url_str.find("://");
     if (protocol_pos == std::string::npos) {
-      throw std::runtime_error("无效的下载URL格式");
+      throw std::runtime_error(common::I18nLogMessages::get_message(
+          common::LogMessageKey::DOWNLOAD_URL_INVALID_FORMAT));
     }
 
     size_t host_start = protocol_pos + 3;
     size_t path_start = url_str.find("/", host_start);
     if (path_start == std::string::npos) {
-      throw std::runtime_error("下载URL中未找到路径部分");
+      throw std::runtime_error(common::I18nLogMessages::get_message(
+          common::LogMessageKey::DOWNLOAD_URL_NO_PATH));
     }
 
     std::string path = url_str.substr(path_start);
@@ -217,8 +225,9 @@ auto TelegramConnectionManager::download_file_content(
     if (response.is_success()) {
       co_return response.body;
     } else {
-      throw std::runtime_error("文件下载失败，状态码: " +
-                               std::to_string(response.status_code));
+      throw std::runtime_error(common::I18nLogMessages::format_message(
+          common::LogMessageKey::FILE_DOWNLOAD_FAILED_STATUS,
+          std::to_string(response.status_code)));
     }
 
   } catch (const std::exception &e) {
@@ -329,9 +338,9 @@ void TelegramConnectionManager::process_updates(std::string_view updates_json) {
         }
       }
     }
-
-  } catch (const json::exception &e) {
-    OBCX_WARN("解析更新JSON失败: {}", e.what());
+  } catch (const std::exception &e) {
+    OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_UPDATE_PARSE_ERROR,
+                   e.what());
   }
 }
 

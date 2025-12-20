@@ -39,7 +39,8 @@ struct HttpClient::Impl {
 HttpClient::HttpClient(asio::io_context &ioc,
                        const common::ConnectionConfig &config)
     : pimpl_(std::make_unique<Impl>(ioc, config)) {
-  OBCX_INFO("HTTP Client initialized for {}:{}", config.host, config.port);
+  OBCX_I18N_INFO(common::LogMessageKey::HTTP_CLIENT_INIT, config.host,
+                 config.port);
 }
 
 HttpClient::~HttpClient() = default;
@@ -188,7 +189,7 @@ auto HttpClient::head_async(std::string_view path,
 auto HttpClient::post_sync(std::string_view path, std::string_view body,
                            const std::map<std::string, std::string> &headers)
     -> HttpResponse {
-  OBCX_DEBUG("POST {} with body: {}", path, body);
+  OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_POST_DEBUG, path, body);
 
   try {
     // 创建请求
@@ -260,12 +261,13 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
       response.raw_response = std::move(res);
     }
 
-    OBCX_DEBUG("Received response with status code: {}", response.status_code);
-    OBCX_DEBUG("Response body: {}", response.body);
+    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_STATUS,
+                    response.status_code);
+    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_BODY, response.body);
 
     return response;
   } catch (const std::exception &e) {
-    OBCX_ERROR("HTTP POST request failed: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::HTTP_POST_FAILED, e.what());
     throw HttpClientError(std::string("HTTP POST request failed: ") + e.what());
   }
 }
@@ -273,7 +275,7 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
 auto HttpClient::get_sync(std::string_view path,
                           const std::map<std::string, std::string> &headers)
     -> HttpResponse {
-  OBCX_DEBUG("GET {}", path);
+  OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_GET_DEBUG, path);
 
   try {
     // 创建请求
@@ -342,12 +344,13 @@ auto HttpClient::get_sync(std::string_view path,
       response.raw_response = std::move(res);
     }
 
-    OBCX_DEBUG("Received response with status code: {}", response.status_code);
-    OBCX_DEBUG("Response body: {}", response.body);
+    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_STATUS,
+                    response.status_code);
+    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_BODY, response.body);
 
     return response;
   } catch (const std::exception &e) {
-    OBCX_ERROR("HTTP GET request failed: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::HTTP_GET_FAILED, e.what());
     throw HttpClientError(std::string("HTTP GET request failed: ") + e.what());
   }
 }
@@ -440,7 +443,7 @@ auto HttpClient::head_sync(std::string_view path,
 
     return response;
   } catch (const std::exception &e) {
-    OBCX_ERROR("HTTP HEAD request failed: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::HTTP_HEAD_FAILED, e.what());
     throw HttpClientError(std::string("HTTP HEAD request failed: ") + e.what());
   }
 }
@@ -454,7 +457,9 @@ auto HttpClient::is_connected() const -> bool {
   return true;
 }
 
-void HttpClient::close() { OBCX_INFO("HTTP Client closed"); }
+void HttpClient::close() {
+  OBCX_I18N_INFO(common::LogMessageKey::HTTP_CLIENT_CLOSED);
+}
 
 auto HttpClientFactory::create(asio::io_context &ioc,
                                const common::ConnectionConfig &config)

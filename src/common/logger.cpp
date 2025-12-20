@@ -84,10 +84,10 @@ void Logger::initialize(spdlog::level::level_enum level,
 
     initialized_ = true;
 
-    OBCX_INFO("Logger initialized successfully");
+    OBCX_I18N_INFO(common::LogMessageKey::LOGGER_INIT_SUCCESS);
   } catch (const spdlog::spdlog_ex &ex) {
-    throw std::runtime_error("Logger initialization failed: " +
-                             std::string(ex.what()));
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::LOGGER_INIT_FAILED_EXCEPTION, ex.what()));
   }
 }
 

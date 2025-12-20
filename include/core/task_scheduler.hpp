@@ -47,7 +47,7 @@ public:
    */
   ~TaskScheduler() {
     stop();
-    OBCX_INFO("TaskScheduler 已销毁");
+    OBCX_I18N_INFO(common::LogMessageKey::TASK_SCHEDULER_DESTROYED);
   }
 
   /**
@@ -89,7 +89,8 @@ public:
 
     std::stringstream ss;
     ss << std::this_thread::get_id();
-    OBCX_DEBUG("TaskScheduler: 提交重负载任务到线程池 (线程ID: {})", ss.str());
+    OBCX_I18N_DEBUG(common::LogMessageKey::TASK_SCHEDULER_SUBMIT_HEAVY_TASK,
+                    ss.str());
 
     // 使用 promise/future 机制实现线程池任务调度
     auto promise = std::make_shared<std::promise<ReturnType>>();
@@ -100,21 +101,24 @@ public:
       try {
         std::stringstream worker_ss;
         worker_ss << std::this_thread::get_id();
-        OBCX_DEBUG("TaskScheduler: 开始执行重负载任务 (工作线程ID: {})",
-                   worker_ss.str());
+        OBCX_I18N_DEBUG(common::LogMessageKey::TASK_SCHEDULER_HEAVY_TASK_START,
+                        worker_ss.str());
 
         // 在线程池中执行实际的重负载任务
         if constexpr (std::is_void_v<ReturnType>) {
           task();
-          OBCX_DEBUG("TaskScheduler: 重负载任务完成 (无返回值)");
+          OBCX_I18N_DEBUG(
+              common::LogMessageKey::TASK_SCHEDULER_HEAVY_TASK_COMPLETE_VOID);
           promise->set_value();
         } else {
           auto result = task();
-          OBCX_DEBUG("TaskScheduler: 重负载任务完成，返回结果");
+          OBCX_I18N_DEBUG(
+              common::LogMessageKey::TASK_SCHEDULER_HEAVY_TASK_COMPLETE_RESULT);
           promise->set_value(std::move(result));
         }
       } catch (...) {
-        OBCX_ERROR("TaskScheduler: 重负载任务执行时发生异常");
+        OBCX_I18N_ERROR(
+            common::LogMessageKey::TASK_SCHEDULER_HEAVY_TASK_EXCEPTION);
         promise->set_exception(std::current_exception());
       }
     });
@@ -156,7 +160,8 @@ public:
     std::vector<ReturnType> results;
     results.reserve(tasks.size());
 
-    OBCX_INFO("TaskScheduler: 开始批量执行 {} 个重负载任务", tasks.size());
+    OBCX_I18N_INFO(common::LogMessageKey::TASK_SCHEDULER_BATCH_START,
+                   tasks.size());
 
     // 并发执行所有任务
     for (auto &task : tasks) {
@@ -164,7 +169,7 @@ public:
       results.push_back(std::move(result));
     }
 
-    OBCX_INFO("TaskScheduler: 批量任务执行完成");
+    OBCX_I18N_INFO(common::LogMessageKey::TASK_SCHEDULER_BATCH_COMPLETE);
     co_return results;
   }
 
@@ -184,8 +189,8 @@ public:
 
     using ReturnType = std::invoke_result_t<Func>;
 
-    OBCX_DEBUG("TaskScheduler: 执行带超时的重负载任务 (超时: {}ms)",
-               timeout.count());
+    OBCX_I18N_DEBUG(common::LogMessageKey::TASK_SCHEDULER_TIMEOUT_TASK_START,
+                    timeout.count());
 
     try {
       // 这里可以使用 asio::steady_timer 实现真正的超时逻辑
@@ -193,7 +198,8 @@ public:
       auto result = co_await run_heavy_task(std::move(task));
       co_return std::make_optional(std::move(result));
     } catch (const std::exception &e) {
-      OBCX_ERROR("TaskScheduler: 超时任务执行失败: {}", e.what());
+      OBCX_I18N_ERROR(common::LogMessageKey::TASK_SCHEDULER_TIMEOUT_TASK_FAILED,
+                      e.what());
       co_return std::nullopt;
     }
   }

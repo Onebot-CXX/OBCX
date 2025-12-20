@@ -22,9 +22,9 @@ ProxyHttpClient::ProxyHttpClient(asio::io_context &ioc,
                                  const common::ConnectionConfig &config)
     : HttpClient(ioc, config), ioc_(ioc), proxy_config_(proxy_config),
       resolver_(ioc), target_host_(config.host), target_port_(config.port) {
-  OBCX_DEBUG("ProxyHttpClient 创建，代理: {}:{} -> 目标: {}:{}",
-             proxy_config_.host, proxy_config_.port, target_host_,
-             target_port_);
+  OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_CLIENT_CREATED,
+                  proxy_config_.host, proxy_config_.port, target_host_,
+                  target_port_);
 }
 
 HttpResponse ProxyHttpClient::post_sync(
@@ -39,7 +39,7 @@ HttpResponse ProxyHttpClient::post_sync(
     return send_http_request(tunnel_socket, "POST", std::string(path),
                              std::string(body), headers);
   } catch (const std::exception &e) {
-    OBCX_ERROR("ProxyHttpClient POST请求失败: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::PROXY_POST_FAILED, e.what());
     HttpResponse error_response;
     error_response.status_code = 0;
     error_response.body = e.what();
@@ -58,7 +58,7 @@ HttpResponse ProxyHttpClient::get_sync(
     return send_http_request(tunnel_socket, "GET", std::string(path), "",
                              headers);
   } catch (const std::exception &e) {
-    OBCX_ERROR("ProxyHttpClient GET请求失败: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::PROXY_GET_FAILED, e.what());
     HttpResponse error_response;
     error_response.status_code = 0;
     error_response.body = e.what();
@@ -103,17 +103,20 @@ tcp::socket ProxyHttpClient::connect_through_proxy() {
     // 设置SNI
     if (!SSL_set_tlsext_host_name(ssl_socket.native_handle(),
                                   proxy_config_.host.c_str())) {
-      OBCX_WARN("无法为HTTPS代理设置SNI: {}", proxy_config_.host);
+      OBCX_I18N_WARN(common::LogMessageKey::PROXY_HTTPS_SNI_FAILED,
+                     proxy_config_.host);
     }
 
     // SSL握手
     boost::system::error_code ec;
     ssl_socket.handshake(ssl::stream_base::client, ec);
     if (ec) {
-      throw std::runtime_error("HTTPS代理SSL握手失败: " + ec.message());
+      throw std::runtime_error(common::I18nLogMessages::format_message(
+          common::LogMessageKey::PROXY_HTTPS_SSL_HANDSHAKE_FAILED_EXCEPTION,
+          ec.message()));
     }
 
-    OBCX_DEBUG("HTTPS代理SSL连接建立成功");
+    OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_HTTPS_SSL_SUCCESS);
     return establish_https_tunnel(ssl_socket, target_host_, target_port_);
   }
   case ProxyType::SOCKS5: {
@@ -122,7 +125,8 @@ tcp::socket ProxyHttpClient::connect_through_proxy() {
     return establish_socks5_tunnel(proxy_socket, target_host_, target_port_);
   }
   default:
-    throw std::runtime_error("不支持的代理类型");
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::PROXY_UNSUPPORTED_TYPE));
   }
 }
 
@@ -152,7 +156,8 @@ tcp::socket ProxyHttpClient::establish_http_tunnel(
   boost::system::error_code ec;
   asio::write(proxy_socket, asio::buffer(request_str), ec);
   if (ec) {
-    throw std::runtime_error("发送CONNECT请求失败: " + ec.message());
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_CONNECT_REQUEST_FAILED, ec.message()));
   }
 
   std::string response_line;
@@ -168,11 +173,14 @@ tcp::socket ProxyHttpClient::establish_http_tunnel(
   }
 
   if (ec) {
-    throw std::runtime_error("读取CONNECT响应失败: " + ec.message());
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_CONNECT_RESPONSE_READ_FAILED,
+        ec.message()));
   }
 
   if (response_line.find("200") == std::string::npos) {
-    throw std::runtime_error("代理CONNECT请求失败: " + response_line);
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_CONNECT_FAILED_EXCEPTION, response_line));
   }
 
   // 读取并丢弃响应头
@@ -193,7 +201,7 @@ tcp::socket ProxyHttpClient::establish_http_tunnel(
       break; // 空行表示头部结束
     }
 
-    OBCX_DEBUG("响应头: {}", header_line);
+    OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_RESPONSE_HEADER, header_line);
   }
 
   return std::move(proxy_socket);
@@ -241,7 +249,8 @@ HttpResponse ProxyHttpClient::send_http_request(
       // 设置SNI（Server Name Indication）
       if (!SSL_set_tlsext_host_name(ssl_stream.native_handle(),
                                     target_host_.c_str())) {
-        OBCX_WARN("无法设置SNI为: {}", target_host_);
+        OBCX_I18N_WARN(common::LogMessageKey::PROXY_TARGET_SNI_FAILED,
+                       target_host_);
       }
 
       // 给隧道更多时间稳定，特别是在通过代理时
@@ -253,28 +262,31 @@ HttpResponse ProxyHttpClient::send_http_request(
       for (int retry = 0; retry < max_retries; ++retry) {
         ssl_stream.handshake(ssl::stream_base::client, ec);
         if (!ec) {
-          OBCX_DEBUG("SSL握手成功 (重试第{}次)", retry);
+          OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_SSL_HANDSHAKE_SUCCESS,
+                          retry);
           break;
         }
 
-        OBCX_WARN("SSL握手失败 (重试第{}/{}次): {}", retry + 1, max_retries,
-                  ec.message());
+        OBCX_I18N_WARN(common::LogMessageKey::PROXY_SSL_HANDSHAKE_FAILED_RETRY,
+                       retry + 1, max_retries, ec.message());
 
         if (retry < max_retries - 1) {
           // 指数退避重试策略：100ms, 200ms, 400ms (每次翻倍)
           auto wait_time = std::chrono::milliseconds(1000 << retry);
-          OBCX_DEBUG("等待 {}ms 后重试", wait_time.count());
+          OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_RETRY_WAIT,
+                          wait_time.count());
           std::this_thread::sleep_for(wait_time);
 
           // 如果是stream truncated错误，可能需要重新创建连接
           if (ec.message().find("stream truncated") != std::string::npos) {
-            OBCX_DEBUG("检测到stream truncated错误，可能需要重建隧道连接");
+            OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_STREAM_TRUNCATED);
             // TODO: implement this
           }
         } else {
-          throw std::runtime_error("SSL握手失败，已尝试" +
-                                   std::to_string(max_retries) +
-                                   "次: " + ec.message());
+          throw std::runtime_error(common::I18nLogMessages::format_message(
+              common::LogMessageKey::
+                  PROXY_SSL_HANDSHAKE_FAILED_MAX_RETRIES_EXCEPTION,
+              max_retries, ec.message()));
         }
       }
 
@@ -282,7 +294,8 @@ HttpResponse ProxyHttpClient::send_http_request(
       boost::system::error_code write_ec;
       http::write(ssl_stream, req, write_ec);
       if (write_ec) {
-        throw std::runtime_error("SSL发送HTTP请求失败: " + write_ec.message());
+        throw std::runtime_error(common::I18nLogMessages::format_message(
+            common::LogMessageKey::PROXY_SSL_SEND_FAILED, write_ec.message()));
       }
 
       // 读取响应，使用错误处理
@@ -291,7 +304,8 @@ HttpResponse ProxyHttpClient::send_http_request(
       boost::system::error_code read_ec;
       http::read(ssl_stream, buffer, res, read_ec);
       if (read_ec) {
-        throw std::runtime_error("SSL读取HTTP响应失败: " + read_ec.message());
+        throw std::runtime_error(common::I18nLogMessages::format_message(
+            common::LogMessageKey::PROXY_SSL_READ_FAILED, read_ec.message()));
       }
 
       // 创建HttpResponse
@@ -319,7 +333,8 @@ HttpResponse ProxyHttpClient::send_http_request(
       return result;
     }
   } catch (const std::exception &e) {
-    throw std::runtime_error("HTTP请求发送失败: " + std::string(e.what()));
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_HTTP_SEND_FAILED, e.what()));
   }
 }
 
@@ -343,13 +358,16 @@ tcp::socket ProxyHttpClient::establish_https_tunnel(
     connect_req.set(http::field::proxy_authorization, "Basic " + credentials);
   }
 
-  OBCX_DEBUG("通过HTTPS代理发送CONNECT请求: {}", connect_target);
+  OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_HTTPS_CONNECT_SEND,
+                  connect_target);
 
   // 通过SSL连接发送CONNECT请求
   boost::system::error_code ec;
   http::write(ssl_socket, connect_req, ec);
   if (ec) {
-    throw std::runtime_error("发送HTTPS CONNECT请求失败: " + ec.message());
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_HTTPS_CONNECT_REQUEST_FAILED,
+        ec.message()));
   }
 
   // 读取CONNECT响应
@@ -357,24 +375,27 @@ tcp::socket ProxyHttpClient::establish_https_tunnel(
   http::response<http::string_body> connect_response;
   http::read(ssl_socket, buffer, connect_response, ec);
   if (ec) {
-    throw std::runtime_error("读取HTTPS CONNECT响应失败: " + ec.message());
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_HTTPS_CONNECT_RESPONSE_FAILED,
+        ec.message()));
   }
 
   // 检查CONNECT响应
   if (connect_response.result() != http::status::ok) {
-    OBCX_ERROR("HTTPS代理CONNECT响应: {}, 状态: {}, 内容: {}",
-               static_cast<int>(connect_response.result()),
-               connect_response.reason(), connect_response.body());
-    throw std::runtime_error(
-        "HTTPS代理CONNECT请求失败: " +
-        std::to_string(static_cast<int>(connect_response.result())));
+    OBCX_I18N_ERROR(common::LogMessageKey::PROXY_HTTPS_CONNECT_ERROR,
+                    static_cast<int>(connect_response.result()),
+                    connect_response.reason(), connect_response.body());
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_HTTPS_CONNECT_STATUS_ERROR,
+        static_cast<int>(connect_response.result())));
   }
 
   // 清空buffer中的任何额外数据
   buffer.consume(buffer.size());
 
-  OBCX_DEBUG("HTTPS代理隧道建立成功: {}:{} -> {}:{}", proxy_config_.host,
-             proxy_config_.port, target_host, target_port);
+  OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_HTTPS_TUNNEL_SUCCESS,
+                  proxy_config_.host, proxy_config_.port, target_host,
+                  target_port);
 
   // 返回底层socket，现在它已经通过SSL代理建立了到目标的隧道
   return std::move(ssl_socket.next_layer());
@@ -383,8 +404,8 @@ tcp::socket ProxyHttpClient::establish_https_tunnel(
 tcp::socket ProxyHttpClient::establish_socks5_tunnel(
     tcp::socket &proxy_socket, const std::string &target_host,
     uint16_t target_port) {
-  OBCX_DEBUG("建立SOCKS5隧道: {} -> {}:{}", proxy_config_.host, target_host,
-             target_port);
+  OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_SOCKS5_TUNNEL_START,
+                  proxy_config_.host, target_host, target_port);
 
   boost::system::error_code ec;
 
@@ -403,25 +424,29 @@ tcp::socket ProxyHttpClient::establish_socks5_tunnel(
 
   asio::write(proxy_socket, asio::buffer(greeting), ec);
   if (ec) {
-    throw std::runtime_error("SOCKS5握手失败: " + ec.message());
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_SOCKS5_HANDSHAKE_FAILED, ec.message()));
   }
 
   // 读取服务器响应
   std::vector<uint8_t> response(2);
   asio::read(proxy_socket, asio::buffer(response), ec);
   if (ec) {
-    throw std::runtime_error("SOCKS5响应读取失败: " + ec.message());
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_SOCKS5_RESPONSE_FAILED, ec.message()));
   }
 
   if (response[0] != 0x05) {
-    throw std::runtime_error("SOCKS5版本不匹配");
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::PROXY_SOCKS5_VERSION_MISMATCH));
   }
 
   // 处理认证
   if (response[1] == 0x02) {
     // 用户名/密码认证
     if (!proxy_config_.username || !proxy_config_.password) {
-      throw std::runtime_error("代理需要用户名/密码认证但未提供");
+      throw std::runtime_error(common::I18nLogMessages::get_message(
+          common::LogMessageKey::PROXY_AUTH_REQUIRED));
     }
 
     std::vector<uint8_t> auth_req;
@@ -435,20 +460,26 @@ tcp::socket ProxyHttpClient::establish_socks5_tunnel(
 
     asio::write(proxy_socket, asio::buffer(auth_req), ec);
     if (ec) {
-      throw std::runtime_error("SOCKS5认证请求失败: " + ec.message());
+      throw std::runtime_error(common::I18nLogMessages::format_message(
+          common::LogMessageKey::PROXY_SOCKS5_AUTH_REQUEST_FAILED,
+          ec.message()));
     }
 
     std::vector<uint8_t> auth_resp(2);
     asio::read(proxy_socket, asio::buffer(auth_resp), ec);
     if (ec) {
-      throw std::runtime_error("SOCKS5认证响应读取失败: " + ec.message());
+      throw std::runtime_error(common::I18nLogMessages::format_message(
+          common::LogMessageKey::PROXY_SOCKS5_AUTH_RESPONSE_FAILED,
+          ec.message()));
     }
 
     if (auth_resp[1] != 0x00) {
-      throw std::runtime_error("SOCKS5认证失败");
+      throw std::runtime_error(common::I18nLogMessages::get_message(
+          common::LogMessageKey::PROXY_SOCKS5_AUTH_FAILED));
     }
   } else if (response[1] != 0x00) {
-    throw std::runtime_error("SOCKS5不支持的认证方法");
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::PROXY_SOCKS5_UNSUPPORTED_AUTH));
   }
 
   // 发送连接请求
@@ -464,19 +495,24 @@ tcp::socket ProxyHttpClient::establish_socks5_tunnel(
 
   asio::write(proxy_socket, asio::buffer(connect_req), ec);
   if (ec) {
-    throw std::runtime_error("SOCKS5连接请求失败: " + ec.message());
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_SOCKS5_CONNECT_REQUEST_FAILED,
+        ec.message()));
   }
 
   // 读取连接响应
   std::vector<uint8_t> connect_resp(10);                       // 最少10字节
   asio::read(proxy_socket, asio::buffer(connect_resp, 4), ec); // 先读前4字节
   if (ec) {
-    throw std::runtime_error("SOCKS5连接响应读取失败: " + ec.message());
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_SOCKS5_CONNECT_RESPONSE_FAILED,
+        ec.message()));
   }
 
   if (connect_resp[0] != 0x05 || connect_resp[1] != 0x00) {
-    throw std::runtime_error("SOCKS5连接失败，错误码: " +
-                             std::to_string(connect_resp[1]));
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::PROXY_SOCKS5_CONNECT_FAILED_EXCEPTION,
+        std::to_string(connect_resp[1])));
   }
 
   // 根据地址类型读取剩余部分
@@ -494,12 +530,15 @@ tcp::socket ProxyHttpClient::establish_socks5_tunnel(
     std::vector<uint8_t> addr_data(remaining_bytes);
     asio::read(proxy_socket, asio::buffer(addr_data), ec);
     if (ec) {
-      throw std::runtime_error("SOCKS5地址数据读取失败: " + ec.message());
+      throw std::runtime_error(common::I18nLogMessages::format_message(
+          common::LogMessageKey::PROXY_SOCKS5_ADDRESS_READ_FAILED,
+          ec.message()));
     }
   }
 
-  OBCX_DEBUG("SOCKS5隧道建立成功: {}:{} -> {}:{}", proxy_config_.host,
-             proxy_config_.port, target_host, target_port);
+  OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_SOCKS5_TUNNEL_SUCCESS,
+                  proxy_config_.host, proxy_config_.port, target_host,
+                  target_port);
 
   return std::move(proxy_socket);
 }

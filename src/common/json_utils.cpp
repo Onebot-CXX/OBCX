@@ -26,7 +26,7 @@ auto JsonUtils::pretty_print(const json &j, int indent) -> std::string {
   try {
     return j.dump(indent);
   } catch (const json::exception &e) {
-    OBCX_ERROR("Failed to pretty print JSON: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::JSON_PRETTY_PRINT_FAILED, e.what());
     return "{}";
   }
 }
@@ -35,7 +35,7 @@ auto JsonUtils::parse(const std::string &str) -> std::optional<json> {
   try {
     return json::parse(str);
   } catch (const json::exception &e) {
-    OBCX_ERROR("Failed to parse JSON: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::JSON_PARSE_FAILED, e.what());
     return std::nullopt;
   }
 }

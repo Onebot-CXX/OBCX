@@ -3,7 +3,6 @@
 #include "common/logger.hpp"
 #include "core/qq_bot.hpp"
 #include "interfaces/connection_manager.hpp"
-#include "onebot11/network/websocket/connection_manager.hpp"
 
 namespace obcx::core {
 
@@ -13,7 +12,9 @@ QQBot::QQBot(adapter::onebot11::ProtocolAdapter adapter)
   OBCX_I18N_INFO(common::LogMessageKey::QQBOT_INSTANCE_CREATED);
 }
 
-QQBot::~QQBot() { OBCX_INFO("QQBot 实例已销毁。"); }
+QQBot::~QQBot() {
+  OBCX_I18N_INFO(common::LogMessageKey::QQBOT_INSTANCE_DESTROYED);
+}
 
 void QQBot::connect(network::ConnectionManagerFactory::ConnectionType type,
                     const common::ConnectionConfig &config) {
@@ -448,7 +449,8 @@ auto QQBot::is_connected() const -> bool {
 
 void QQBot::ensure_connection_manager() const {
   if (!connection_manager_) {
-    throw std::runtime_error("Bot未连接，请先调用connect*方法");
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::BOT_NOT_CONNECTED));
   }
 }
 
@@ -465,7 +467,7 @@ void QQBot::error_notify(std::string_view target_id, std::string_view message,
   if (dispatcher_) {
     dispatcher_->dispatch(this, error_event);
   } else {
-    OBCX_WARN("事件分发器未初始化，无法分发异常事件");
+    OBCX_I18N_WARN(common::LogMessageKey::EVENT_DISPATCHER_NOT_INITIALIZED);
   }
 }
 

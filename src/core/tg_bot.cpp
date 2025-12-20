@@ -21,7 +21,9 @@ TGBot::TGBot(adapter::telegram::ProtocolAdapter adapter)
   OBCX_I18N_INFO(common::LogMessageKey::TELEGRAMBOT_INSTANCE_CREATED);
 }
 
-TGBot::~TGBot() { OBCX_INFO("TelegramBot 实例已销毁。"); }
+TGBot::~TGBot() {
+  OBCX_I18N_INFO(common::LogMessageKey::TELEGRAMBOT_INSTANCE_DESTROYED);
+}
 
 void TGBot::connect(network::ConnectionManagerFactory::ConnectionType type,
                     const common::ConnectionConfig &config) {
@@ -30,7 +32,8 @@ void TGBot::connect(network::ConnectionManagerFactory::ConnectionType type,
     connection_manager_ = network::ConnectionManagerFactory::create(
         type, *io_context_, *adapter_);
   } else {
-    throw std::runtime_error("Telegram Bot only support TelegramHTTP");
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::TELEGRAMBOT_ONLY_SUPPORT_HTTP));
   }
 
   connection_manager_->set_event_callback([this](const common::Event &event) {
@@ -107,7 +110,8 @@ auto TGBot::poll_updates() -> asio::awaitable<void> {
       // Parse and dispatch events
       // In a real implementation, we would parse the updates and dispatch
       // events For now, we'll just log that we received updates
-      OBCX_DEBUG("Received {} updates from Telegram", updates.length());
+      OBCX_I18N_DEBUG(common::LogMessageKey::TELEGRAMBOT_RECEIVED_UPDATES,
+                      updates.length());
 
       // Update offset for next poll
       // In a real implementation, we would parse the actual update IDs
@@ -115,7 +119,8 @@ auto TGBot::poll_updates() -> asio::awaitable<void> {
 
       success = true;
     } catch (const std::exception &e) {
-      OBCX_ERROR("Error polling updates: {}", e.what());
+      OBCX_I18N_ERROR(common::LogMessageKey::TELEGRAMBOT_POLLING_ERROR,
+                      e.what());
     }
 
     // Wait before next poll or retry
@@ -137,7 +142,7 @@ void TGBot::error_notify(std::string_view target_id, std::string_view message,
   if (dispatcher_) {
     dispatcher_->dispatch(this, error_event);
   } else {
-    OBCX_WARN("事件分发器未初始化，无法分发异常事件");
+    OBCX_I18N_WARN(common::LogMessageKey::EVENT_DISPATCHER_NOT_INITIALIZED);
   }
 }
 
@@ -205,7 +210,8 @@ auto TGBot::delete_message(std::string_view message_id)
   std::string msg_id(message_id);
   size_t pos = msg_id.find(':');
   if (pos == std::string::npos) {
-    throw std::invalid_argument("Invalid message ID format for Telegram");
+    throw std::invalid_argument(common::I18nLogMessages::get_message(
+        common::LogMessageKey::INVALID_PARAMETER));
   }
 
   std::string chat_id = msg_id.substr(0, pos);
@@ -222,7 +228,8 @@ auto TGBot::get_message(std::string_view message_id)
     -> asio::awaitable<std::string> {
   // Telegram doesn't have a direct get message API
   // We would need to store messages locally or use other mechanisms
-  OBCX_WARN("TelegramBot::get_message 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "get_message");
   co_return "{}";
 }
 
@@ -231,7 +238,8 @@ auto TGBot::get_message(std::string_view message_id)
 auto TGBot::get_friend_list() -> asio::awaitable<std::string> {
   // Telegram doesn't have a direct friend list API
   // We could return the list of users we've interacted with
-  OBCX_WARN("TelegramBot::get_friend_list 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "get_friend_list");
   co_return "{}";
 }
 
@@ -252,7 +260,8 @@ auto TGBot::get_stranger_info(std::string_view user_id, bool no_cache)
 auto TGBot::get_group_list() -> asio::awaitable<std::string> {
   // Telegram doesn't have a direct group list API
   // We could return the list of chats we're in
-  OBCX_WARN("TelegramBot::get_group_list 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "get_group_list");
   co_return "{}";
 }
 
@@ -317,7 +326,8 @@ auto TGBot::set_group_card(std::string_view group_id, std::string_view user_id,
     -> asio::awaitable<std::string> {
   // Telegram doesn't have a direct group card API
   // This would need to be implemented differently
-  OBCX_WARN("TelegramBot::set_group_card 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "set_group_card");
   co_return "{}";
 }
 
@@ -354,14 +364,16 @@ auto TGBot::set_group_anonymous_ban(std::string_view group_id,
                                     int32_t duration)
     -> asio::awaitable<std::string> {
   // Telegram doesn't have anonymous ban functionality in the same way
-  OBCX_WARN("TelegramBot::set_group_anonymous_ban 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "set_group_anonymous_ban");
   co_return "{}";
 }
 
 auto TGBot::set_group_anonymous(std::string_view group_id, bool enable)
     -> asio::awaitable<std::string> {
   // Telegram doesn't have anonymous chat functionality in the same way
-  OBCX_WARN("TelegramBot::set_group_anonymous 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "set_group_anonymous");
   co_return "{}";
 }
 
@@ -378,7 +390,8 @@ auto TGBot::get_group_honor_info(std::string_view group_id,
                                  std::string_view type)
     -> asio::awaitable<std::string> {
   // Telegram doesn't have honor info functionality
-  OBCX_WARN("TelegramBot::get_group_honor_info 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "get_group_honor_info");
   co_return "{}";
 }
 
@@ -394,13 +407,15 @@ auto TGBot::get_login_info() -> asio::awaitable<std::string> {
 
 auto TGBot::get_status() -> asio::awaitable<std::string> {
   // Telegram doesn't have a direct status API
-  OBCX_WARN("TelegramBot::get_status 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "get_status");
   co_return R"({"retcode": 0, "status": "ok", "data": {"online": true}})";
 }
 
 auto TGBot::get_version_info() -> asio::awaitable<std::string> {
   // Return version info for Telegram bot
-  OBCX_WARN("TelegramBot::get_version_info 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "get_version_info");
   co_return R"({"retcode": 0, "data": {"version": "TelegramBot/1.0.0"}})";
 }
 
@@ -440,20 +455,23 @@ auto TGBot::can_send_record() -> asio::awaitable<std::string> {
 auto TGBot::get_cookies(std::string_view domain)
     -> asio::awaitable<std::string> {
   // Telegram bots don't use cookies in the same way
-  OBCX_WARN("TelegramBot::get_cookies 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "get_cookies");
   co_return "{}";
 }
 
 auto TGBot::get_csrf_token() -> asio::awaitable<std::string> {
   // Telegram bots don't use CSRF tokens
-  OBCX_WARN("TelegramBot::get_csrf_token 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "get_csrf_token");
   co_return "{}";
 }
 
 auto TGBot::get_credentials(std::string_view domain)
     -> asio::awaitable<std::string> {
   // Telegram bots use bot tokens instead
-  OBCX_WARN("TelegramBot::get_credentials 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "get_credentials");
   co_return "{}";
 }
 
@@ -463,7 +481,8 @@ auto TGBot::set_friend_add_request(std::string_view flag, bool approve,
                                    std::string_view remark)
     -> asio::awaitable<std::string> {
   // Telegram doesn't have friend requests in the same way
-  OBCX_WARN("TelegramBot::set_friend_add_request 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "set_friend_add_request");
   co_return "{}";
 }
 
@@ -472,7 +491,8 @@ auto TGBot::set_group_add_request(std::string_view flag,
                                   std::string_view reason)
     -> asio::awaitable<std::string> {
   // Telegram doesn't have group add requests in the same way
-  OBCX_WARN("TelegramBot::set_group_add_request 尚未实现完整的功能");
+  OBCX_I18N_WARN(common::LogMessageKey::TELEGRAMBOT_FUNCTION_NOT_IMPLEMENTED,
+                 "set_group_add_request");
   co_return "{}";
 }
 
@@ -500,7 +520,8 @@ auto TGBot::generate_echo_id() -> uint64_t {
 
 void TGBot::ensure_connection_manager() const {
   if (!connection_manager_) {
-    throw std::runtime_error("Bot未连接，请先调用connect*方法");
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::BOT_NOT_CONNECTED));
   }
 }
 
@@ -540,15 +561,17 @@ auto TGBot::extract_media_files(const nlohmann::json &message_data)
         info.file_id = largest_photo["file_id"].get<std::string>();
 
         // 调试：打印photo对象结构
-        OBCX_DEBUG("Photo对象内容: {}", largest_photo.dump());
+        OBCX_I18N_DEBUG(common::LogMessageKey::TELEGRAMBOT_PHOTO_CONTENT,
+                        largest_photo.dump());
 
         info.file_unique_id =
             largest_photo.contains("file_unique_id")
                 ? largest_photo["file_unique_id"].get<std::string>()
                 : "";
 
-        OBCX_DEBUG("提取到的file_unique_id: '{}' (是否为空: {})",
-                   info.file_unique_id, info.file_unique_id.empty());
+        OBCX_I18N_DEBUG(
+            common::LogMessageKey::TELEGRAMBOT_FILE_UNIQUE_ID_EXTRACTED,
+            info.file_unique_id, info.file_unique_id.empty());
 
         info.file_type = "photo";
         if (largest_photo.contains("file_size")) {
@@ -572,16 +595,17 @@ auto TGBot::extract_media_files(const nlohmann::json &message_data)
           info.file_id = media_obj["file_id"].get<std::string>();
 
           // 调试：打印媒体对象结构
-          OBCX_DEBUG("{}对象内容: {}", media_type, media_obj.dump());
+          OBCX_I18N_DEBUG(common::LogMessageKey::TELEGRAMBOT_MEDIA_CONTENT,
+                          media_type, media_obj.dump());
 
           info.file_unique_id =
               media_obj.contains("file_unique_id")
                   ? media_obj["file_unique_id"].get<std::string>()
                   : "";
 
-          OBCX_DEBUG("{}提取到的file_unique_id: '{}' (是否为空: {})",
-                     media_type, info.file_unique_id,
-                     info.file_unique_id.empty());
+          OBCX_I18N_DEBUG(
+              common::LogMessageKey::TELEGRAMBOT_MEDIA_FILE_UNIQUE_ID_EXTRACTED,
+              media_type, info.file_unique_id, info.file_unique_id.empty());
 
           info.file_type = media_type;
 
@@ -604,7 +628,8 @@ auto TGBot::extract_media_files(const nlohmann::json &message_data)
     }
 
   } catch (const std::exception &e) {
-    OBCX_ERROR("提取媒体文件信息时出错: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::TELEGRAMBOT_EXTRACT_MEDIA_ERROR,
+                    e.what());
   }
 
   return media_files;
@@ -620,7 +645,8 @@ auto TGBot::get_media_download_url(const MediaFileInfo &media_info)
         dynamic_cast<obcx::network::TelegramConnectionManager *>(
             connection_manager_.get());
     if (!tg_conn_mgr) {
-      OBCX_ERROR("ConnectionManager不是TelegramConnectionManager类型");
+      OBCX_I18N_ERROR(
+          common::LogMessageKey::TELEGRAMBOT_INVALID_CONNECTION_MANAGER);
       co_return std::nullopt;
     }
 
@@ -629,8 +655,8 @@ auto TGBot::get_media_download_url(const MediaFileInfo &media_info)
     co_return download_url;
 
   } catch (const std::exception &e) {
-    OBCX_ERROR("获取媒体文件下载链接失败 (file_id: {}, type: {}): {}",
-               media_info.file_id, media_info.file_type, e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::TELEGRAMBOT_GET_DOWNLOAD_URL_FAILED,
+                    media_info.file_id, media_info.file_type, e.what());
     co_return std::nullopt;
   }
 }

@@ -127,7 +127,7 @@ auto WebsocketClient::run(std::string host, std::string port,
      * \endif
      */
     if (se.code() != websocket::error::closed) {
-      OBCX_ERROR("WebSocket 运行错误: {}", se.what());
+      OBCX_I18N_ERROR(common::LogMessageKey::WEBSOCKET_RUN_ERROR, se.what());
     }
     /*
      * \if CHINESE
@@ -139,7 +139,8 @@ auto WebsocketClient::run(std::string host, std::string port,
      */
     on_message_(se.code(), "");
   } catch (const std::exception &e) {
-    OBCX_CRITICAL("WebSocket 捕获到未处理异常: {}", e.what());
+    OBCX_I18N_CRITICAL(common::LogMessageKey::WEBSOCKET_UNHANDLED_EXCEPTION,
+                       e.what());
     beast::error_code ec = asio::error::fault;
     /*
      * \if CHINESE
@@ -154,12 +155,12 @@ auto WebsocketClient::run(std::string host, std::string port,
 
   // 停止写入器协程
   stop_writer();
-  OBCX_WARN("WebSocket 连接已关闭.");
+  OBCX_I18N_WARN(common::LogMessageKey::WEBSOCKET_CONNECTION_CLOSED);
 }
 
 auto WebsocketClient::send(std::string message) -> asio::awaitable<void> {
   if (!ws_.is_open()) {
-    OBCX_WARN("WebSocket 未连接，无法发送消息.");
+    OBCX_I18N_WARN(common::LogMessageKey::WEBSOCKET_NOT_CONNECTED);
     co_return;
   }
 
@@ -186,7 +187,8 @@ auto WebsocketClient::send(std::string message) -> asio::awaitable<void> {
           .async_wait(asio::use_awaitable);
     }
   } catch (const std::exception &e) {
-    OBCX_ERROR("等待写入完成时发生错误: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::WEBSOCKET_WRITE_WAIT_ERROR,
+                    e.what());
     throw;
   }
 }
@@ -198,10 +200,12 @@ auto WebsocketClient::close() -> asio::awaitable<void> {
                                asio::use_awaitable);
     } catch (const beast::system_error &se) {
       if (se.code() != websocket::error::closed) {
-        OBCX_ERROR("WebSocket 关闭错误: {}", se.what());
+        OBCX_I18N_ERROR(common::LogMessageKey::WEBSOCKET_CLOSE_ERROR,
+                        se.what());
       }
     } catch (const std::exception &e) {
-      OBCX_ERROR("WebSocket 关闭时捕獲到未處理異常: {}", e.what());
+      OBCX_I18N_ERROR(common::LogMessageKey::WEBSOCKET_CLOSE_EXCEPTION,
+                      e.what());
     }
   }
 }
@@ -246,7 +250,7 @@ auto WebsocketClient::writer_coro() -> asio::awaitable<void> {
         OBCX_I18N_DEBUG(common::LogMessageKey::MESSAGE_SENT_SUCCESSFULLY,
                         request->message);
       } catch (const std::exception &e) {
-        OBCX_ERROR("写入消息时发生错误: {}", e.what());
+        OBCX_I18N_ERROR(common::LogMessageKey::WEBSOCKET_WRITE_ERROR, e.what());
 
         // 通知写入失败
         try {

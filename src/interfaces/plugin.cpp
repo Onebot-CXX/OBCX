@@ -10,8 +10,8 @@ std::tuple<std::unique_lock<std::mutex>,
            std::vector<std::unique_ptr<core::IBot>> &>
 IPlugin::get_bots() {
   if (!bots_ || !bots_mutex_) {
-    throw std::runtime_error(
-        "Bot vector not initialized. Call set_bots() first.");
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::PLUGIN_BOT_VECTOR_NOT_INIT));
   }
 
   std::unique_lock lock(*bots_mutex_);
@@ -29,7 +29,7 @@ std::optional<toml::table> IPlugin::get_config_section(
   if (!config)
     return std::nullopt;
 
-  if (auto section = config->config.get(section_name)) {
+  if (auto *section = config->config.get(section_name)) {
     if (auto section_table = section->as_table()) {
       return *section_table;
     }

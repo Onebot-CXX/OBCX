@@ -9,14 +9,16 @@ auto ConfigLoader::load_config(const std::string &config_path) -> bool {
   try {
     config_path_ = config_path;
     config_data_ = std::make_unique<toml::table>(toml::parse_file(config_path));
-    OBCX_INFO("Config loaded successfully from: {}", config_path);
+    OBCX_I18N_INFO(common::LogMessageKey::CONFIG_LOAD_SUCCESS, config_path);
     return true;
   } catch (const toml::parse_error &e) {
-    OBCX_INFO("Failed to parse config file {}: {}", config_path, e.what());
+    OBCX_I18N_INFO(common::LogMessageKey::CONFIG_PARSE_FAILED, config_path,
+                   e.what());
     config_data_.reset();
     return false;
   } catch (const std::exception &e) {
-    OBCX_INFO("Failed to load config file {}: {}", config_path, e.what());
+    OBCX_I18N_INFO(common::LogMessageKey::CONFIG_LOAD_ERROR, config_path,
+                   e.what());
     config_data_.reset();
     return false;
   }

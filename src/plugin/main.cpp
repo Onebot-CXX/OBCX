@@ -49,12 +49,12 @@ void print_help() {
 void signal_handler(int signal) {
   std::atomic_signal_fence(std::memory_order_acquire);
   if (g_shutdown_started) {
-    OBCX_WARN("Shutdown already in progress, ignoring signal {}", signal);
+    OBCX_I18N_WARN(common::LogMessageKey::SHUTDOWN_IN_PROGRESS, signal);
     return;
   }
   std::atomic_signal_fence(std::memory_order_release);
   g_shutdown_started = true;
-  OBCX_INFO("Received signal {}, shutting down gracefully...", signal);
+  OBCX_I18N_INFO(common::LogMessageKey::SHUTDOWN_SIGNAL_RECEIVED, signal);
   g_should_stop = true;
   g_stop_cv.notify_one();
 }
@@ -78,7 +78,7 @@ public:
           adapter::telegram::ProtocolAdapter{});
     }
 
-    OBCX_ERROR("Unknown bot type: {}", config.type);
+    OBCX_I18N_ERROR(common::LogMessageKey::UNKNOWN_BOT_TYPE, config.type);
     return nullptr;
   }
 
@@ -103,7 +103,8 @@ public:
       }
     }
 
-    OBCX_ERROR("Unknown connection type: {} for bot type: {}", type, bot_type);
+    OBCX_I18N_ERROR(common::LogMessageKey::UNKNOWN_CONNECTION_TYPE, type,
+                    bot_type);
     return network::ConnectionManagerFactory::ConnectionType::Onebot11HTTP;
   }
 
@@ -173,8 +174,8 @@ public:
     }
 
     // Debug logging for proxy configuration
-    OBCX_INFO("Proxy config - Host: '{}', Port: {}, Type: '{}'",
-              config.proxy_host, config.proxy_port, config.proxy_type);
+    OBCX_I18N_INFO(common::LogMessageKey::PROXY_CONFIG_INFO, config.proxy_host,
+                   config.proxy_port, config.proxy_type);
 
     if (const auto *proxy_username = conn_table.get("proxy_username")) {
       config.proxy_username = proxy_username->value_or<std::string>("");
@@ -197,12 +198,12 @@ public:
       // Load and initialize plugins for this bot
       for (const auto &plugin_name : config.plugins) {
         if (!plugin_manager.load_plugin(plugin_name)) {
-          OBCX_WARN("Failed to load plugin: {}", plugin_name);
+          OBCX_I18N_WARN(common::LogMessageKey::PLUGIN_LOAD_WARN, plugin_name);
           continue;
         }
 
         if (!plugin_manager.initialize_plugin(plugin_name)) {
-          OBCX_WARN("Failed to initialize plugin: {}", plugin_name);
+          OBCX_I18N_WARN(common::LogMessageKey::PLUGIN_INIT_WARN, plugin_name);
           continue;
         }
       }
@@ -215,11 +216,11 @@ public:
       bot.connect(get_connection_type(conn_type, config.type),
                   connection_config);
 
-      OBCX_INFO("Bot component setup completed successfully");
+      OBCX_I18N_INFO(common::LogMessageKey::BOT_SETUP_SUCCESS);
       return true;
 
     } catch (const std::exception &e) {
-      OBCX_ERROR("Failed to setup bot component: {}", e.what());
+      OBCX_I18N_ERROR(common::LogMessageKey::BOT_SETUP_FAILED, e.what());
       return false;
     }
   }
@@ -269,12 +270,12 @@ auto main(int argc, char *argv[]) -> int {
   auto locale = config_loader.get_value<std::string>("global.locale");
   if (locale.has_value()) {
     common::I18nLogMessages::set_locale(*locale);
-    OBCX_INFO("Log locale set to: {}", *locale);
+    OBCX_I18N_INFO(common::LogMessageKey::LOG_LOCALE_SET, *locale);
   }
   // If not specified, keep default en_US (no need to explicitly set)
 
-  OBCX_INFO("OBCX Robot Framework starting...");
-  OBCX_INFO("Configuration loaded from: {}", config_path);
+  OBCX_I18N_INFO(common::LogMessageKey::FRAMEWORK_STARTING);
+  OBCX_I18N_INFO(common::LogMessageKey::CONFIG_LOADED_FROM, config_path);
 
   // Initialize plugin manager
   common::PluginManager plugin_manager;
@@ -297,7 +298,7 @@ auto main(int argc, char *argv[]) -> int {
   // Load bot configurations
   auto bot_configs = config_loader.get_bot_configs();
   if (bot_configs.empty()) {
-    OBCX_ERROR("No bot configurations found");
+    OBCX_I18N_ERROR(common::LogMessageKey::NO_BOT_CONFIGS);
     return 1;
   }
 
@@ -310,13 +311,13 @@ auto main(int argc, char *argv[]) -> int {
 
   for (const auto &config : bot_configs) {
     if (!config.enabled) {
-      OBCX_INFO("Skipping disabled bot component of type: {}", config.type);
+      OBCX_I18N_INFO(common::LogMessageKey::SKIPPING_DISABLED_BOT, config.type);
       continue;
     }
 
     auto bot = ComponentManager::create_bot(config);
     if (!bot) {
-      OBCX_ERROR("Failed to create bot component of type: {}", config.type);
+      OBCX_I18N_ERROR(common::LogMessageKey::BOT_CREATE_FAILED, config.type);
       continue;
     }
 
@@ -327,30 +328,31 @@ auto main(int argc, char *argv[]) -> int {
 
     if (!component_manager.setup_bot(*bots[bot_index], config,
                                      plugin_manager)) {
-      OBCX_ERROR("Failed to setup bot component of type: {}", config.type);
+      OBCX_I18N_ERROR(common::LogMessageKey::BOT_SETUP_FAILED_TYPE,
+                      config.type);
       // Remove the bot from vector since setup failed
       bots.pop_back();
       continue;
     }
 
-    OBCX_INFO("Starting bot component of type: {}", config.type);
+    OBCX_I18N_INFO(common::LogMessageKey::STARTING_BOT, config.type);
 
     // Start bot component in separate thread, capturing the specific bot index
     bot_threads.emplace_back([&bots, bot_index]() {
       try {
         bots[bot_index]->run();
       } catch (const std::exception &e) {
-        OBCX_ERROR("Bot component runtime error: {}", e.what());
+        OBCX_I18N_ERROR(common::LogMessageKey::BOT_RUNTIME_ERROR, e.what());
       }
     });
   }
 
   if (bots.empty()) {
-    OBCX_ERROR("No bot components started successfully");
+    OBCX_I18N_ERROR(common::LogMessageKey::NO_BOTS_STARTED);
     return 1;
   }
 
-  OBCX_INFO("All components started successfully. OBCX Framework running...");
+  OBCX_I18N_INFO(common::LogMessageKey::ALL_COMPONENTS_STARTED);
 
   // Wait for shutdown signal
   {
@@ -358,7 +360,7 @@ auto main(int argc, char *argv[]) -> int {
     g_stop_cv.wait(lock, []() { return g_should_stop; });
   }
 
-  OBCX_INFO("Shutting down OBCX Framework...");
+  OBCX_I18N_INFO(common::LogMessageKey::FRAMEWORK_SHUTDOWN);
 
   // Stop all bot components
   for (auto &bot : bots) {
@@ -368,14 +370,13 @@ auto main(int argc, char *argv[]) -> int {
   // Wait for bot threads to finish with timeout
   for (size_t i = 0; i < bot_threads.size(); ++i) {
     if (bot_threads[i].joinable()) {
-      OBCX_INFO("Waiting for bot thread {} to finish...", i);
+      OBCX_I18N_INFO(common::LogMessageKey::WAITING_BOT_THREAD, i);
       // Use a detached thread to implement timeout
       bool thread_finished = false;
       std::thread timeout_thread([&]() {
         std::this_thread::sleep_for(std::chrono::seconds(5));
         if (!thread_finished) {
-          OBCX_WARN("Bot thread {} did not finish within timeout, detaching",
-                    i);
+          OBCX_I18N_WARN(common::LogMessageKey::BOT_THREAD_TIMEOUT, i);
           bot_threads[i].detach();
         }
       });
@@ -392,6 +393,6 @@ auto main(int argc, char *argv[]) -> int {
   // Shutdown all plugins
   plugin_manager.shutdown_all_plugins();
 
-  OBCX_INFO("OBCX Framework shutdown complete");
+  OBCX_I18N_INFO(common::LogMessageKey::FRAMEWORK_SHUTDOWN_COMPLETE);
   return 0;
 }

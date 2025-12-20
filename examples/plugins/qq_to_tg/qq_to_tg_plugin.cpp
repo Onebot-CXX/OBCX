@@ -2,14 +2,14 @@
 #include "common/logger.hpp"
 #include "core/qq_bot.hpp"
 #include "core/tg_bot.hpp"
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 
 #include "../dependency/bridge_bot/config.hpp"
 #include "../dependency/bridge_bot/database_manager.hpp"
 #include "../dependency/bridge_bot/qq_handler.hpp"
 #include "../dependency/bridge_bot/retry_queue_manager.hpp"
-#include "common/config_loader.hpp"
+
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
 
 namespace plugins {
 QQToTGPlugin::QQToTGPlugin() {

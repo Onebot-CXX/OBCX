@@ -15,7 +15,8 @@ auto MediaConverter::convert_webm_to_gif(const std::string &webm_url,
                                          int max_duration, int max_width)
     -> bool {
   try {
-    OBCX_INFO("开始转换WebM到GIF: {} -> {}", webm_url, output_path);
+    OBCX_I18N_INFO(common::LogMessageKey::MEDIA_CONVERT_WEBM_TO_GIF_START,
+                   webm_url, output_path);
 
     // 构建FFmpeg命令 - 完全无损转换
     // -t: 最大时长
@@ -49,20 +50,24 @@ auto MediaConverter::convert_webm_to_gif(const std::string &webm_url,
           << "2>/dev/null";
     }
 
-    OBCX_DEBUG("执行FFmpeg命令: {}", cmd.str());
+    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_EXECUTE_FFMPEG,
+                    cmd.str());
 
     bool success = execute_command(cmd.str());
 
     if (success && is_valid_file(output_path)) {
       auto file_size = std::filesystem::file_size(output_path);
-      OBCX_INFO("WebM到GIF转换成功，输出文件大小: {} bytes", file_size);
+      OBCX_I18N_INFO(common::LogMessageKey::MEDIA_CONVERT_WEBM_TO_GIF_SUCCESS,
+                     file_size);
       return true;
-    } else {
-      OBCX_ERROR("WebM到GIF转换失败或输出文件无效");
-      return false;
     }
+
+    OBCX_I18N_ERROR(common::LogMessageKey::MEDIA_CONVERT_WEBM_TO_GIF_FAILED);
+    return false;
+
   } catch (const std::exception &e) {
-    OBCX_ERROR("WebM到GIF转换异常: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::MEDIA_CONVERT_WEBM_TO_GIF_EXCEPTION,
+                    e.what());
     return false;
   }
 }
@@ -80,15 +85,17 @@ auto MediaConverter::convert_webm_to_gif_with_fallback(
     const std::string &webm_url, const std::string &output_path,
     int max_duration) -> bool {
   try {
-    OBCX_INFO("开始带回退机制的WebM到GIF转换: {} -> {}", webm_url, output_path);
+    OBCX_I18N_INFO(
+        common::LogMessageKey::MEDIA_CONVERT_WEBM_TO_GIF_FALLBACK_START,
+        webm_url, output_path);
 
     // 第一次尝试：完全无损转换（保持原始分辨率、帧率、颜色）
-    OBCX_DEBUG("尝试无损转换...");
+    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_TRY_LOSSLESS);
     bool lossless_success =
         convert_webm_to_gif(webm_url, output_path, max_duration, 0);
 
     if (lossless_success && is_valid_file(output_path)) {
-      OBCX_INFO("无损WebM到GIF转换成功");
+      OBCX_I18N_INFO(common::LogMessageKey::MEDIA_CONVERT_LOSSLESS_SUCCESS);
       return true;
     }
 
@@ -96,23 +103,24 @@ auto MediaConverter::convert_webm_to_gif_with_fallback(
     cleanup_temp_file(output_path);
 
     // 第二次尝试：压缩转换（320px宽度，保持帧率和颜色优化）
-    OBCX_WARN("无损转换失败，尝试压缩转换...");
+    OBCX_I18N_WARN(common::LogMessageKey::MEDIA_CONVERT_LOSSLESS_FAILED);
     bool compressed_success =
         convert_webm_to_gif(webm_url, output_path, max_duration, 320);
 
     if (compressed_success && is_valid_file(output_path)) {
-      OBCX_INFO("压缩WebM到GIF转换成功（320px）");
+      OBCX_I18N_INFO(common::LogMessageKey::MEDIA_CONVERT_COMPRESSED_SUCCESS);
       return true;
     }
 
     // 清理失败的文件
     cleanup_temp_file(output_path);
 
-    OBCX_ERROR("WebM到GIF转换完全失败，需要使用文本表情回退");
+    OBCX_I18N_ERROR(common::LogMessageKey::MEDIA_CONVERT_ALL_FAILED);
     return false;
 
   } catch (const std::exception &e) {
-    OBCX_ERROR("带回退机制的WebM到GIF转换异常: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::MEDIA_CONVERT_FALLBACK_EXCEPTION,
+                    e.what());
     cleanup_temp_file(output_path);
     return false;
   }
@@ -122,7 +130,8 @@ auto MediaConverter::convert_tgs_to_gif(const std::string &tgs_url,
                                         const std::string &output_path,
                                         int max_width) -> bool {
   try {
-    OBCX_INFO("开始转换TGS到GIF: {} -> {}", tgs_url, output_path);
+    OBCX_I18N_INFO(common::LogMessageKey::MEDIA_CONVERT_TGS_TO_GIF_START,
+                   tgs_url, output_path);
 
     // TGS格式是基于Lottie的JSON动画，需要特殊处理
     // 这里我们尝试使用lottie-convert工具，如果不可用则返回false
@@ -131,20 +140,23 @@ auto MediaConverter::convert_tgs_to_gif(const std::string &tgs_url,
         << "--width " << max_width << " --height " << max_width << " "
         << "2>/dev/null";
 
-    OBCX_DEBUG("执行TGS转换命令: {}", cmd.str());
+    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_EXECUTE_TGS,
+                    cmd.str());
 
     bool success = execute_command(cmd.str());
 
     if (success && is_valid_file(output_path)) {
       auto file_size = std::filesystem::file_size(output_path);
-      OBCX_INFO("TGS到GIF转换成功，输出文件大小: {} bytes", file_size);
+      OBCX_I18N_INFO(common::LogMessageKey::MEDIA_CONVERT_TGS_TO_GIF_SUCCESS,
+                     file_size);
       return true;
     } else {
-      OBCX_WARN("TGS到GIF转换失败，可能缺少lottie-convert工具");
+      OBCX_I18N_WARN(common::LogMessageKey::MEDIA_CONVERT_TGS_TO_GIF_FAILED);
       return false;
     }
   } catch (const std::exception &e) {
-    OBCX_ERROR("TGS到GIF转换异常: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::MEDIA_CONVERT_TGS_TO_GIF_EXCEPTION,
+                    e.what());
     return false;
   }
 }
@@ -169,7 +181,8 @@ auto MediaConverter::generate_temp_path(const std::string &extension)
           "convert_" + std::to_string(dis(gen)) + "." + extension;
       std::filesystem::path temp_file = shared_dir / filename;
 
-      OBCX_DEBUG("生成Docker共享目录文件路径: {}", temp_file.string());
+      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_DOCKER_PATH,
+                      temp_file.string());
       return temp_file.string();
     }
 
@@ -187,10 +200,12 @@ auto MediaConverter::generate_temp_path(const std::string &extension)
         "convert_" + std::to_string(dis(gen)) + "." + extension;
     std::filesystem::path temp_file = temp_dir / filename;
 
-    OBCX_DEBUG("生成临时文件路径: {}", temp_file.string());
+    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_TEMP_PATH,
+                    temp_file.string());
     return temp_file.string();
   } catch (const std::exception &e) {
-    OBCX_ERROR("生成临时文件路径失败: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::MEDIA_CONVERT_TEMP_PATH_FAILED,
+                    e.what());
     // 回退到简单路径
     return "/tmp/obcx_convert_" + std::to_string(std::time(nullptr)) + "." +
            extension;
@@ -201,28 +216,30 @@ auto MediaConverter::cleanup_temp_file(const std::string &file_path) -> void {
   try {
     if (std::filesystem::exists(file_path)) {
       std::filesystem::remove(file_path);
-      OBCX_DEBUG("清理临时文件: {}", file_path);
+      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_CLEANUP, file_path);
     }
   } catch (const std::exception &e) {
-    OBCX_WARN("清理临时文件失败: {} - {}", file_path, e.what());
+    OBCX_I18N_WARN(common::LogMessageKey::MEDIA_CONVERT_CLEANUP_FAILED,
+                   file_path, e.what());
   }
 }
 
 auto MediaConverter::execute_command(const std::string &command) -> bool {
   try {
-    OBCX_DEBUG("执行系统命令: {}", command);
+    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_EXECUTE_CMD, command);
     int result = std::system(command.c_str());
     bool success = (result == 0);
 
     if (success) {
-      OBCX_DEBUG("命令执行成功");
+      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_CMD_SUCCESS);
     } else {
-      OBCX_DEBUG("命令执行失败，返回码: {}", result);
+      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_CMD_FAILED, result);
     }
 
     return success;
   } catch (const std::exception &e) {
-    OBCX_ERROR("执行系统命令异常: {}", e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::MEDIA_CONVERT_EXECUTE_CMD_EXCEPTION,
+                    e.what());
     return false;
   }
 }
@@ -230,20 +247,24 @@ auto MediaConverter::execute_command(const std::string &command) -> bool {
 auto MediaConverter::is_valid_file(const std::string &file_path) -> bool {
   try {
     if (!std::filesystem::exists(file_path)) {
-      OBCX_DEBUG("文件不存在: {}", file_path);
+      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_FILE_NOT_EXIST,
+                      file_path);
       return false;
     }
 
     auto file_size = std::filesystem::file_size(file_path);
     if (file_size == 0) {
-      OBCX_DEBUG("文件大小为0: {}", file_path);
+      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_FILE_EMPTY,
+                      file_path);
       return false;
     }
 
-    OBCX_DEBUG("文件有效: {} ({}bytes)", file_path, file_size);
+    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_FILE_VALID, file_path,
+                    file_size);
     return true;
   } catch (const std::exception &e) {
-    OBCX_ERROR("检查文件有效性异常: {} - {}", file_path, e.what());
+    OBCX_I18N_ERROR(common::LogMessageKey::MEDIA_CONVERT_CHECK_FILE_EXCEPTION,
+                    file_path, e.what());
     return false;
   }
 }
