@@ -1082,31 +1082,110 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
 
     // 批量处理图片（如果有多张图片）
     if (image_segments.size() > 1) {
-      PLUGIN_INFO("qq_to_tg", "检测到多张图片({})，进行聚合处理",
+      PLUGIN_INFO("qq_to_tg", "检测到多张图片({})，使用MediaGroup发送",
                   image_segments.size());
 
-      // 添加多图片提示
-      obcx::common::MessageSegment multi_image_tip;
-      multi_image_tip.type = "text";
-      multi_image_tip.data["text"] =
-          fmt::format("\n📸 共{}张图片：\n", image_segments.size());
-      message_to_send.push_back(multi_image_tip);
-
-      // 依次处理每张图片，但标注序号
-      for (size_t i = 0; i < image_segments.size(); i++) {
-        const auto &img_segment = image_segments[i];
-
-        // 添加图片序号
-        obcx::common::MessageSegment img_number;
-        img_number.type = "text";
-        img_number.data["text"] = fmt::format("{}. ", i + 1);
-        message_to_send.push_back(img_number);
-
-        // 处理图片
-        co_await handle_qq_media(img_segment);
+      // 构建媒体组列表 (type, url)
+      std::vector<std::pair<std::string, std::string>> media_list;
+      for (const auto &img_segment : image_segments) {
+        std::string url =
+            img_segment.data.value("url", img_segment.data.value("file", ""));
+        if (!url.empty()) {
+          media_list.emplace_back("photo", url);
+          PLUGIN_DEBUG("qq_to_tg", "添加图片到MediaGroup: {}", url);
+        }
       }
 
-      PLUGIN_DEBUG("qq_to_tg", "完成{}张图片的聚合处理", image_segments.size());
+      // 如果有有效的图片URL，使用sendMediaGroup发送
+      if (!media_list.empty()) {
+        bool media_group_success = false;
+        std::string media_group_error;
+
+        try {
+          // 收集文本内容作为caption
+          std::string caption;
+          if (show_sender) {
+            caption = fmt::format("[{}]", sender_display_name);
+          }
+          // 添加其他文本段的内容到caption
+          for (const auto &seg : other_segments) {
+            if (seg.type == "text" && seg.data.contains("text")) {
+              if (!caption.empty()) {
+                caption += "\n";
+              }
+              caption += seg.data.at("text");
+            }
+          }
+
+          std::optional<int64_t> opt_topic_id =
+              (topic_id == -1) ? std::nullopt
+                               : std::optional<int64_t>(topic_id);
+
+          // 获取回复消息ID（如果有）
+          std::optional<std::string> opt_reply_id;
+          for (const auto &seg : message_to_send) {
+            if (seg.type == "reply" && seg.data.contains("id")) {
+              opt_reply_id = seg.data.at("id");
+              break;
+            }
+          }
+
+          std::string media_response =
+              co_await static_cast<obcx::core::TGBot &>(telegram_bot)
+                  .send_media_group(telegram_group_id, media_list, caption,
+                                    opt_topic_id, opt_reply_id);
+
+          PLUGIN_INFO("qq_to_tg", "成功通过MediaGroup发送 {} 张图片",
+                      media_list.size());
+          media_group_success = true;
+
+          // 解析响应获取消息ID用于映射
+          if (!media_response.empty()) {
+            try {
+              nlohmann::json response_json =
+                  nlohmann::json::parse(media_response);
+              if (response_json.contains("result") &&
+                  response_json["result"].is_array() &&
+                  !response_json["result"].empty()) {
+                // 使用第一个消息的ID作为映射
+                auto first_msg = response_json["result"][0];
+                if (first_msg.contains("message_id")) {
+                  std::string tg_msg_id =
+                      std::to_string(first_msg["message_id"].get<int64_t>());
+                  obcx::storage::MessageMapping mapping;
+                  mapping.source_platform = "qq";
+                  mapping.source_message_id = event.message_id;
+                  mapping.target_platform = "telegram";
+                  mapping.target_message_id = tg_msg_id;
+                  mapping.created_at = std::chrono::system_clock::now();
+                  db_manager_->add_message_mapping(mapping);
+                  PLUGIN_DEBUG("qq_to_tg",
+                               "记录MediaGroup消息映射: QQ {} -> TG {}",
+                               event.message_id, tg_msg_id);
+                }
+              }
+            } catch (const std::exception &e) {
+              PLUGIN_WARN("qq_to_tg", "解析MediaGroup响应失败: {}", e.what());
+            }
+          }
+
+        } catch (const std::exception &e) {
+          media_group_error = e.what();
+          PLUGIN_ERROR("qq_to_tg",
+                       "通过MediaGroup发送图片失败: {}，回退到单图发送",
+                       media_group_error);
+        }
+
+        // 如果成功，直接返回；如果失败，回退到单图发送
+        if (media_group_success) {
+          co_return;
+        }
+
+        // 失败时回退到单图发送模式
+        for (const auto &img_segment : image_segments) {
+          co_await handle_qq_media(img_segment);
+        }
+      }
     } else if (image_segments.size() == 1) {
       // 单张图片正常处理
       co_await handle_qq_media(image_segments[0]);
