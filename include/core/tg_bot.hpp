@@ -105,6 +105,22 @@ public:
                                                 std::string_view photo_data,
                                                 std::string_view caption = "");
 
+  /**
+   * @brief 发送媒体组（多张图片/视频）到群组或topic
+   * @param chat_id 聊天ID
+   * @param media 媒体列表（类型和URL的pair列表）
+   * @param caption 媒体组描述（附加到第一个媒体）
+   * @param topic_id 可选的topic ID
+   * @param reply_to_message_id 可选的回复消息ID
+   * @return 操作结果的JSON响应
+   */
+  asio::awaitable<std::string> send_media_group(
+      std::string_view chat_id,
+      const std::vector<std::pair<std::string, std::string>> &media,
+      std::string_view caption = "",
+      std::optional<int64_t> topic_id = std::nullopt,
+      std::optional<std::string> reply_to_message_id = std::nullopt);
+
   // --- 消息管理 API ---
 
   /**

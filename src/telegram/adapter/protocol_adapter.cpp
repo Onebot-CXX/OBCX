@@ -1355,4 +1355,50 @@ auto ProtocolAdapter::serialize_get_updates_request(
   return json.dump();
 }
 
+auto ProtocolAdapter::serialize_send_media_group_request(
+    std::string_view chat_id,
+    const std::vector<std::pair<std::string, std::string>> &media,
+    std::string_view caption, const std::optional<int64_t> &topic_id,
+    const std::optional<std::string> &reply_to_message_id,
+    const std::optional<uint64_t> &echo) -> std::string {
+  nlohmann::json json;
+  json["method"] = "sendMediaGroup";
+  json["chat_id"] = chat_id;
+
+  if (topic_id.has_value()) {
+    json["message_thread_id"] = topic_id.value();
+  }
+
+  if (reply_to_message_id.has_value()) {
+    json["reply_to_message_id"] = reply_to_message_id.value();
+  }
+
+  // 构建media数组
+  nlohmann::json media_array = nlohmann::json::array();
+  bool first = true;
+  for (const auto &[type, url] : media) {
+    nlohmann::json media_item;
+    media_item["type"] = type;
+    media_item["media"] = url;
+
+    // 只在第一个媒体上添加caption
+    if (first && !caption.empty()) {
+      media_item["caption"] = caption;
+      first = false;
+    } else {
+      first = false;
+    }
+
+    media_array.push_back(media_item);
+  }
+
+  json["media"] = media_array;
+
+  if (echo.has_value()) {
+    json["echo"] = std::to_string(echo.value());
+  }
+
+  return json.dump();
+}
+
 } // namespace obcx::adapter::telegram

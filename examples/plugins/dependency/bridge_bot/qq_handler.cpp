@@ -1146,6 +1146,9 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
               forward_title_segment.data["text"] = "\n📋 合并转发消息:\n";
               message_to_send.push_back(forward_title_segment);
 
+              // 收集合并转发中的所有图片
+              std::vector<obcx::common::MessageSegment> forward_images;
+
               // 处理转发消息中的每个节点
               if (forward_data.contains("messages") &&
                   forward_data["messages"].is_array()) {
@@ -1158,6 +1161,7 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
 
                     // 处理content数组
                     std::string node_content = "";
+                    int node_image_count = 0;
                     if (msg_node.contains("content") &&
                         msg_node["content"].is_array()) {
                       for (const auto &content_seg : msg_node["content"]) {
@@ -1176,7 +1180,39 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                                 "[表情:{}]",
                                 content_seg["data"]["id"].get<std::string>());
                           } else if (seg_type == "image") {
-                            node_content += "[图片]";
+                            // 收集图片信息用于后续发送
+                            node_image_count++;
+                            node_content += fmt::format(
+                                "[图片{}]", forward_images.size() + 1);
+
+                            // 创建图片消息段
+                            obcx::common::MessageSegment img_segment;
+                            img_segment.type = "image";
+                            if (content_seg.contains("data")) {
+                              auto img_data = content_seg["data"];
+                              if (img_data.contains("url") &&
+                                  img_data["url"].is_string()) {
+                                img_segment.data["url"] =
+                                    img_data["url"].get<std::string>();
+                                img_segment.data["file"] =
+                                    img_data["url"].get<std::string>();
+                              } else if (img_data.contains("file") &&
+                                         img_data["file"].is_string()) {
+                                img_segment.data["file"] =
+                                    img_data["file"].get<std::string>();
+                              }
+                              // 复制其他可能有用的字段
+                              if (img_data.contains("subType")) {
+                                img_segment.data["subType"] =
+                                    img_data["subType"];
+                              }
+                            }
+                            forward_images.push_back(img_segment);
+                            PLUGIN_DEBUG(
+                                "qq_to_tg", "收集合并转发中的图片: url={}",
+                                img_segment.data.value(
+                                    "url",
+                                    img_segment.data.value("file", "无URL")));
                           } else if (seg_type == "at" &&
                                      content_seg.contains("data") &&
                                      content_seg["data"].contains("qq")) {
@@ -1204,10 +1240,61 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
                 }
               }
 
+              // 如果收集到了图片，使用sendMediaGroup批量发送
+              if (!forward_images.empty()) {
+                PLUGIN_INFO(
+                    "qq_to_tg",
+                    "合并转发消息中发现 {} 张图片，准备使用MediaGroup发送",
+                    forward_images.size());
+
+                // 构建媒体组列表 (type, url)
+                std::vector<std::pair<std::string, std::string>> media_list;
+                for (const auto &img_seg : forward_images) {
+                  std::string url =
+                      img_seg.data.value("url", img_seg.data.value("file", ""));
+                  if (!url.empty()) {
+                    media_list.emplace_back("photo", url);
+                    PLUGIN_DEBUG("qq_to_tg", "添加图片到MediaGroup: {}", url);
+                  }
+                }
+
+                // 如果有有效的图片URL，使用sendMediaGroup发送
+                if (!media_list.empty()) {
+                  try {
+                    std::string caption = fmt::format(
+                        "📸 合并转发消息中的{}张图片", media_list.size());
+                    std::optional<int64_t> opt_topic_id =
+                        (topic_id == -1) ? std::nullopt
+                                         : std::optional<int64_t>(topic_id);
+
+                    std::string media_response =
+                        co_await static_cast<obcx::core::TGBot &>(telegram_bot)
+                            .send_media_group(telegram_group_id, media_list,
+                                              caption, opt_topic_id,
+                                              std::nullopt);
+
+                    PLUGIN_INFO("qq_to_tg",
+                                "成功通过MediaGroup发送 {} 张图片，响应: {}",
+                                media_list.size(), media_response);
+                  } catch (const std::exception &e) {
+                    PLUGIN_ERROR("qq_to_tg", "通过MediaGroup发送图片失败: {}",
+                                 e.what());
+                    // 失败时添加错误提示到文本消息
+                    obcx::common::MessageSegment error_segment;
+                    error_segment.type = "text";
+                    error_segment.data["text"] =
+                        fmt::format("\n[发送{}张图片失败: {}]",
+                                    media_list.size(), e.what());
+                    message_to_send.push_back(error_segment);
+                  }
+                }
+              }
+
               PLUGIN_INFO(
-                  "qq_to_tg", "成功处理合并转发消息，包含 {} 条消息",
+                  "qq_to_tg", "成功处理合并转发消息，包含 {} 条消息，{} 张图片",
                   forward_data.value("messages", nlohmann::json::array())
-                      .size());
+                      .size(),
+                  forward_images.size());
             } else {
               PLUGIN_WARN("qq_to_tg", "获取合并转发内容失败: {}",
                           forward_response);

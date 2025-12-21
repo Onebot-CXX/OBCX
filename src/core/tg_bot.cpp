@@ -200,6 +200,20 @@ auto TGBot::send_group_photo(std::string_view group_id,
                                                                      echo_id);
 }
 
+auto TGBot::send_media_group(
+    std::string_view chat_id,
+    const std::vector<std::pair<std::string, std::string>> &media,
+    std::string_view caption, std::optional<int64_t> topic_id,
+    std::optional<std::string> reply_to_message_id)
+    -> asio::awaitable<std::string> {
+  auto echo_id = generate_echo_id();
+  auto payload = get_telegram_adapter().serialize_send_media_group_request(
+      chat_id, media, caption, topic_id, reply_to_message_id, echo_id);
+
+  co_return co_await connection_manager_->send_action_and_wait_async(payload,
+                                                                     echo_id);
+}
+
 // --- 消息管理 API ---
 
 auto TGBot::delete_message(std::string_view message_id)

@@ -52,8 +52,11 @@ set(CMAKE_PREFIX_PATH
     "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TRIPLET}")
 
 option(ENABLE_DEBUG_TRACE "Enable logging with file and line numbers" OFF)
-set(CMAKE_UNITY_BUILD ON)
-set(CMAKE_UNITY_BUILD_BATCH_SIZE 10)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+  set(CMAKE_UNITY_BUILD ON)
+  set(CMAKE_UNITY_BUILD_BATCH_SIZE 10)
+endif()
 
 if(ENABLE_DEBUG_TRACE)
   message(

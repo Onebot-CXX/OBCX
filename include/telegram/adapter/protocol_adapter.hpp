@@ -390,6 +390,24 @@ public:
   auto serialize_get_updates_request(
       int offset = 0, int limit = 100,
       const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
+
+  /**
+   * @brief 将"发送媒体组"动作序列化为Telegram API兼容的JSON字符串。
+   * @param chat_id 目标聊天ID。
+   * @param media 媒体文件列表（每个包含type和media字段）。
+   * @param caption 整个媒体组的描述（会附加到第一个媒体）。
+   * @param topic_id 可选的topic ID，用于forum群组。
+   * @param reply_to_message_id 可选的回复消息ID。
+   * @param echo 可选的echo字符串，用于匹配响应。
+   * @return 用于动作请求的JSON字符串负载。
+   */
+  auto serialize_send_media_group_request(
+      std::string_view chat_id,
+      const std::vector<std::pair<std::string, std::string>> &media,
+      std::string_view caption = "",
+      const std::optional<int64_t> &topic_id = std::nullopt,
+      const std::optional<std::string> &reply_to_message_id = std::nullopt,
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 };
 
 } // namespace obcx::adapter::telegram
