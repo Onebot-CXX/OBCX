@@ -1401,4 +1401,25 @@ auto ProtocolAdapter::serialize_send_media_group_request(
   return json.dump();
 }
 
+auto ProtocolAdapter::serialize_edit_message_text_request(
+    std::string_view chat_id, std::string_view message_id,
+    std::string_view text, std::string_view parse_mode,
+    const std::optional<uint64_t> &echo) -> std::string {
+  nlohmann::json json;
+  json["method"] = "editMessageText";
+  json["chat_id"] = chat_id;
+  json["message_id"] = message_id;
+  json["text"] = text;
+
+  if (!parse_mode.empty()) {
+    json["parse_mode"] = parse_mode;
+  }
+
+  if (echo.has_value()) {
+    json["echo"] = std::to_string(echo.value());
+  }
+
+  return json.dump();
+}
+
 } // namespace obcx::adapter::telegram

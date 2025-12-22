@@ -267,5 +267,8 @@ msgstr "WebSocket 连接已建立"
 msgid "WebSocket connected successfully to ws://{}:{}"
 msgstr "WebSocket 已成功连接到 ws://{}:{}"
 
+msgid "WebSocket connection closed."
+msgstr "WebSocket 连接已关闭。"
+
 msgid "Message sent successfully: {}"
 msgstr "消息已成功发送: {}"

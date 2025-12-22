@@ -286,7 +286,9 @@ void WebsocketClient::stop_writer() {
         request->promise.set_exception(writer_error_);
       } else {
         request->promise.set_exception(
-            std::make_exception_ptr(std::runtime_error("WebSocket连接已关闭")));
+            std::make_exception_ptr(std::runtime_error(
+                common::I18nLogMessages::get_message(
+                    common::LogMessageKey::WEBSOCKET_CONNECTION_CLOSED))));
       }
     } catch (...) {
       // 忽略设置异常时的错误

@@ -132,6 +132,18 @@ public:
       std::string_view message_id) override;
 
   /**
+   * @brief 编辑消息文本
+   * @param chat_id 聊天ID
+   * @param message_id 要编辑的消息ID
+   * @param text 新的消息文本
+   * @param parse_mode 解析模式（MarkdownV2, HTML, Markdown）
+   * @return 操作结果的JSON响应
+   */
+  asio::awaitable<std::string> edit_message_text(
+      std::string_view chat_id, std::string_view message_id,
+      std::string_view text, std::string_view parse_mode = "");
+
+  /**
    * @brief 获取消息详情
    * @param message_id 要获取的消息ID
    * @return 消息详情的JSON响应

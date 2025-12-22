@@ -154,6 +154,8 @@ void NoticeEvent::from_json(const json &j) {
   DESERIALIZE_FIELD(j, *this, notice_type);
   user_id = JsonUtils::get_id_as_string(j, "user_id");
   group_id = JsonUtils::get_optional_id_as_string(j, "group_id");
+  // 保存原始JSON数据，以便访问如message_id等额外字段
+  data = j;
 }
 
 // RequestEvent

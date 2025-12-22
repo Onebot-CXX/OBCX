@@ -408,6 +408,20 @@ public:
       const std::optional<int64_t> &topic_id = std::nullopt,
       const std::optional<std::string> &reply_to_message_id = std::nullopt,
       const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
+
+  /**
+   * @brief 将"编辑消息文本"动作序列化为Telegram API兼容的JSON字符串。
+   * @param chat_id 聊天ID。
+   * @param message_id 要编辑的消息ID。
+   * @param text 新的消息文本。
+   * @param parse_mode 解析模式（MarkdownV2, HTML, Markdown）。
+   * @param echo 可选的echo字符串，用于匹配响应。
+   * @return 用于动作请求的JSON字符串负载。
+   */
+  auto serialize_edit_message_text_request(
+      std::string_view chat_id, std::string_view message_id,
+      std::string_view text, std::string_view parse_mode = "",
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 };
 
 } // namespace obcx::adapter::telegram

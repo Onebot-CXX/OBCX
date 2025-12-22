@@ -90,6 +90,16 @@ bool QQToTGPlugin::initialize() {
           PLUGIN_INFO(get_name(),
                       "Registered QQ heartbeat callback for QQ to TG plugin");
 
+          // 注册通知事件回调（用于处理撤回消息等）
+          qq_bot->on_event<obcx::common::NoticeEvent>(
+              [this](obcx::core::IBot &bot,
+                     const obcx::common::NoticeEvent &event)
+                  -> boost::asio::awaitable<void> {
+                co_await handle_qq_notice(bot, event);
+              });
+          PLUGIN_INFO(get_name(),
+                      "Registered QQ notice callback for QQ to TG plugin");
+
           break;
         }
       }
@@ -179,6 +189,42 @@ boost::asio::awaitable<void> QQToTGPlugin::handle_qq_heartbeat(
                                              std::chrono::system_clock::now());
       PLUGIN_DEBUG(get_name(), "QQ platform heartbeat updated, interval: {}ms",
                    event.interval);
+    }
+  }
+
+  co_return;
+}
+
+boost::asio::awaitable<void> QQToTGPlugin::handle_qq_notice(
+    obcx::core::IBot &bot, const obcx::common::NoticeEvent &event) {
+  // 确保这是QQ bot的通知
+  if (auto *qq_bot = dynamic_cast<obcx::core::QQBot *>(&bot)) {
+    PLUGIN_DEBUG(get_name(), "QQ to TG Plugin: Processing QQ notice, type: {}",
+                 event.notice_type);
+
+    try {
+      if (!tg_bot_) {
+        auto [lock, bots] = get_bots();
+
+        for (auto &bot_ptr : bots) {
+          if (auto *tg = dynamic_cast<obcx::core::TGBot *>(bot_ptr.get())) {
+            tg_bot_ = tg;
+            break;
+          }
+        }
+      }
+
+      if (tg_bot_ && qq_handler_) {
+        // 将 NoticeEvent 转换为 Event variant 并传递给 handler
+        obcx::common::Event event_variant = event;
+        co_await qq_handler_->handle_recall_event(*tg_bot_, *qq_bot,
+                                                  event_variant);
+      } else {
+        PLUGIN_WARN(get_name(),
+                    "Telegram bot or QQHandler not found for notice handling");
+      }
+    } catch (const std::exception &e) {
+      PLUGIN_ERROR(get_name(), "Error handling QQ notice: {}", e.what());
     }
   }
 

@@ -1584,6 +1584,21 @@ auto QQHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
     PLUGIN_INFO("qq_to_tg", "处理QQ群 {} 中消息 {} 的撤回事件", qq_group_id,
                 recalled_message_id);
 
+    // 根据QQ群ID获取对应的Telegram群ID和topic_id
+    auto [telegram_group_id, topic_id] = get_tg_group_and_topic_id(qq_group_id);
+    if (telegram_group_id.empty()) {
+      PLUGIN_DEBUG("qq_to_tg", "未找到QQ群 {} 对应的Telegram群映射", qq_group_id);
+      co_return;
+    }
+
+    // 获取bridge配置
+    const GroupBridgeConfig *bridge_config = get_bridge_config(telegram_group_id);
+    if (!bridge_config) {
+      PLUGIN_DEBUG("qq_to_tg", "未找到Telegram群 {} 的bridge配置",
+                   telegram_group_id);
+      co_return;
+    }
+
     // 查找对应的Telegram消息ID
     auto target_message_id = db_manager_->get_target_message_id(
         "qq", recalled_message_id, "telegram");
@@ -1594,36 +1609,82 @@ auto QQHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
       co_return;
     }
 
+    // 获取原始消息内容
+    auto original_message = db_manager_->get_message("qq", recalled_message_id);
+    std::string message_content =
+        original_message.has_value() ? original_message->content : "已撤回的消息";
+
+    // 转义MarkdownV2特殊字符
+    auto escape_markdown_v2 = [](const std::string &text) -> std::string {
+      std::string result;
+      result.reserve(text.size() * 2);
+      for (char c : text) {
+        // MarkdownV2需要转义的特殊字符
+        if (c == '_' || c == '*' || c == '[' || c == ']' || c == '(' ||
+            c == ')' || c == '~' || c == '`' || c == '>' || c == '#' ||
+            c == '+' || c == '-' || c == '=' || c == '|' || c == '{' ||
+            c == '}' || c == '.' || c == '!') {
+          result += '\\';
+        }
+        result += c;
+      }
+      return result;
+    };
+
+    // 判断是否需要显示发送者
+    bool show_sender = false;
+    if (bridge_config->mode == BridgeMode::GROUP_TO_GROUP) {
+      show_sender = bridge_config->show_qq_to_tg_sender;
+    } else {
+      // Topic模式：获取对应topic的配置
+      const TopicBridgeConfig *topic_config =
+          get_topic_config(telegram_group_id, topic_id);
+      show_sender = topic_config ? topic_config->show_qq_to_tg_sender : false;
+    }
+
+    // 创建带删除线的消息内容
+    std::string edited_content;
+    if (show_sender && original_message.has_value()) {
+      // 获取发送者显示名称
+      std::string sender_display_name = db_manager_->get_user_display_name(
+          "qq", original_message->user_id, qq_group_id);
+      // 格式: [用户名]\t~消息内容~
+      edited_content = fmt::format("{}~{}~",
+                                   escape_markdown_v2(fmt::format("[{}]\t", sender_display_name)),
+                                   escape_markdown_v2(message_content));
+    } else {
+      // 不显示发送者，只显示消息内容
+      edited_content = fmt::format("~{}~", escape_markdown_v2(message_content));
+    }
+
     try {
-      // 尝试在Telegram上撤回消息
-      auto response =
-          co_await telegram_bot.delete_message(target_message_id.value());
+      // 使用 edit_message_text 编辑消息，添加删除线
+      auto *tg_bot = dynamic_cast<obcx::core::TGBot *>(&telegram_bot);
+      if (!tg_bot) {
+        PLUGIN_ERROR("qq_to_tg", "无法获取TGBot实例");
+        co_return;
+      }
+
+      auto response = co_await tg_bot->edit_message_text(
+          telegram_group_id, target_message_id.value(), edited_content,
+          "MarkdownV2");
 
       // 解析响应
       nlohmann::json response_json = nlohmann::json::parse(response);
 
       if (response_json.contains("ok") && response_json["ok"].get<bool>()) {
-        PLUGIN_INFO("qq_to_tg", "成功在Telegram撤回消息: {}",
-                    target_message_id.value());
+        PLUGIN_INFO("qq_to_tg", "成功编辑Telegram消息为撤回状态: {}:{}",
+                    telegram_group_id, target_message_id.value());
       } else {
-        PLUGIN_WARN("qq_to_tg", "Telegram撤回消息失败: {}, 响应: {}",
-                    target_message_id.value(), response);
+        PLUGIN_WARN("qq_to_tg", "编辑Telegram消息失败: {}:{}, 响应: {}",
+                    telegram_group_id, target_message_id.value(), response);
       }
 
     } catch (const std::exception &e) {
-      PLUGIN_WARN("qq_to_tg", "尝试在Telegram撤回消息时出错: {}", e.what());
+      PLUGIN_WARN("qq_to_tg", "尝试编辑Telegram消息时出错: {}", e.what());
     }
 
-    // 无论Telegram撤回是否成功，都删除数据库中的消息映射
-    bool deleted = db_manager_->delete_message_mapping(
-        "qq", recalled_message_id, "telegram");
-    if (deleted) {
-      PLUGIN_DEBUG("qq_to_tg", "已删除消息映射: qq:{} -> telegram:{}",
-                   recalled_message_id, target_message_id.value());
-    } else {
-      PLUGIN_WARN("qq_to_tg", "删除消息映射失败: qq:{} -> telegram:{}",
-                  recalled_message_id, target_message_id.value());
-    }
+    // 保留消息映射，不删除（以便后续查询）
 
   } catch (const std::bad_variant_access &e) {
     PLUGIN_DEBUG("qq_to_tg", "事件不是NoticeEvent类型，跳过撤回处理");

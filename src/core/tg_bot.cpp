@@ -238,6 +238,17 @@ auto TGBot::delete_message(std::string_view message_id)
                                                                      echo_id);
 }
 
+auto TGBot::edit_message_text(std::string_view chat_id,
+                              std::string_view message_id, std::string_view text,
+                              std::string_view parse_mode)
+    -> asio::awaitable<std::string> {
+  auto echo_id = generate_echo_id();
+  auto payload = get_telegram_adapter().serialize_edit_message_text_request(
+      chat_id, message_id, text, parse_mode, echo_id);
+  co_return co_await connection_manager_->send_action_and_wait_async(payload,
+                                                                     echo_id);
+}
+
 auto TGBot::get_message(std::string_view message_id)
     -> asio::awaitable<std::string> {
   // Telegram doesn't have a direct get message API
