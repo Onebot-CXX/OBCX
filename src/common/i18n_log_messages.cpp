@@ -597,6 +597,10 @@ void I18nLogMessages::setup_message_keys() {
       "obcx_create_plugin returned nullptr for {}";
   message_keys_[LogMessageKey::PLUGIN_CREATE_EXCEPTION] =
       "Exception during plugin creation from {}: {}";
+  message_keys_[LogMessageKey::PLUGIN_RELOAD_START] =
+      "Starting plugin reload...";
+  message_keys_[LogMessageKey::PLUGIN_RELOAD_COMPLETE] =
+      "Plugin reload completed";
 
   // Main / Framework
   message_keys_[LogMessageKey::SHUTDOWN_IN_PROGRESS] =

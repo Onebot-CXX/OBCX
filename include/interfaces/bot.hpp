@@ -36,6 +36,16 @@ public:
   }
 
   /**
+   * @brief 清除所有已注册的事件处理器
+   *        在插件reload时调用，防止悬空函数指针
+   */
+  void clear_event_handlers() {
+    if (dispatcher_) {
+      dispatcher_->clear_handlers();
+    }
+  }
+
+  /**
    * @brief 通过指定的连接类型连接到实现
    * @param type 连接类型
    * @param config 连接配置

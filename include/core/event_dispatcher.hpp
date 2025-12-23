@@ -58,6 +58,11 @@ public:
   }
 
   /**
+   * @brief 清除所有已注册的事件处理器
+   */
+  void clear_handlers() { handlers_.clear(); }
+
+  /**
    * @brief 分发一个事件给所有已注册的处理器
    * @param bot Bot实例的引用，会传递给事件处理器
    * @param event 从适配器层传入的事件变体

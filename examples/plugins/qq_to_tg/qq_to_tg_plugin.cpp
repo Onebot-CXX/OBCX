@@ -134,6 +134,22 @@ void QQToTGPlugin::deinitialize() {
 void QQToTGPlugin::shutdown() {
   try {
     PLUGIN_INFO(get_name(), "Shutting down QQ to TG Plugin...");
+
+    // Clear cached bot pointer first
+    tg_bot_ = nullptr;
+
+    // Stop retry manager if running (this cancels any pending async operations)
+    if (retry_manager_) {
+      retry_manager_->stop();
+      retry_manager_.reset();
+    }
+
+    // Release QQ handler
+    qq_handler_.reset();
+
+    // Release database manager last (other components may depend on it)
+    db_manager_.reset();
+
     PLUGIN_INFO(get_name(), "QQ to TG Plugin shutdown complete");
   } catch (const std::exception &e) {
     PLUGIN_ERROR(get_name(), "Exception during QQ to TG Plugin shutdown: {}",
