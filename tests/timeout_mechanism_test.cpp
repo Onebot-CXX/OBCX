@@ -11,6 +11,7 @@
 #include "common/message_type.hpp"
 #include "onebot11/adapter/protocol_adapter.hpp"
 #include "onebot11/network/websocket/connection_manager.hpp"
+// NOLINTBEGIN
 
 namespace beast = boost::beast;
 namespace websocket = beast::websocket;
@@ -414,3 +415,4 @@ TEST_F(WsTimeoutMechanismTest, DelayedResponse) {
 }
 
 } // namespace obcx::test
+// NOLINTEND

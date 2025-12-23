@@ -208,7 +208,7 @@ auto TelegramConnectionManager::download_file_content(
     }
 
     size_t host_start = protocol_pos + 3;
-    size_t path_start = url_str.find("/", host_start);
+    size_t path_start = url_str.find('/', host_start);
     if (path_start == std::string::npos) {
       throw std::runtime_error(common::I18nLogMessages::get_message(
           common::LogMessageKey::DOWNLOAD_URL_NO_PATH));

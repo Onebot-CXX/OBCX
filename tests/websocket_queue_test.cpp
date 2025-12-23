@@ -12,13 +12,12 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/steady_timer.hpp>
-#include <chrono>
-#include <iostream>
 #include <thread>
 
 using namespace obcx::network;
 using namespace std::chrono_literals;
 
+// NOLINTBEGIN
 // 模拟弱网环境的WebSocket服务器
 class MockWebSocketServer {
 public:
@@ -190,3 +189,4 @@ auto main() -> int {
 
   return 0;
 }
+// NOLINTEND

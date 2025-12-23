@@ -239,7 +239,8 @@ auto TGBot::delete_message(std::string_view message_id)
 }
 
 auto TGBot::edit_message_text(std::string_view chat_id,
-                              std::string_view message_id, std::string_view text,
+                              std::string_view message_id,
+                              std::string_view text,
                               std::string_view parse_mode)
     -> asio::awaitable<std::string> {
   auto echo_id = generate_echo_id();

@@ -21,7 +21,8 @@ Checks: >
   - readability-identifier-length
   - bugprone-easily-swappable-parameters
   - cppcoreguidelines-avoid-capturing-lambda-coroutines
-  - cppcoreguidelines-avoid-reference-coroutine-parameters¶
+  - cppcoreguidelines-avoid-reference-coroutine-parameters
+  - cppcoreguidelines-non-private-member-variables-in-classes
 CheckOptions:
   # This option configures the 'modernize-use-trailing-return-type' check.
   # By setting 'DefinitionRequired' to '0' (false), we enforce the use of

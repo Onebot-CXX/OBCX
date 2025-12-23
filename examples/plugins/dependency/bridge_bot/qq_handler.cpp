@@ -1587,12 +1587,14 @@ auto QQHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
     // 根据QQ群ID获取对应的Telegram群ID和topic_id
     auto [telegram_group_id, topic_id] = get_tg_group_and_topic_id(qq_group_id);
     if (telegram_group_id.empty()) {
-      PLUGIN_DEBUG("qq_to_tg", "未找到QQ群 {} 对应的Telegram群映射", qq_group_id);
+      PLUGIN_DEBUG("qq_to_tg", "未找到QQ群 {} 对应的Telegram群映射",
+                   qq_group_id);
       co_return;
     }
 
     // 获取bridge配置
-    const GroupBridgeConfig *bridge_config = get_bridge_config(telegram_group_id);
+    const GroupBridgeConfig *bridge_config =
+        get_bridge_config(telegram_group_id);
     if (!bridge_config) {
       PLUGIN_DEBUG("qq_to_tg", "未找到Telegram群 {} 的bridge配置",
                    telegram_group_id);
@@ -1611,8 +1613,9 @@ auto QQHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
 
     // 获取原始消息内容
     auto original_message = db_manager_->get_message("qq", recalled_message_id);
-    std::string message_content =
-        original_message.has_value() ? original_message->content : "已撤回的消息";
+    std::string message_content = original_message.has_value()
+                                      ? original_message->content
+                                      : "已撤回的消息";
 
     // 转义MarkdownV2特殊字符
     auto escape_markdown_v2 = [](const std::string &text) -> std::string {
@@ -1649,9 +1652,10 @@ auto QQHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
       std::string sender_display_name = db_manager_->get_user_display_name(
           "qq", original_message->user_id, qq_group_id);
       // 格式: [用户名]\t~消息内容~
-      edited_content = fmt::format("{}~{}~",
-                                   escape_markdown_v2(fmt::format("[{}]\t", sender_display_name)),
-                                   escape_markdown_v2(message_content));
+      edited_content = fmt::format(
+          "{}~{}~",
+          escape_markdown_v2(fmt::format("[{}]\t", sender_display_name)),
+          escape_markdown_v2(message_content));
     } else {
       // 不显示发送者，只显示消息内容
       edited_content = fmt::format("~{}~", escape_markdown_v2(message_content));
