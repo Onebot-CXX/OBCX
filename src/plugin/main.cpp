@@ -7,55 +7,55 @@
 #include "interfaces/connection_manager.hpp"
 #include "onebot11/adapter/protocol_adapter.hpp"
 #include "telegram/adapter/protocol_adapter.hpp"
+
 #include <atomic>
 #include <boost/date_time/posix_time/time_formatters.hpp>
+#include <boost/program_options.hpp>
 #include <csignal>
 #include <cstdint>
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <print>
 #include <spdlog/common.h>
+#include <string>
 #include <thread>
 #include <vector>
 
 using namespace obcx;
+namespace po = boost::program_options;
 
 namespace {
-bool g_should_stop = false;
-bool g_shutdown_started = false;
+std::atomic_bool g_should_stop = false;
 
 std::mutex g_stop_mtx;
 std::condition_variable g_stop_cv;
 
 const uint16_t DEFAULT_PORT = 8080;
+constexpr int BOT_SHUTDOWN_TIMEOUT_SECONDS = 5;
 
 void print_version() {
-  std::cout << "OBCX Robot Framework v1.0.0" << '\n';
-  std::cout << "A modular bot framework supporting QQ and Telegram" << '\n';
+  std::println("OBCX Robot Framework v1.0.0");
+  std::println("A modular bot framework supporting QQ and Telegram");
 }
 
-void print_help() {
-  std::cout << "Usage: OBCX [OPTIONS] [CONFIG_FILE]" << '\n';
-  std::cout << '\n';
-  std::cout << "OPTIONS:" << '\n';
-  std::cout << "  -h, --help     Show this help message" << '\n';
-  std::cout << "  -v, --version  Show version information" << '\n';
-  std::cout << '\n';
-  std::cout << "CONFIG_FILE:" << '\n';
-  std::cout << "  Path to TOML configuration file (default: config.toml)"
-            << '\n';
+void print_help(const po::options_description &desc) {
+  std::println("Usage: OBCX [OPTIONS] [CONFIG_FILE]");
+  std::println("");
+  std::println("OPTIONS:");
+  std::cout << desc << "\n";
+  std::println("");
+  std::println("CONFIG_FILE:");
+  std::println("  Path to TOML configuration file (default: config.toml)");
 }
 
 void signal_handler(int signal) {
-  std::atomic_signal_fence(std::memory_order_acquire);
-  if (g_shutdown_started) {
+  bool expected = false;
+  if (!g_should_stop.compare_exchange_strong(expected, true)) {
     OBCX_I18N_WARN(common::LogMessageKey::SHUTDOWN_IN_PROGRESS, signal);
     return;
   }
-  std::atomic_signal_fence(std::memory_order_release);
-  g_shutdown_started = true;
   OBCX_I18N_INFO(common::LogMessageKey::SHUTDOWN_SIGNAL_RECEIVED, signal);
-  g_should_stop = true;
   g_stop_cv.notify_one();
 }
 } // namespace
@@ -238,31 +238,49 @@ auto main(int argc, char *argv[]) -> int {
       fmt::format("logs/obcx-bridge-{}.log",
                   boost::posix_time::to_iso_extended_string(
                       boost::posix_time::second_clock::local_time())));
+
   std::string config_path = "config.toml";
 
-  // Parse command line arguments
-  for (int i = 1; i < argc; ++i) {
-    std::string arg = argv[i];
-    if (arg == "-h" || arg == "--help") {
-      print_help();
+  // Parse command line arguments using boost-program-options
+  try {
+    po::options_description desc("Options");
+    desc.add_options()("help,h", "Show this help message")(
+        "version,v", "Show version information")(
+        "config", po::value<std::string>(), "Path to TOML configuration file");
+
+    po::positional_options_description p;
+    p.add("config", -1);
+
+    po::variables_map vm;
+    po::store(
+        po::command_line_parser(argc, argv).options(desc).positional(p).run(),
+        vm);
+    po::notify(vm);
+
+    if (vm.count("help")) {
+      print_help(desc);
       return 0;
     }
-    if (arg == "-v" || arg == "--version") {
+
+    if (vm.count("version")) {
       print_version();
       return 0;
     }
-    if (arg.starts_with("-")) {
-      std::cerr << "Unknown option: " << arg << '\n';
-      print_help();
-      return 1;
+
+    if (vm.count("config")) {
+      config_path = vm["config"].as<std::string>();
     }
-    config_path = arg;
+
+  } catch (const po::error &e) {
+    std::println(std::cerr, "Error parsing arguments: {}", e.what());
+    return 1;
   }
 
   // Initialize configuration
   auto &config_loader = common::ConfigLoader::instance();
   if (!config_loader.load_config(config_path)) {
-    std::cerr << "Failed to load configuration from: " << config_path << '\n';
+    std::println(std::cerr, "Failed to load configuration from: {}",
+                 config_path);
     return 1;
   }
 
@@ -354,10 +372,30 @@ auto main(int argc, char *argv[]) -> int {
 
   OBCX_I18N_INFO(common::LogMessageKey::ALL_COMPONENTS_STARTED);
 
+  // Start CLI input thread
+  std::thread cli_thread([]() {
+    std::string line;
+    while (!g_should_stop.load(std::memory_order_acquire) &&
+           std::getline(std::cin, line)) {
+      if (line == "\x03" || line == "exit" || line == "quit") {
+        bool expected = false;
+        if (g_should_stop.compare_exchange_strong(expected, true)) {
+          OBCX_I18N_INFO(common::LogMessageKey::SHUTDOWN_SIGNAL_RECEIVED, 0);
+          g_stop_cv.notify_one();
+        }
+        break;
+      }
+      std::println(std::cout, "Input: {}", line);
+      // Placeholder for future command processing
+    }
+  });
+  cli_thread.detach();
+
   // Wait for shutdown signal
   {
     std::unique_lock lock(g_stop_mtx);
-    g_stop_cv.wait(lock, []() { return g_should_stop; });
+    g_stop_cv.wait(
+        lock, []() { return g_should_stop.load(std::memory_order_acquire); });
   }
 
   OBCX_I18N_INFO(common::LogMessageKey::FRAMEWORK_SHUTDOWN);
@@ -374,7 +412,8 @@ auto main(int argc, char *argv[]) -> int {
       // Use a detached thread to implement timeout
       bool thread_finished = false;
       std::thread timeout_thread([&]() {
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+        std::this_thread::sleep_for(
+            std::chrono::seconds(BOT_SHUTDOWN_TIMEOUT_SECONDS));
         if (!thread_finished) {
           OBCX_I18N_WARN(common::LogMessageKey::BOT_THREAD_TIMEOUT, i);
           bot_threads[i].detach();
