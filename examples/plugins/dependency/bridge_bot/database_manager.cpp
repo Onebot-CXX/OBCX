@@ -9,6 +9,31 @@
 
 namespace obcx::storage {
 
+// 静态成员初始化
+std::shared_ptr<DatabaseManager> DatabaseManager::instance_ = nullptr;
+std::mutex DatabaseManager::instance_mutex_;
+
+std::shared_ptr<DatabaseManager> DatabaseManager::instance(
+    const std::string &db_path) {
+  std::lock_guard lock(instance_mutex_);
+  if (!instance_) {
+    if (db_path.empty()) {
+      PLUGIN_ERROR("bridge",
+                   "DatabaseManager::instance() called without db_path on "
+                   "first initialization");
+      return nullptr;
+    }
+    instance_ = std::shared_ptr<DatabaseManager>(new DatabaseManager(db_path));
+  }
+  return instance_;
+}
+
+void DatabaseManager::reset_instance() {
+  std::lock_guard lock(instance_mutex_);
+  instance_.reset();
+  PLUGIN_DEBUG("bridge", "DatabaseManager instance reset");
+}
+
 DatabaseManager::DatabaseManager(const std::string &db_path)
     : db_path_(db_path), db_(nullptr) {
   PLUGIN_DEBUG("bridge", "DatabaseManager constructed with path: {}", db_path_);
@@ -16,7 +41,10 @@ DatabaseManager::DatabaseManager(const std::string &db_path)
 
 DatabaseManager::~DatabaseManager() {
   if (db_) {
-    sqlite3_close(db_);
+    // Use sqlite3_close_v2 which handles pending operations gracefully
+    // It will mark the connection as unusable and close it when all
+    // pending operations complete
+    sqlite3_close_v2(db_);
     PLUGIN_DEBUG("bridge", "Database closed");
   }
 }
@@ -24,7 +52,18 @@ DatabaseManager::~DatabaseManager() {
 bool DatabaseManager::initialize() {
   std::lock_guard lock(db_mutex_);
 
-  int rc = sqlite3_open(db_path_.c_str(), &db_);
+  // 已经初始化过则直接返回
+  if (initialized_ && db_) {
+    PLUGIN_DEBUG("bridge", "Database already initialized");
+    return true;
+  }
+
+  // Use sqlite3_open_v2 with SQLITE_OPEN_PRIVATECACHE to avoid shared cache
+  // issues when multiple plugins open the same database file
+  int rc = sqlite3_open_v2(db_path_.c_str(), &db_,
+                           SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
+                               SQLITE_OPEN_FULLMUTEX,
+                           nullptr);
   if (rc != SQLITE_OK) {
     PLUGIN_ERROR("bridge", "Cannot open database: {}", sqlite3_errmsg(db_));
     return false;
@@ -37,7 +76,12 @@ bool DatabaseManager::initialize() {
     return false;
   }
 
-  return create_tables();
+  if (!create_tables()) {
+    return false;
+  }
+
+  initialized_ = true;
+  return true;
 }
 
 bool DatabaseManager::create_tables() {

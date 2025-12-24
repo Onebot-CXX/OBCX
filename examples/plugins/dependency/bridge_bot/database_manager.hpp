@@ -139,17 +139,24 @@ struct PlatformHeartbeatInfo {
 };
 
 /**
- * @brief 数据库管理器类
+ * @brief 数据库管理器类（单例模式）
  *
  * 提供消息持久化、用户信息管理、消息ID映射等功能
  */
 class DatabaseManager {
 public:
   /**
-   * @brief 构造函数
-   * @param db_path 数据库文件路径
+   * @brief 获取单例实例
+   * @param db_path 数据库文件路径（仅首次调用时有效）
+   * @return DatabaseManager单例引用
    */
-  explicit DatabaseManager(const std::string &db_path);
+  static std::shared_ptr<DatabaseManager> instance(
+      const std::string &db_path = "");
+
+  /**
+   * @brief 重置单例实例（用于plugin reload时清理）
+   */
+  static void reset_instance();
 
   /**
    * @brief 析构函数
@@ -502,9 +509,19 @@ public:
       const std::string &platform);
 
 private:
+  /**
+   * @brief 私有构造函数（单例模式）
+   * @param db_path 数据库文件路径
+   */
+  explicit DatabaseManager(const std::string &db_path);
+
   std::string db_path_;
   sqlite3 *db_;
   std::mutex db_mutex_;
+  bool initialized_ = false;
+
+  static std::shared_ptr<DatabaseManager> instance_;
+  static std::mutex instance_mutex_;
 
   /**
    * @brief 创建数据库表

@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "obcx",
   "version": "0.1.0",
-  "builtin-baseline": "245eb91b466a1f2e1eb73e2b04a6ba77c14c35af",
+  "builtin-baseline": "5d57f5a0a5469a23e005fc79a7c1814ab4fc967e",
   "dependencies": [
     "boost-beast",
     "boost-locale",

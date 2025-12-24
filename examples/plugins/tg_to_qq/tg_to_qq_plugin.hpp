@@ -30,10 +30,10 @@ public:
   ~TGToQQPlugin() override;
 
   // IPlugin interface
-  std::string get_name() const override;
-  std::string get_version() const override;
-  std::string get_description() const override;
-  bool initialize() override;
+  [[nodiscard]] auto get_name() const -> std::string override;
+  [[nodiscard]] auto get_version() const -> std::string override;
+  [[nodiscard]] auto get_description() const -> std::string override;
+  auto initialize() -> bool override;
   void deinitialize() override;
   void shutdown() override;
 
@@ -45,9 +45,9 @@ private:
     bool enable_retry_queue = false;
   };
 
-  bool load_configuration();
-  boost::asio::awaitable<void> handle_tg_message(
-      obcx::core::IBot &bot, const obcx::common::MessageEvent &event);
+  auto load_configuration() -> bool;
+  auto handle_tg_message(
+      obcx::core::IBot &bot, const obcx::common::MessageEvent &event) -> boost::asio::awaitable<void>;
 
   // Configuration
   Config config_;

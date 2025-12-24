@@ -172,8 +172,14 @@ void PluginManager::shutdown_all_plugins() {
 
 auto PluginManager::find_plugin_file(const std::string &plugin_name) const
     -> std::string {
-  const std::vector possible_names = {plugin_name, "lib" + plugin_name + ".so",
-                                      plugin_name + ".so"};
+  // Platform-specific library extensions
+  const std::vector possible_names = {
+      plugin_name,
+      "lib" + plugin_name + ".so",
+      plugin_name + ".so",
+      "lib" + plugin_name + ".dylib",
+      plugin_name + ".dylib"
+  };
 
   for (const auto &directory : plugin_directories_) {
     for (const auto &name : possible_names) {

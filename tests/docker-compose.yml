@@ -1,6 +1,6 @@
 version: "3"
 services:
-  llonebot:
+  llonebot-x64:
     environment:
       - VNC_PASSWD=nopasswd # 设置 VNC 密码
     volumes:
@@ -11,10 +11,32 @@ services:
       - 127.0.0.1:3001:3001 # OneBot WebSocket 端口
       - 127.0.0.1:3080:3080 # Web UI
       - 127.0.0.1:5600:5600 # Satori 端口
-      - 127.0.0.1:5900:5900 # novnc
-      - 127.0.0.1:7081:7081 # vnc
+      #- 127.0.0.1:5900:5900 # novnc
+      #- 127.0.0.1:7081:7081 # vnc
       - 127.0.0.1:13000:13000 # pmhq
     container_name: llonebot
     network_mode: bridge
     restart: always
     image: initialencounter/llonebot:latest
+    profiles:
+      - x64
+  llonebot-arm64:
+    environment:
+      - VNC_PASSWD=nopasswd # 设置 VNC 密码
+    volumes:
+      - ./QQ:/root/.config/QQ # 挂载 QQ 配置目录
+      - ./llonebot:/root/llonebot # 挂载 llonebot 数据目录
+    ports:
+      - 127.0.0.1:3000:3000 # OneBot HTTP 端口
+      - 127.0.0.1:3001:3001 # OneBot WebSocket 端口
+      - 127.0.0.1:3080:3080 # Web UI
+      - 127.0.0.1:5600:5600 # Satori 端口
+      #- 127.0.0.1:5900:5900 # novnc
+      #- 127.0.0.1:7081:7081 # vnc
+      - 127.0.0.1:13000:13000 # pmhq
+    container_name: llonebot
+    network_mode: bridge
+    restart: always
+    image: initialencounter/llonebot-arm:latest
+    profiles:
+      - arm64

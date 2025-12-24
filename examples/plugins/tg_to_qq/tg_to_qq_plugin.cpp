@@ -21,11 +21,11 @@ TGToQQPlugin::~TGToQQPlugin() {
   PLUGIN_DEBUG("tg_to_qq", "TGToQQPlugin destructor called");
 }
 
-std::string TGToQQPlugin::get_name() const { return "tg_to_qq"; }
+auto TGToQQPlugin::get_name() const -> std::string { return "tg_to_qq"; }
 
-std::string TGToQQPlugin::get_version() const { return "1.0.0"; }
+auto TGToQQPlugin::get_version() const -> std::string { return "1.0.0"; }
 
-std::string TGToQQPlugin::get_description() const {
+auto TGToQQPlugin::get_description() const -> std::string {
   return "Telegram to QQ message forwarding plugin (simplified version)";
 }
 
@@ -42,10 +42,9 @@ bool TGToQQPlugin::initialize() {
       return false;
     }
 
-    // Initialize database manager
-    db_manager_ =
-        std::make_shared<obcx::storage::DatabaseManager>(config_.database_file);
-    if (!db_manager_->initialize()) {
+    // Initialize database manager (singleton)
+    db_manager_ = obcx::storage::DatabaseManager::instance(config_.database_file);
+    if (!db_manager_ || !db_manager_->initialize()) {
       PLUGIN_ERROR(get_name(), "Failed to initialize database");
       return false;
     }
@@ -114,20 +113,16 @@ void TGToQQPlugin::shutdown() {
   try {
     PLUGIN_INFO(get_name(), "Shutting down TG to QQ Plugin...");
 
-    // Clear cached bot pointer first
-    qq_bot_ = nullptr;
-
-    // Stop retry manager if running (this cancels any pending async operations)
     if (retry_manager_) {
       retry_manager_->stop();
       retry_manager_.reset();
     }
 
-    // Release telegram handler
     telegram_handler_.reset();
 
-    // Release database manager last (other components may depend on it)
-    db_manager_.reset();
+    // Don't reset db_manager_ - it's a singleton shared with other plugins
+    db_manager_ = nullptr;
+    qq_bot_ = nullptr;
 
     PLUGIN_INFO(get_name(), "TG to QQ Plugin shutdown complete");
   } catch (const std::exception &e) {
@@ -189,7 +184,7 @@ boost::asio::awaitable<void> TGToQQPlugin::handle_tg_message(
   co_return;
 }
 
-bool TGToQQPlugin::load_configuration() {
+auto TGToQQPlugin::load_configuration() -> bool {
   try {
     config_.database_file = get_config_value<std::string>("database_file")
                                 .value_or("bridge_bot.db");

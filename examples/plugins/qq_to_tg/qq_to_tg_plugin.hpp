@@ -32,13 +32,13 @@ public:
   ~QQToTGPlugin() override;
 
   // IPlugin interface
-  std::string get_name() const override;
+  [[nodiscard]] auto get_name() const -> std::string override;
 
-  std::string get_version() const override;
+  [[nodiscard]] auto get_version() const -> std::string override;
 
-  std::string get_description() const override;
+  [[nodiscard]] auto get_description() const -> std::string override;
 
-  bool initialize() override;
+  auto initialize() -> bool override;
 
   void deinitialize() override;
 
@@ -52,16 +52,19 @@ private:
     bool enable_retry_queue = false;
   };
 
-  bool load_configuration();
+  auto load_configuration() -> bool;
 
-  boost::asio::awaitable<void> handle_qq_message(
-      obcx::core::IBot &bot, const obcx::common::MessageEvent &event);
+  auto handle_qq_message(obcx::core::IBot &bot,
+                         const obcx::common::MessageEvent &event)
+      -> boost::asio::awaitable<void>;
 
-  boost::asio::awaitable<void> handle_qq_heartbeat(
-      obcx::core::IBot &bot, const obcx::common::HeartbeatEvent &event);
+  auto handle_qq_heartbeat(obcx::core::IBot &bot,
+                           const obcx::common::HeartbeatEvent &event)
+      -> boost::asio::awaitable<void>;
 
-  boost::asio::awaitable<void> handle_qq_notice(
-      obcx::core::IBot &bot, const obcx::common::NoticeEvent &event);
+  auto handle_qq_notice(obcx::core::IBot &bot,
+                        const obcx::common::NoticeEvent &event)
+      -> boost::asio::awaitable<void>;
 
   // Configuration
   Config config_;

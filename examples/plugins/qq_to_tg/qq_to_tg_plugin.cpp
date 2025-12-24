@@ -21,15 +21,15 @@ QQToTGPlugin::~QQToTGPlugin() {
   PLUGIN_DEBUG(get_name(), "QQToTGPlugin destructor called");
 }
 
-std::string QQToTGPlugin::get_name() const { return "qq_to_tg"; }
+auto QQToTGPlugin::get_name() const -> std::string { return "qq_to_tg"; }
 
-std::string QQToTGPlugin::get_version() const { return "1.0.0"; }
+auto QQToTGPlugin::get_version() const -> std::string { return "1.0.0"; }
 
-std::string QQToTGPlugin::get_description() const {
+auto QQToTGPlugin::get_description() const -> std::string {
   return "QQ to Telegram message forwarding plugin (simplified version)";
 }
 
-bool QQToTGPlugin::initialize() {
+auto QQToTGPlugin::initialize() -> bool {
   try {
     PLUGIN_INFO(get_name(), "Initializing QQ to TG Plugin...");
 
@@ -42,10 +42,9 @@ bool QQToTGPlugin::initialize() {
       return false;
     }
 
-    // Initialize database manager
-    db_manager_ =
-        std::make_shared<obcx::storage::DatabaseManager>(config_.database_file);
-    if (!db_manager_->initialize()) {
+    // Initialize database manager (singleton)
+    db_manager_ = obcx::storage::DatabaseManager::instance(config_.database_file);
+    if (!db_manager_ || !db_manager_->initialize()) {
       PLUGIN_ERROR(get_name(), "Failed to initialize database");
       return false;
     }
@@ -147,8 +146,8 @@ void QQToTGPlugin::shutdown() {
     // Release QQ handler
     qq_handler_.reset();
 
-    // Release database manager last (other components may depend on it)
-    db_manager_.reset();
+    // Don't reset db_manager_ - it's a singleton shared with other plugins
+    db_manager_ = nullptr;
 
     PLUGIN_INFO(get_name(), "QQ to TG Plugin shutdown complete");
   } catch (const std::exception &e) {
@@ -157,8 +156,9 @@ void QQToTGPlugin::shutdown() {
   }
 }
 
-boost::asio::awaitable<void> QQToTGPlugin::handle_qq_message(
-    obcx::core::IBot &bot, const obcx::common::MessageEvent &event) {
+auto QQToTGPlugin::handle_qq_message(obcx::core::IBot &bot,
+                                     const obcx::common::MessageEvent &event)
+    -> boost::asio::awaitable<void> {
   // 确保这是QQ bot的消息
   if (auto *qq_bot = dynamic_cast<obcx::core::QQBot *>(&bot)) {
     PLUGIN_INFO(get_name(),
@@ -195,8 +195,9 @@ boost::asio::awaitable<void> QQToTGPlugin::handle_qq_message(
   co_return;
 }
 
-boost::asio::awaitable<void> QQToTGPlugin::handle_qq_heartbeat(
-    obcx::core::IBot &bot, const obcx::common::HeartbeatEvent &event) {
+auto QQToTGPlugin::handle_qq_heartbeat(
+    obcx::core::IBot &bot, const obcx::common::HeartbeatEvent &event)
+    -> boost::asio::awaitable<void> {
   // 确保这是QQ bot的心跳
   if (auto *qq_bot = dynamic_cast<obcx::core::QQBot *>(&bot)) {
     // 更新QQ平台的心跳时间
@@ -211,8 +212,9 @@ boost::asio::awaitable<void> QQToTGPlugin::handle_qq_heartbeat(
   co_return;
 }
 
-boost::asio::awaitable<void> QQToTGPlugin::handle_qq_notice(
-    obcx::core::IBot &bot, const obcx::common::NoticeEvent &event) {
+auto QQToTGPlugin::handle_qq_notice(obcx::core::IBot &bot,
+                                    const obcx::common::NoticeEvent &event)
+    -> boost::asio::awaitable<void> {
   // 确保这是QQ bot的通知
   if (auto *qq_bot = dynamic_cast<obcx::core::QQBot *>(&bot)) {
     PLUGIN_DEBUG(get_name(), "QQ to TG Plugin: Processing QQ notice, type: {}",
@@ -247,7 +249,7 @@ boost::asio::awaitable<void> QQToTGPlugin::handle_qq_notice(
   co_return;
 }
 
-bool QQToTGPlugin::load_configuration() {
+auto QQToTGPlugin::load_configuration() -> bool {
   try {
     // 从插件配置加载设置
     config_.database_file = get_config_value<std::string>("database_file")

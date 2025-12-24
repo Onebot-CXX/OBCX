@@ -91,7 +91,6 @@ protected:
   }
 
 private:
-  // 静态成员存储bot vector的引用和互斥锁
   static std::vector<std::unique_ptr<core::IBot>> *bots_;
   static std::mutex *bots_mutex_;
 };
