@@ -18,18 +18,19 @@ namespace ssl = asio::ssl;
 using tcp = asio::ip::tcp;
 
 ProxyHttpClient::ProxyHttpClient(asio::io_context &ioc,
-                                 const ProxyConfig &proxy_config,
+                                 ProxyConfig proxy_config,
                                  const common::ConnectionConfig &config)
-    : HttpClient(ioc, config), ioc_(ioc), proxy_config_(proxy_config),
-      resolver_(ioc), target_host_(config.host), target_port_(config.port) {
+    : HttpClient(ioc, config), ioc_(ioc),
+      proxy_config_(std::move(proxy_config)), resolver_(ioc),
+      target_host_(config.host), target_port_(config.port) {
   OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_CLIENT_CREATED,
                   proxy_config_.host, proxy_config_.port, target_host_,
                   target_port_);
 }
 
-HttpResponse ProxyHttpClient::post_sync(
+auto ProxyHttpClient::post_sync(
     std::string_view path, std::string_view body,
-    const std::map<std::string, std::string> &headers) {
+    const std::map<std::string, std::string> &headers) -> HttpResponse {
 
   try {
     // 建立代理隧道
@@ -47,8 +48,9 @@ HttpResponse ProxyHttpClient::post_sync(
   }
 }
 
-HttpResponse ProxyHttpClient::get_sync(
-    std::string_view path, const std::map<std::string, std::string> &headers) {
+auto ProxyHttpClient::get_sync(
+    std::string_view path, const std::map<std::string, std::string> &headers)
+    -> HttpResponse {
 
   try {
     // 建立代理隧道
@@ -72,7 +74,7 @@ void ProxyHttpClient::close() {
   HttpClient::close();
 }
 
-tcp::socket ProxyHttpClient::connect_through_proxy() {
+auto ProxyHttpClient::connect_through_proxy() -> tcp::socket {
   // 解析代理地址
   auto proxy_results =
       resolver_.resolve(proxy_config_.host, std::to_string(proxy_config_.port));
@@ -207,10 +209,10 @@ tcp::socket ProxyHttpClient::establish_http_tunnel(
   return std::move(proxy_socket);
 }
 
-HttpResponse ProxyHttpClient::send_http_request(
+auto ProxyHttpClient::send_http_request(
     tcp::socket &tunnel_socket, const std::string &method,
     const std::string &path, const std::string &body,
-    const std::map<std::string, std::string> &headers) {
+    const std::map<std::string, std::string> &headers) -> HttpResponse {
   try {
     // 构建HTTP请求
     http::verb verb_type =
@@ -338,9 +340,9 @@ HttpResponse ProxyHttpClient::send_http_request(
   }
 }
 
-tcp::socket ProxyHttpClient::establish_https_tunnel(
+auto ProxyHttpClient::establish_https_tunnel(
     ssl::stream<tcp::socket> &ssl_socket, const std::string &target_host,
-    uint16_t target_port) {
+    uint16_t target_port) -> tcp::socket {
   // 构建CONNECT请求
   std::string connect_target = target_host + ":" + std::to_string(target_port);
   http::request<http::string_body> connect_req{http::verb::connect,
@@ -401,9 +403,10 @@ tcp::socket ProxyHttpClient::establish_https_tunnel(
   return std::move(ssl_socket.next_layer());
 }
 
-tcp::socket ProxyHttpClient::establish_socks5_tunnel(
-    tcp::socket &proxy_socket, const std::string &target_host,
-    uint16_t target_port) {
+auto ProxyHttpClient::establish_socks5_tunnel(tcp::socket &proxy_socket,
+                                              const std::string &target_host,
+                                              uint16_t target_port)
+    -> tcp::socket {
   OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_SOCKS5_TUNNEL_START,
                   proxy_config_.host, target_host, target_port);
 

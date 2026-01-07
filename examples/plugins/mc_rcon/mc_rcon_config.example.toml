@@ -1,0 +1,41 @@
+# MC RCON Plugin Configuration Example
+# Copy this file to your config directory and rename to your needs.
+# Add the section to your main config.toml file.
+
+[mc_rcon]
+# QQ groups allowed to use /mc commands
+allowed_groups = ["123456789", "987654321"]
+
+# Admin users who can execute any command (QQ user IDs)
+admin_users = ["111111111", "222222222"]
+
+# Commands that regular (non-admin) users can execute
+# Only the first word of the command is checked
+whitelist_commands = ["list", "tps", "help", "status", "seed", "time", "weather", "difficulty"]
+
+# Default server if not specified in command
+# Example: "/mc list" will use this server
+default_server = "survival"
+
+# Connection timeout in milliseconds
+connection_timeout_ms = 5000
+
+# Server configurations
+[[mc_rcon.servers]]
+name = "survival"
+host = "127.0.0.1"
+port = 25575
+password = "your_rcon_password"
+
+[[mc_rcon.servers]]
+name = "creative"
+host = "127.0.0.1"
+port = 25576
+password = "another_rcon_password"
+
+# Usage Examples:
+# /mc list                  - List players on default server (survival)
+# /mc survival list         - List players on survival server
+# /mc creative list         - List players on creative server
+# /mc say Hello World       - Say "Hello World" on default server (admin only)
+# /mc creative op player    - Op player on creative server (admin only)

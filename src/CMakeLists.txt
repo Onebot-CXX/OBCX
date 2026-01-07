@@ -36,7 +36,6 @@ target_link_libraries(
          Threads::Threads
          OpenSSL::SSL
          OpenSSL::Crypto
-         unofficial::sqlite3::sqlite3
          tomlplusplus::tomlplusplus)
 
 target_compile_features(obcx_core PUBLIC cxx_std_20)

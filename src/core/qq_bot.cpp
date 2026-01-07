@@ -1,8 +1,8 @@
-#include <string>
-
-#include "common/logger.hpp"
 #include "core/qq_bot.hpp"
+#include "common/logger.hpp"
 #include "interfaces/connection_manager.hpp"
+
+#include <string>
 
 namespace obcx::core {
 
@@ -390,6 +390,29 @@ auto QQBot::get_private_file_url(std::string_view user_id,
   auto echo_id = generate_echo_id();
   auto payload = get_onebot_adapter().serialize_get_private_file_url_request(
       user_id, file_id, echo_id);
+  co_return co_await connection_manager_->send_action_and_wait_async(payload,
+                                                                     echo_id);
+}
+
+// --- 扩展 API (go-cqhttp/NapCat) ---
+
+auto QQBot::group_poke(std::string_view group_id, std::string_view user_id)
+    -> asio::awaitable<std::string> {
+  ensure_connection_manager();
+  auto echo_id = generate_echo_id();
+  auto payload = get_onebot_adapter().serialize_group_poke_request(
+      group_id, user_id, echo_id);
+  co_return co_await connection_manager_->send_action_and_wait_async(payload,
+                                                                     echo_id);
+}
+
+auto QQBot::send_group_forward_msg(std::string_view group_id,
+                                   const nlohmann::json &messages)
+    -> asio::awaitable<std::string> {
+  ensure_connection_manager();
+  auto echo_id = generate_echo_id();
+  auto payload = get_onebot_adapter().serialize_send_group_forward_msg_request(
+      group_id, messages, echo_id);
   co_return co_await connection_manager_->send_action_and_wait_async(payload,
                                                                      echo_id);
 }

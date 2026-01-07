@@ -640,6 +640,50 @@ public:
       std::string_view reason = "",
       const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
+  // --- 扩展 API (go-cqhttp/NapCat) ---
+
+  /**
+   * \~chinese
+   * @brief 将"群组戳一戳"动作序列化为 v11 兼容的JSON字符串。
+   * @param group_id 目标群ID。
+   * @param user_id 要戳的用户ID。
+   * @param echo 可选的echo字符串，用于匹配响应。
+   * @return 用于动作请求的JSON字符串负载。
+   *
+   * \~english
+   * @brief Serializes a "group poke" action into a v11-compatible JSON string.
+   * This is an extension API supported by go-cqhttp/NapCat.
+   * @param group_id The target group ID.
+   * @param user_id The user ID to poke.
+   * @param echo Optional echo string to match the response.
+   * @return The JSON string payload for the action request.
+   */
+  auto serialize_group_poke_request(
+      std::string_view group_id, std::string_view user_id,
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
+
+  /**
+   * \~chinese
+   * @brief 将"发送群合并转发消息"动作序列化为 v11 兼容的JSON字符串。
+   * @param group_id 目标群ID。
+   * @param messages 合并转发的消息节点数组，每个节点包含 name, uin, content。
+   * @param echo 可选的echo字符串，用于匹配响应。
+   * @return 用于动作请求的JSON字符串负载。
+   *
+   * \~english
+   * @brief Serializes a "send group forward message" action into a
+   * v11-compatible JSON string. This is an extension API supported by
+   * go-cqhttp/NapCat.
+   * @param group_id The target group ID.
+   * @param messages Array of forward message nodes, each containing name, uin,
+   * content.
+   * @param echo Optional echo string to match the response.
+   * @return The JSON string payload for the action request.
+   */
+  auto serialize_send_group_forward_msg_request(
+      std::string_view group_id, const nlohmann::json &messages,
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
+
   // \~chinese 其他动作的序列化方法可以按需在此处添加...
   // \~english Serialization methods for other actions can be added here as
   // needed...

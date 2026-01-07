@@ -1,6 +1,6 @@
 #include "common/plugin_manager.hpp"
 #include "common/logger.hpp"
-#include <algorithm>
+
 #include <filesystem>
 
 namespace obcx::common {
@@ -160,7 +160,9 @@ void PluginManager::shutdown_plugin(const std::string &plugin_name) const {
 
 void PluginManager::initialize_all_plugins() {
   for (const auto &name : loaded_plugins_ | std::views::keys) {
-    initialize_plugin(name); // FIXME: check the initialization!
+    if (!initialize_plugin(name)) {
+      // FIXME: add error log
+    }
   }
 }
 
@@ -174,12 +176,8 @@ auto PluginManager::find_plugin_file(const std::string &plugin_name) const
     -> std::string {
   // Platform-specific library extensions
   const std::vector possible_names = {
-      plugin_name,
-      "lib" + plugin_name + ".so",
-      plugin_name + ".so",
-      "lib" + plugin_name + ".dylib",
-      plugin_name + ".dylib"
-  };
+      plugin_name, "lib" + plugin_name + ".so", plugin_name + ".so",
+      "lib" + plugin_name + ".dylib", plugin_name + ".dylib"};
 
   for (const auto &directory : plugin_directories_) {
     for (const auto &name : possible_names) {
@@ -195,7 +193,9 @@ auto PluginManager::find_plugin_file(const std::string &plugin_name) const
 
 auto PluginManager::load_plugin_library(const std::string &plugin_path)
     -> std::unique_ptr<SafePluginWrapper> {
-  void *handle = dlopen(plugin_path.c_str(), RTLD_LAZY);
+  // Use RTLD_NOW to immediately resolve all symbols, ensuring new symbols
+  // added during hot reload are properly loaded
+  void *handle = dlopen(plugin_path.c_str(), RTLD_NOW);
   if (!handle) {
     OBCX_I18N_ERROR(common::LogMessageKey::PLUGIN_LIB_LOAD_FAILED, plugin_path,
                     dlerror());

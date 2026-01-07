@@ -1,5 +1,6 @@
 #include "common/json_utils.hpp"
 #include "common/logger.hpp"
+
 #include <algorithm>
 
 namespace obcx::common {

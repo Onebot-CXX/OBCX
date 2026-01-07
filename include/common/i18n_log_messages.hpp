@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/locale.hpp>
+#include <cstdint>
 #include <fmt/format.h>
 #include <map>
 #include <string>
@@ -15,7 +16,7 @@ namespace obcx::common {
  * @brief Log message enumeration for multilingual support
  * \endif
  */
-enum class LogMessageKey {
+enum class LogMessageKey : std::uint16_t {
   // Logger initialization
   LOGGER_INIT_SUCCESS,
   LOGGER_INIT_FAILED,

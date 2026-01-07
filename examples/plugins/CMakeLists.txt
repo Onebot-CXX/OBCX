@@ -4,8 +4,10 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Add plugin subdirectories
-add_subdirectory(qq_to_tg)
-add_subdirectory(tg_to_qq)
+add_subdirectory(bridge_bot)
 add_subdirectory(torrent_downloader)
+add_subdirectory(mc_rcon)
+add_subdirectory(image_extract)
+add_subdirectory(group_member_backup)
 #add_subdirectory(image_search)
 

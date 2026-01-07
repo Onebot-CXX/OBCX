@@ -1,11 +1,9 @@
 #pragma once
 
-#include "common/logger.hpp"
 #include "common/message_type.hpp"
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/ssl.hpp>
-#include <functional>
 #include <future>
 #include <memory>
 
@@ -64,9 +62,9 @@ public:
    * @param headers 额外的请求头
    * @return 响应的future
    */
-  std::future<HttpResponse> post_async(
-      std::string_view path, std::string_view body,
-      const std::map<std::string, std::string> &headers = {});
+  auto post_async(std::string_view path, std::string_view body,
+                  const std::map<std::string, std::string> &headers = {})
+      -> std::future<HttpResponse>;
 
   /**
    * @brief 异步发送GET请求
@@ -74,9 +72,9 @@ public:
    * @param headers 额外的请求头
    * @return 响应的future
    */
-  std::future<HttpResponse> get_async(
-      std::string_view path,
-      const std::map<std::string, std::string> &headers = {});
+  auto get_async(std::string_view path,
+                 const std::map<std::string, std::string> &headers = {})
+      -> std::future<HttpResponse>;
 
   /**
    * @brief 异步发送HEAD请求
@@ -95,9 +93,9 @@ public:
    * @param headers 额外的请求头
    * @return HTTP响应
    */
-  virtual HttpResponse post_sync(
-      std::string_view path, std::string_view body,
-      const std::map<std::string, std::string> &headers = {});
+  virtual auto post_sync(std::string_view path, std::string_view body,
+                         const std::map<std::string, std::string> &headers = {})
+      -> HttpResponse;
 
   /**
    * @brief 同步发送GET请求
@@ -115,9 +113,9 @@ public:
    * @param headers 额外的请求头
    * @return HTTP响应
    */
-  virtual HttpResponse head_sync(
-      std::string_view path,
-      const std::map<std::string, std::string> &headers = {});
+  virtual auto head_sync(std::string_view path,
+                         const std::map<std::string, std::string> &headers = {})
+      -> HttpResponse;
 
   /**
    * @brief 设置请求超时
@@ -129,7 +127,7 @@ public:
    * @brief 检查连接是否可用
    * @return 是否连接正常
    */
-  bool is_connected() const;
+  [[nodiscard]] auto is_connected() const -> bool;
 
   /**
    * @brief 关闭连接
@@ -144,13 +142,13 @@ private:
    * @brief 执行HTTP请求的内部实现
    */
   template <typename RequestType>
-  std::future<HttpResponse> execute_async(RequestType &&request);
+  auto execute_async(RequestType &&request) -> std::future<HttpResponse>;
 
   /**
    * @brief 同步执行HTTP请求的内部实现
    */
   template <typename RequestType>
-  HttpResponse execute_sync(RequestType &&request);
+  auto execute_sync(RequestType &&request) -> HttpResponse;
 
   /**
    * @brief 准备请求头
@@ -171,8 +169,9 @@ public:
    * @param config 连接配置
    * @return HTTP客户端实例
    */
-  static std::unique_ptr<HttpClient> create(
-      asio::io_context &ioc, const common::ConnectionConfig &config);
+  static auto create(asio::io_context &ioc,
+                     const common::ConnectionConfig &config)
+      -> std::unique_ptr<HttpClient>;
 };
 
 } // namespace obcx::network

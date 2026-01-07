@@ -25,7 +25,7 @@
  * Include i18n log messages header
  * \endif
  */
-#include "common/i18n_log_messages.hpp"
+#include "common/i18n_log_messages.hpp" // NOLINT
 
 namespace obcx::common {
 

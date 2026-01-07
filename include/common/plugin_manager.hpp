@@ -1,7 +1,7 @@
 #pragma once
 
-#include "interfaces/bot.hpp"
 #include "interfaces/plugin.hpp"
+
 #include <dlfcn.h>
 #include <memory>
 #include <string>
@@ -26,7 +26,7 @@ public:
   }
 
   SafePluginWrapper(const SafePluginWrapper &) = delete;
-  SafePluginWrapper &operator=(const SafePluginWrapper &) = delete;
+  auto operator=(const SafePluginWrapper &) -> SafePluginWrapper & = delete;
 
   SafePluginWrapper(SafePluginWrapper &&other) noexcept
       : plugin_ptr_(other.plugin_ptr_), handle_(other.handle_),
@@ -49,13 +49,13 @@ public:
     return *this;
   }
 
-  auto get() const -> interface::IPlugin * {
+  [[nodiscard]] auto get() const -> interface::IPlugin * {
     return static_cast<interface::IPlugin *>(plugin_ptr_);
   }
 
-  interface::IPlugin *operator->() const { return get(); }
+  auto operator->() const -> interface::IPlugin * { return get(); }
 
-  interface::IPlugin &operator*() const { return *get(); }
+  auto operator*() const -> interface::IPlugin & { return *get(); }
 
   explicit operator bool() const { return plugin_ptr_ != nullptr; }
 
@@ -82,12 +82,13 @@ struct LoadedPlugin {
   std::string path;
 
   LoadedPlugin() = default;
+  ~LoadedPlugin() = default;
 
   LoadedPlugin(const LoadedPlugin &) = delete;
-  LoadedPlugin &operator=(const LoadedPlugin &) = delete;
+  auto operator=(const LoadedPlugin &) -> LoadedPlugin & = delete;
 
   LoadedPlugin(LoadedPlugin &&other) noexcept = default;
-  LoadedPlugin &operator=(LoadedPlugin &&other) noexcept = default;
+  auto operator=(LoadedPlugin &&other) noexcept -> LoadedPlugin & = default;
 };
 
 class PluginManager {
@@ -97,25 +98,29 @@ public:
   ~PluginManager();
 
   PluginManager(const PluginManager &) = delete;
-  PluginManager &operator=(const PluginManager &) = delete;
+  auto operator=(const PluginManager &) -> PluginManager & = delete;
 
   void add_plugin_directory(const std::string &directory);
 
-  bool load_plugin(const std::string &plugin_name);
+  auto load_plugin(const std::string &plugin_name) -> bool;
 
-  bool load_plugin_from_path(const std::string &plugin_path);
+  auto load_plugin_from_path(const std::string &plugin_path) -> bool;
 
   void unload_plugin(const std::string &plugin_name);
 
   void unload_all_plugins();
 
-  bool is_plugin_loaded(const std::string &plugin_name) const;
+  [[nodiscard]] auto is_plugin_loaded(const std::string &plugin_name) const
+      -> bool;
 
-  auto get_plugin(const std::string &plugin_name) const -> interface::IPlugin *;
+  [[nodiscard]] auto get_plugin(const std::string &plugin_name) const
+      -> interface::IPlugin *;
 
-  auto get_loaded_plugin_names() const -> std::vector<std::string>;
+  [[nodiscard]] auto get_loaded_plugin_names() const
+      -> std::vector<std::string>;
 
-  auto initialize_plugin(const std::string &plugin_name) const -> bool;
+  [[nodiscard]] auto initialize_plugin(const std::string &plugin_name) const
+      -> bool;
 
   void deinitialize_plugin(const std::string &plugin_name) const;
 
@@ -126,7 +131,8 @@ public:
   void shutdown_all_plugins();
 
 private:
-  auto find_plugin_file(const std::string &plugin_name) const -> std::string;
+  [[nodiscard]] auto find_plugin_file(const std::string &plugin_name) const
+      -> std::string;
 
   static auto load_plugin_library(const std::string &plugin_path)
       -> std::unique_ptr<SafePluginWrapper>;

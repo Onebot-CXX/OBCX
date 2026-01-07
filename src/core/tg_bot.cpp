@@ -1,16 +1,11 @@
 #include "core/tg_bot.hpp"
-
 #include "common/logger.hpp"
 #include "interfaces/connection_manager.hpp"
-#include "network/http_client.hpp"
 #include "telegram/adapter/protocol_adapter.hpp"
 #include "telegram/network/connection_manager.hpp"
 
-#include "common/media_converter.hpp"
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
-#include <filesystem>
-#include <fstream>
 #include <nlohmann/json.hpp>
 
 namespace obcx::core {

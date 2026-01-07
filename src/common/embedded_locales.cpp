@@ -1,4 +1,5 @@
 #include "common/embedded_locales.hpp"
+
 #include <array>
 
 namespace obcx::common {

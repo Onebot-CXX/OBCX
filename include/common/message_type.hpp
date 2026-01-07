@@ -1,7 +1,9 @@
 #pragma once
 
 #include "json_utils.hpp"
+
 #include <chrono>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <variant>
@@ -17,7 +19,7 @@ namespace obcx::common {
  * @brief Message status enum.
  * \endif
  */
-enum class MessageStatus { ok, failed, async_ };
+enum class MessageStatus : std::uint8_t { ok, failed, async_ };
 
 /**
  * \if CHINESE
@@ -79,7 +81,7 @@ struct BaseRequest {
  * @brief OneBot event type
  * \endif
  */
-enum class EventType { message, notice, request, meta_event };
+enum class EventType : std::uint8_t { message, notice, request, meta_event };
 
 /**
  * \if CHINESE

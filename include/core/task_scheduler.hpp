@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/logger.hpp"
+
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/post.hpp>

@@ -1,5 +1,4 @@
 #include "telegram/adapter/protocol_adapter.hpp"
-
 #include "common/json_utils.hpp"
 #include "common/logger.hpp"
 

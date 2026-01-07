@@ -1,4 +1,5 @@
 #include "network/http_client.hpp"
+#include "common/logger.hpp"
 
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -7,7 +8,6 @@
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/version.hpp>
 #include <cstdlib>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <thread>

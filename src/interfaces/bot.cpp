@@ -1,9 +1,6 @@
 #include "interfaces/bot.hpp"
-
-#include "common/logger.hpp"
 #include "core/event_dispatcher.hpp"
 #include "core/task_scheduler.hpp"
-#include "onebot11/adapter/protocol_adapter.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <chrono>

@@ -68,3 +68,130 @@
 
 - **重要提醒**：这四种情况涵盖了所有可能的回复场景，修改相关逻辑时必须确保四种情况都能正确处理，实现真正的跨平台回复体验
 
+### 插件系统架构与热重载
+
+#### 核心组件
+
+- **PluginManager** (`src/common/plugin_manager.cpp`): 管理插件的加载、卸载、初始化和关闭
+- **IPlugin** (`include/interfaces/plugin.hpp`): 插件接口基类，定义生命周期方法
+- **EventDispatcher** (`include/core/event_dispatcher.hpp`): 事件分发器，管理事件回调
+- **DatabaseManager** (`examples/plugins/dependency/bridge_bot/database_manager.hpp`): 单例数据库管理器
+
+#### 插件生命周期
+
+1. **加载阶段** (`load_plugin`):
+   - 通过 `dlopen()` 加载 `.so` 文件
+   - 获取 `obcx_create_plugin` 和 `obcx_destroy_plugin` 符号
+   - 创建插件实例
+
+2. **初始化阶段** (`initialize_plugin`):
+   - 调用插件的 `initialize()` 方法
+   - 插件在此阶段注册事件回调 (`bot->on_event<EventType>(...)`)
+   - 初始化数据库、Handler等资源
+
+3. **运行阶段**:
+   - 事件通过 `EventDispatcher` 分发给已注册的回调
+
+4. **关闭阶段** (`shutdown_plugin`):
+   - 调用插件的 `shutdown()` 方法
+   - **必须正确清理资源**（详见下方注意事项）
+
+5. **卸载阶段** (`unload_plugin`):
+   - 调用 `obcx_destroy_plugin` 销毁插件实例
+   - 通过 `dlclose()` 卸载 `.so` 文件
+
+#### CLI Reload 命令
+
+在框架运行时，可以通过stdin输入 `reload` 命令热重载所有插件：
+
+```
+reload    - 热重载所有插件
+exit/quit - 退出框架
+```
+
+#### Reload 执行流程（严格顺序）
+
+```cpp
+// Step 1: 清除所有bot的事件处理器（防止悬空函数指针）
+for (auto &bot : bots) {
+    bot->clear_event_handlers();
+}
+
+// Step 2: 关闭所有插件（调用每个插件的shutdown()）
+plugin_manager.shutdown_all_plugins();
+
+// Step 3: 卸载所有插件（dlclose .so文件）
+plugin_manager.unload_all_plugins();
+
+// Step 4: 重新加载配置文件
+config_loader.reload_config();
+
+// Step 5: 更新bot配置
+bot_configs = config_loader.get_bot_configs();
+
+// Step 6: 重新加载和初始化插件
+for (const auto &config : bot_configs) {
+    for (const auto &plugin_name : config.plugins) {
+        plugin_manager.load_plugin(plugin_name);
+        plugin_manager.initialize_plugin(plugin_name);
+    }
+}
+```
+
+#### 插件 shutdown() 方法必须遵守的规则
+
+**关键**：插件的 `shutdown()` 方法必须正确清理所有资源，否则会导致崩溃：
+
+```cpp
+void MyPlugin::shutdown() {
+    // 1. 清除缓存的bot指针（它们在reload后会失效）
+    cached_bot_ptr_ = nullptr;
+
+    // 2. 停止异步任务管理器（如RetryQueueManager）
+    if (retry_manager_) {
+        retry_manager_->stop();  // 取消所有pending的异步操作
+        retry_manager_.reset();
+    }
+
+    // 3. 释放Handler（它们可能持有数据库引用）
+    handler_.reset();
+
+    // 4. 释放数据库引用（单例模式下只置空，不要reset）
+    db_manager_ = nullptr;  // 单例由DatabaseManager::reset_instance()管理
+}
+```
+
+#### 为什么必须清除事件处理器
+
+当插件被 `dlclose()` 后，其代码从内存中卸载。如果 `EventDispatcher` 仍持有指向已卸载代码的函数指针，调用这些回调会导致**段错误**。
+
+解决方案：在卸载插件前调用 `bot->clear_event_handlers()` 清除所有回调。
+
+#### DatabaseManager 单例模式
+
+`DatabaseManager` 使用单例模式，多个插件共享同一实例：
+
+```cpp
+// 获取单例（首次调用需要提供db_path）
+db_manager_ = DatabaseManager::instance(config_.database_file);
+
+// 重置单例（在所有插件都unload后调用）
+DatabaseManager::reset_instance();
+```
+
+**注意**：插件的 `shutdown()` 中不要 `reset()` db_manager_，只需置空指针。单例的生命周期由框架管理。
+
+#### 避免 Static 局部变量问题
+
+**不要**在插件代码中使用 static 局部变量存储 io_context 等资源：
+
+```cpp
+// 错误示例 - static变量在reload后不会重新初始化
+if (config_.enable_retry_queue) {
+    static boost::asio::io_context retry_io_context;  // 危险！
+    retry_manager_ = std::make_shared<RetryQueueManager>(db_manager_, retry_io_context);
+}
+```
+
+这种模式会导致reload后资源状态不一致。
+

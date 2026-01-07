@@ -1,5 +1,6 @@
 #include "network/websocket_client.hpp"
 #include "common/logger.hpp"
+
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/error.hpp>

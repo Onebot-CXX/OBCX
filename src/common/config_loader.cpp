@@ -24,7 +24,7 @@ auto ConfigLoader::load_config(const std::string &config_path) -> bool {
   }
 }
 
-std::vector<BotConfig> ConfigLoader::get_bot_configs() const {
+auto ConfigLoader::get_bot_configs() const -> std::vector<BotConfig> {
   std::lock_guard lock(mutex_);
   std::vector<BotConfig> bot_configs;
 
@@ -65,8 +65,8 @@ std::vector<BotConfig> ConfigLoader::get_bot_configs() const {
   return bot_configs;
 }
 
-std::optional<PluginConfig> ConfigLoader::get_plugin_config(
-    const std::string &plugin_name) const {
+auto ConfigLoader::get_plugin_config(const std::string &plugin_name) const
+    -> std::optional<PluginConfig> {
   std::lock_guard lock(mutex_);
 
   if (!config_data_) {
@@ -103,7 +103,7 @@ std::optional<PluginConfig> ConfigLoader::get_plugin_config(
   return std::nullopt;
 }
 
-std::vector<PluginConfig> ConfigLoader::get_all_plugin_configs() const {
+auto ConfigLoader::get_all_plugin_configs() const -> std::vector<PluginConfig> {
   std::lock_guard lock(mutex_);
   std::vector<PluginConfig> plugin_configs;
 
@@ -144,8 +144,8 @@ std::vector<PluginConfig> ConfigLoader::get_all_plugin_configs() const {
   return plugin_configs;
 }
 
-std::optional<toml::table> ConfigLoader::get_section(
-    const std::string &section_name) const {
+auto ConfigLoader::get_section(const std::string &section_name) const
+    -> std::optional<toml::table> {
   std::lock_guard lock(mutex_);
 
   if (!config_data_) {

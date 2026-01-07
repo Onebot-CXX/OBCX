@@ -6,9 +6,9 @@ namespace obcx::interface {
 std::vector<std::unique_ptr<core::IBot>> *IPlugin::bots_ = nullptr;
 std::mutex *IPlugin::bots_mutex_ = nullptr;
 
-std::tuple<std::unique_lock<std::mutex>,
-           std::vector<std::unique_ptr<core::IBot>> &>
-IPlugin::get_bots() {
+auto IPlugin::get_bots()
+    -> std::tuple<std::unique_lock<std::mutex>,
+                  std::vector<std::unique_ptr<core::IBot>> &> {
   if (!bots_ || !bots_mutex_) {
     throw std::runtime_error(common::I18nLogMessages::get_message(
         common::LogMessageKey::PLUGIN_BOT_VECTOR_NOT_INIT));
@@ -23,8 +23,9 @@ void IPlugin::set_bots(std::vector<std::unique_ptr<core::IBot>> *bots,
   bots_ = bots;
   bots_mutex_ = mutex;
 }
-std::optional<toml::table> IPlugin::get_config_section(
-    const std::string &section_name) const {
+
+auto IPlugin::get_config_section(const std::string &section_name) const
+    -> std::optional<toml::table> {
   auto config = common::ConfigLoader::instance().get_plugin_config(get_name());
   if (!config)
     return std::nullopt;

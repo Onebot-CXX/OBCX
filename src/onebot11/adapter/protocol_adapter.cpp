@@ -757,4 +757,38 @@ auto ProtocolAdapter::serialize_get_private_file_url_request(
   return j.dump();
 }
 
+// --- 扩展 API (go-cqhttp/NapCat) ---
+
+auto ProtocolAdapter::serialize_group_poke_request(
+    std::string_view group_id, std::string_view user_id,
+    const std::optional<uint64_t> &echo) -> std::string {
+  nlohmann::json j;
+  j["action"] = "group_poke";
+  j["params"]["group_id"] = std::string(group_id);
+  j["params"]["user_id"] = std::string(user_id);
+
+  if (echo) {
+    j["echo"] = echo.value();
+  }
+
+  OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_SERIALIZED_ACTION, j.dump());
+  return j.dump();
+}
+
+auto ProtocolAdapter::serialize_send_group_forward_msg_request(
+    std::string_view group_id, const nlohmann::json &messages,
+    const std::optional<uint64_t> &echo) -> std::string {
+  nlohmann::json j;
+  j["action"] = "send_group_forward_msg";
+  j["params"]["group_id"] = std::string(group_id);
+  j["params"]["messages"] = messages;
+
+  if (echo) {
+    j["echo"] = echo.value();
+  }
+
+  OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_SERIALIZED_ACTION, j.dump());
+  return j.dump();
+}
+
 } // namespace obcx::adapter::onebot11

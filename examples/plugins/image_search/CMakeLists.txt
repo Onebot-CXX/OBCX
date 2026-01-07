@@ -9,18 +9,18 @@ add_library(
   tg_to_qq_plugin.cpp
   tg_to_qq_plugin.hpp
   # dependency/bridge_bot dependencies
-  ../dependency/bridge_bot/config.cpp
-  ../dependency/bridge_bot/qq_handler.cpp
-  ../dependency/bridge_bot/telegram_handler.cpp
-  ../dependency/bridge_bot/media_processor.cpp
-  ../dependency/bridge_bot/path_manager.cpp
-  ../dependency/bridge_bot/database_manager.cpp
-  ../dependency/bridge_bot/retry_queue_manager.cpp
-  ../dependency/bridge_bot/telegram/telegram_media_processor.cpp
-  ../dependency/bridge_bot/telegram/telegram_message_formatter.cpp
-  ../dependency/bridge_bot/telegram/telegram_command_handler.cpp
-  ../dependency/bridge_bot/telegram/telegram_event_handler.cpp
-  ../dependency/bridge_bot/qq/qq_media_processor.cpp)
+  ../dependency/config.cpp
+  ../dependency/qq_handler.cpp
+  ../dependency/telegram_handler.cpp
+  ../dependency/media_processor.cpp
+  ../dependency/path_manager.cpp
+  ../dependency/database_manager.cpp
+  ../dependency/retry_queue_manager.cpp
+  ../dependency/telegram/telegram_media_processor.cpp
+  ../dependency/telegram/telegram_message_formatter.cpp
+  ../dependency/telegram/telegram_command_handler.cpp
+  ../dependency/telegram/telegram_event_handler.cpp
+  ../dependency/qq/qq_media_processor.cpp)
 
 # Set the output name to match plugin loading expectations
 set_target_properties(

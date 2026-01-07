@@ -2,6 +2,7 @@
 
 #include "common/logger.hpp"
 #include "common/message_type.hpp"
+
 #include <any>
 #include <boost/asio.hpp>
 #include <boost/core/demangle.hpp>

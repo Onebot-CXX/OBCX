@@ -3,6 +3,7 @@
 #include "common/message_type.hpp"
 #include "network/http_client.hpp"
 #include <boost/asio.hpp>
+#include <cstdint>
 #include <optional>
 
 namespace obcx::network {
@@ -11,7 +12,7 @@ namespace asio = boost::asio;
 using tcp = asio::ip::tcp;
 
 // 代理协议类型
-enum class ProxyType {
+enum class ProxyType : std::uint8_t {
   HTTP,  // HTTP代理 (CONNECT方法)
   HTTPS, // HTTPS代理 (CONNECT方法，代理连接使用SSL)
   SOCKS5 // SOCKS5代理
@@ -25,7 +26,9 @@ struct ProxyConfig {
   std::optional<std::string> username;
   std::optional<std::string> password;
 
-  bool is_enabled() const { return !host.empty() && port > 0; }
+  [[nodiscard]] auto is_enabled() const -> bool {
+    return !host.empty() && port > 0;
+  }
 };
 
 /**
@@ -35,8 +38,7 @@ struct ProxyConfig {
  */
 class ProxyHttpClient : public HttpClient {
 public:
-  explicit ProxyHttpClient(asio::io_context &ioc,
-                           const ProxyConfig &proxy_config,
+  explicit ProxyHttpClient(asio::io_context &ioc, ProxyConfig proxy_config,
                            const common::ConnectionConfig &config);
   ~ProxyHttpClient() override = default;
 

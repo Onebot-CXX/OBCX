@@ -39,21 +39,20 @@ public:
    * @param access_token OneBot v11 的 access-token。
    * @param on_message 收到消息时的回调函数。
    */
-  asio::awaitable<void> run(std::string host, std::string port,
-                            std::string access_token,
-                            MessageHandler on_message);
+  auto run(std::string host, std::string port, std::string access_token,
+           MessageHandler on_message) -> asio::awaitable<void>;
 
   /**
    * @brief 异步发送一条消息。
    * @param message 要发送的文本消息。
    * @return 返回一个awaitable，当消息真正发送完成时恢复执行
    */
-  asio::awaitable<void> send(std::string message);
+  auto send(std::string message) -> asio::awaitable<void>;
 
   /**
    * @brief 异步关闭WebSocket连接。
    */
-  asio::awaitable<void> close();
+  auto close() -> asio::awaitable<void>;
 
   /**
    * @brief 获取执行器
@@ -81,7 +80,7 @@ private:
   /**
    * @brief 写入器协程 - 负责从队列中取出消息并逐一发送
    */
-  asio::awaitable<void> writer_coro();
+  auto writer_coro() -> asio::awaitable<void>;
 
   /**
    * @brief 停止写入器协程

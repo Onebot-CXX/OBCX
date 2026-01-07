@@ -1,6 +1,7 @@
-#include "../../../../include/telegram/network/connection_manager.hpp"
+#include "telegram/network/connection_manager.hpp"
 #include "common/logger.hpp"
 #include "telegram/adapter/protocol_adapter.hpp"
+
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <nlohmann/json.hpp>
