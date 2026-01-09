@@ -555,13 +555,14 @@ std::optional<UserInfo> DatabaseManager::get_user(const std::string &platform,
     const char *last_updated_str =
         reinterpret_cast<const char *>(sqlite3_column_text(stmt, 8));
     if (last_updated_str) {
-      // SQLite DATETIME 格式: "YYYY-MM-DD HH:MM:SS"
+      // SQLite CURRENT_TIMESTAMP 是 UTC 时间，格式: "YYYY-MM-DD HH:MM:SS"
       std::tm tm = {};
       std::istringstream ss(last_updated_str);
       ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
       if (!ss.fail()) {
+        // 使用 timegm 将 UTC 时间转换为 time_t（而不是 mktime 的本地时间）
         user_info.last_updated =
-            std::chrono::system_clock::from_time_t(std::mktime(&tm));
+            std::chrono::system_clock::from_time_t(timegm(&tm));
       }
     }
 

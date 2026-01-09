@@ -234,7 +234,7 @@ auto main(int argc, char *argv[]) -> int {
   signal(SIGTERM, signal_handler);
 
   common::Logger::initialize(
-      spdlog::level::info,
+      spdlog::level::debug,
       fmt::format("logs/obcx-bridge-{}.log",
                   boost::posix_time::to_iso_extended_string(
                       boost::posix_time::second_clock::local_time())));
