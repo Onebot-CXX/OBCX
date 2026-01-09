@@ -20,7 +20,7 @@ auto QQMessageFormatter::format_sender_info(
     -> boost::asio::awaitable<std::string> {
 
   // 获取用户显示名称（使用同步获取，如果数据库没有会主动获取）
-  std::string sender_display_name = co_await get_user_display_name_with_sync(
+  std::string sender_display_name = co_await fetch_user_display_name(
       qq_bot, event.user_id, event.group_id.value_or(""));
 
   // 根据配置决定是否添加发送者信息
@@ -471,26 +471,26 @@ auto QQMessageFormatter::send_media_group(
   co_return false;
 }
 
-auto QQMessageFormatter::get_user_display_name_with_sync(
-    obcx::core::IBot &qq_bot, const std::string &user_id,
-    const std::string &group_id) -> boost::asio::awaitable<std::string> {
+auto QQMessageFormatter::fetch_user_display_name(obcx::core::IBot &qq_bot,
+                                                 const std::string &user_id,
+                                                 const std::string &group_id)
+    -> boost::asio::awaitable<std::string> {
 
-  std::string display_name =
+  auto display_name =
       db_manager_->get_user_display_name("qq", user_id, group_id);
 
-  // 如果仍然是用户ID（说明没有昵称信息），尝试同步获取一次
-  if (display_name == user_id &&
-      db_manager_->should_fetch_user_info("qq", user_id, group_id)) {
-    co_await sync_user_info(qq_bot, user_id, group_id);
+  // 如果没有找到用户信息，尝试同步获取一次
+  if (!display_name.has_value()) {
+    co_await fetch_user_info(qq_bot, user_id, group_id);
     display_name = db_manager_->get_user_display_name("qq", user_id, group_id);
   }
 
-  co_return display_name;
+  co_return display_name.value_or(user_id);
 }
 
-auto QQMessageFormatter::sync_user_info(obcx::core::IBot &qq_bot,
-                                        const std::string &user_id,
-                                        const std::string &group_id)
+auto QQMessageFormatter::fetch_user_info(obcx::core::IBot &qq_bot,
+                                         const std::string &user_id,
+                                         const std::string &group_id)
     -> boost::asio::awaitable<void> {
   try {
     // 同步获取群成员信息（仅第一次）

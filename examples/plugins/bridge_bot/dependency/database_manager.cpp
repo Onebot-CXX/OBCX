@@ -551,6 +551,20 @@ std::optional<UserInfo> DatabaseManager::get_user(const std::string &platform,
     if (last_name)
       user_info.last_name = last_name;
 
+    // 读取 last_updated (DATETIME 格式，需要解析)
+    const char *last_updated_str =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 8));
+    if (last_updated_str) {
+      // SQLite DATETIME 格式: "YYYY-MM-DD HH:MM:SS"
+      std::tm tm = {};
+      std::istringstream ss(last_updated_str);
+      ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
+      if (!ss.fail()) {
+        user_info.last_updated =
+            std::chrono::system_clock::from_time_t(std::mktime(&tm));
+      }
+    }
+
     sqlite3_finalize(stmt);
     return user_info;
   }
@@ -559,19 +573,33 @@ std::optional<UserInfo> DatabaseManager::get_user(const std::string &platform,
   return std::nullopt;
 }
 
-std::string DatabaseManager::get_user_display_name(
+std::optional<std::string> DatabaseManager::get_user_display_name(
     const std::string &platform, const std::string &user_id,
     const std::string &group_id) {
-  auto user_info = get_user(platform, user_id, group_id);
+  // 用户信息过期时间（30分钟）
+  constexpr auto kUserInfoExpiration = std::chrono::minutes(30);
+
+  // Telegram 用户始终使用空 group_id 查询（存储时就是空的）
+  std::string query_group_id = (platform == "telegram") ? "" : group_id;
+  auto user_info = get_user(platform, user_id, query_group_id);
+
   if (!user_info.has_value()) {
-    return user_id; // 如果没找到用户信息，返回用户ID
+    return std::nullopt;
   }
 
   const auto &user = user_info.value();
 
+  // 检查用户信息是否过期
+  auto now = std::chrono::system_clock::now();
+  if (now - user.last_updated > kUserInfoExpiration) {
+    PLUGIN_DEBUG("bridge", "User info expired for {}:{}, triggering refresh",
+                 platform, user_id);
+    return std::nullopt;
+  }
+
   // Telegram用户优先显示真实姓名而不是username
   if (platform == "telegram") {
-    // 对于Telegram：优先级为 昵称 > 名字+姓氏 > 用户名 > 用户ID
+    // 对于Telegram：优先级为 昵称 > 名字+姓氏 > 用户名
     if (!user.nickname.empty()) {
       return user.nickname;
     }
@@ -606,7 +634,7 @@ std::string DatabaseManager::get_user_display_name(
       return display_name;
     }
   } else {
-    // 其他平台：优先级为 昵称 > 用户名 > 名字+姓氏 > 用户ID
+    // 其他平台：优先级为 昵称 > 用户名 > 名字+姓氏
     if (!user.nickname.empty()) {
       return user.nickname;
     }
@@ -624,32 +652,8 @@ std::string DatabaseManager::get_user_display_name(
     }
   }
 
-  return user_id;
-}
-
-bool DatabaseManager::should_fetch_user_info(const std::string &platform,
-                                             const std::string &user_id,
-                                             const std::string &group_id) {
-  auto user_info = get_user(platform, user_id, group_id);
-
-  // 如果用户不存在，需要获取
-  if (!user_info.has_value()) {
-    return true;
-  }
-
-  const auto &user = user_info.value();
-
-  // 对于QQ用户，如果没有昵称信息，需要获取
-  if (platform == "qq") {
-    return user.nickname.empty();
-  }
-
-  // 对于Telegram用户，如果没有用户名和名字，需要获取
-  if (platform == "telegram") {
-    return user.username.empty() && user.first_name.empty();
-  }
-
-  return false;
+  // 用户记录存在但所有名称字段都为空
+  return std::nullopt;
 }
 
 bool DatabaseManager::add_message_mapping(const MessageMapping &mapping) {

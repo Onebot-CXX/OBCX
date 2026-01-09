@@ -38,4 +38,12 @@ auto IPlugin::get_config_section(const std::string &section_name) const
 
   return std::nullopt;
 }
+
+auto IPlugin::get_config_table() const -> std::optional<toml::table> {
+  auto config = common::ConfigLoader::instance().get_plugin_config(get_name());
+  if (!config)
+    return std::nullopt;
+
+  return config->config;
+}
 } // namespace obcx::interface

@@ -75,6 +75,16 @@ public:
       if (auto val = node.value<bool>()) {
         return *val;
       }
+    } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+      if (node.is_array()) {
+        std::vector<std::string> result;
+        for (const auto &item : *node.as_array()) {
+          if (auto val = item.value<std::string>()) {
+            result.push_back(*val);
+          }
+        }
+        return result;
+      }
     }
 
     return std::nullopt;
@@ -82,6 +92,9 @@ public:
 
   [[nodiscard]] auto get_config_section(const std::string &section_name) const
       -> std::optional<toml::table>;
+
+  /// Get the entire config table for this plugin ([plugins.<name>.config])
+  [[nodiscard]] auto get_config_table() const -> std::optional<toml::table>;
 
 protected:
   template <typename EventType>

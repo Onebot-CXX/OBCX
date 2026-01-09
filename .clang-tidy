@@ -35,3 +35,5 @@ CheckOptions:
     value: "1"
   - key: cppcoreguidelines-avoid-non-const-global-variables.AllowInternalLinkage
     value: true
+  - key: readability-magic-numbers.AllowPointerConditions
+    value: true

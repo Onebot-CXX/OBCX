@@ -432,8 +432,7 @@ auto main(int argc, char *argv[]) -> int {
         continue;
       }
 
-      std::println(std::cout, "Input: {}", line);
-      // Placeholder for future command processing
+      //  Placeholder for future command processing
     }
   });
   cli_thread.detach();

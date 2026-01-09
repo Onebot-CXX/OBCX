@@ -86,12 +86,15 @@ void McRconPlugin::shutdown() {
 
 auto McRconPlugin::load_configuration() -> bool {
   try {
-    // Use the config system
-    std::string config_path =
-        get_config_value<std::string>("config_file").value_or("");
-    if (!load_config(config_path)) {
-      PLUGIN_WARN(get_name(), "Config file not specified or load failed, "
-                              "using default empty config");
+    auto config_table = get_config_table();
+    if (!config_table.has_value()) {
+      PLUGIN_ERROR(get_name(), "No config found at [plugins.mc_rcon.config]");
+      return false;
+    }
+
+    if (!load_config(config_table.value())) {
+      PLUGIN_WARN(get_name(), "Failed to load config");
+      return false;
     }
 
     PLUGIN_INFO(get_name(),

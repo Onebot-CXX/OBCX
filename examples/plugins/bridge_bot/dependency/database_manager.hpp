@@ -226,26 +226,16 @@ public:
                                    const std::string &group_id = "");
 
   /**
-   * @brief 获取用户的显示名称（优先显示昵称，其次用户名，最后用户ID）
+   * @brief 获取用户的显示名称（优先显示昵称，其次用户名）
    * @param platform 平台名称
    * @param user_id 用户ID
-   * @param group_id 群组ID（可选，用于获取群组特定的昵称）
-   * @return 用户显示名称
+   * @param group_id
+   * 群组ID（可选，用于获取群组特定的昵称，Telegram用户忽略此参数）
+   * @return 用户显示名称，如果未找到用户信息返回nullopt
    */
-  std::string get_user_display_name(const std::string &platform,
-                                    const std::string &user_id,
-                                    const std::string &group_id = "");
-
-  /**
-   * @brief 检查用户是否需要更新信息（用于主动获取QQ用户信息）
-   * @param platform 平台名称
-   * @param user_id 用户ID
-   * @param group_id 群组ID（可选，用于检查群组特定的用户信息）
-   * @return 如果用户不存在或信息不完整返回true
-   */
-  bool should_fetch_user_info(const std::string &platform,
-                              const std::string &user_id,
-                              const std::string &group_id = "");
+  std::optional<std::string> get_user_display_name(
+      const std::string &platform, const std::string &user_id,
+      const std::string &group_id = "");
 
   // === 消息ID映射相关操作 ===
 

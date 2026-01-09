@@ -65,25 +65,25 @@ private:
   static auto escape_markdown_v2(const std::string &text) -> std::string;
 
   /**
-   * @brief 获取用户显示名称（带同步获取功能）
+   * @brief 获取用户显示名称，如果数据库没有则异步获取
    * @param qq_bot QQ机器人实例
    * @param user_id 用户ID
    * @param group_id 群ID
    * @return 用户显示名称
    */
-  auto get_user_display_name_with_sync(obcx::core::IBot &qq_bot,
-                                       const std::string &user_id,
-                                       const std::string &group_id)
+  auto fetch_user_display_name(obcx::core::IBot &qq_bot,
+                               const std::string &user_id,
+                               const std::string &group_id)
       -> boost::asio::awaitable<std::string>;
 
   /**
-   * @brief 同步获取用户信息并保存到数据库
+   * @brief 异步获取用户信息并保存到数据库
    * @param qq_bot QQ机器人实例
    * @param user_id 用户ID
    * @param group_id 群ID
    */
-  auto sync_user_info(obcx::core::IBot &qq_bot, const std::string &user_id,
-                      const std::string &group_id)
+  auto fetch_user_info(obcx::core::IBot &qq_bot, const std::string &user_id,
+                       const std::string &group_id)
       -> boost::asio::awaitable<void>;
 };
 

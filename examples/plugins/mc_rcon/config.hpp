@@ -38,11 +38,11 @@ struct PluginConfig {
 extern PluginConfig PLUGIN_CONFIG;
 
 /**
- * @brief Load plugin configuration from TOML file
- * @param config_path Path to the TOML configuration file
+ * @brief Load plugin configuration from TOML table
+ * @param config The TOML table from [plugins.mc_rcon.config]
  * @return true if configuration loaded successfully
  */
-bool load_config(const std::string &config_path);
+bool load_config(const toml::table &config);
 
 /**
  * @brief Check if a group is allowed to use the plugin

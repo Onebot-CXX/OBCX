@@ -117,16 +117,15 @@ auto QQEventHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
     std::string edited_content;
     if (show_sender && original_message.has_value()) {
       // 获取发送者显示名称（使用同步获取）
-      std::string sender_display_name =
-          co_await get_user_display_name_with_sync(
-              qq_bot, original_message->user_id, qq_group_id);
+      std::string sender_display_name = co_await fetch_user_display_name(
+          qq_bot, original_message->user_id, qq_group_id);
       // 格式: [用户名]\t~消息内容~
       edited_content = fmt::format(
-          "{}~Message had been recalled~",
+          "{}~Message has been recalled~",
           escape_markdown_v2(fmt::format("[{}]\t", sender_display_name)));
     } else {
       // 不显示发送者，只显示消息内容
-      edited_content = "~Message had been recalled~";
+      edited_content = "~Message has been recalled~";
     }
 
     try {
@@ -280,9 +279,9 @@ auto QQEventHandler::handle_poke_event(obcx::core::IBot &telegram_bot,
 
     // 获取两个用户的显示名称（使用同步获取）
     std::string user_display_name =
-        co_await get_user_display_name_with_sync(qq_bot, user_id, qq_group_id);
-    std::string target_display_name = co_await get_user_display_name_with_sync(
-        qq_bot, target_id, qq_group_id);
+        co_await fetch_user_display_name(qq_bot, user_id, qq_group_id);
+    std::string target_display_name =
+        co_await fetch_user_display_name(qq_bot, target_id, qq_group_id);
 
     // 如果显示名称为空，使用QQ号作为后备
     if (user_display_name.empty()) {
@@ -417,26 +416,26 @@ auto QQEventHandler::escape_markdown_v2(const std::string &text)
   return result;
 }
 
-auto QQEventHandler::get_user_display_name_with_sync(
-    obcx::core::IBot &qq_bot, const std::string &user_id,
-    const std::string &group_id) -> boost::asio::awaitable<std::string> {
+auto QQEventHandler::fetch_user_display_name(obcx::core::IBot &qq_bot,
+                                             const std::string &user_id,
+                                             const std::string &group_id)
+    -> boost::asio::awaitable<std::string> {
 
-  std::string display_name =
+  auto display_name =
       db_manager_->get_user_display_name("qq", user_id, group_id);
 
-  // 如果仍然是用户ID（说明没有昵称信息），尝试同步获取一次
-  if (display_name == user_id &&
-      db_manager_->should_fetch_user_info("qq", user_id, group_id)) {
-    co_await sync_user_info(qq_bot, user_id, group_id);
+  // 如果没有找到用户信息，尝试同步获取一次
+  if (!display_name.has_value()) {
+    co_await fetch_user_info(qq_bot, user_id, group_id);
     display_name = db_manager_->get_user_display_name("qq", user_id, group_id);
   }
 
-  co_return display_name;
+  co_return display_name.value_or(user_id);
 }
 
-auto QQEventHandler::sync_user_info(obcx::core::IBot &qq_bot,
-                                    const std::string &user_id,
-                                    const std::string &group_id)
+auto QQEventHandler::fetch_user_info(obcx::core::IBot &qq_bot,
+                                     const std::string &user_id,
+                                     const std::string &group_id)
     -> boost::asio::awaitable<void> {
   try {
     // 同步获取群成员信息

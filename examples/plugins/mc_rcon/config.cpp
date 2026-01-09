@@ -5,18 +5,9 @@ namespace mc_rcon {
 // Global plugin configuration
 PluginConfig PLUGIN_CONFIG;
 
-bool load_config(const std::string &config_path) {
+bool load_config(const toml::table &config) {
   try {
     PLUGIN_CONFIG = PluginConfig{}; // Reset to defaults
-
-    // Get mc_rcon section from config
-    auto config_section =
-        obcx::common::ConfigLoader::instance().get_section("mc_rcon");
-    if (!config_section.has_value()) {
-      PLUGIN_WARN("mc_rcon", "No mc_rcon section found in config");
-      return false;
-    }
-    const auto &config = config_section.value();
 
     // Load allowed_groups
     if (config.contains("allowed_groups")) {
