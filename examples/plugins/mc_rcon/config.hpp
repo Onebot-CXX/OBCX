@@ -1,9 +1,8 @@
 #pragma once
 
-#include "common/config_loader.hpp"
-#include "common/logger.hpp"
 #include <cstdint>
 #include <string>
+#include <toml++/toml.hpp>
 #include <unordered_set>
 #include <vector>
 

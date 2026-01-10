@@ -1,6 +1,7 @@
 #include "rclone_client.hpp"
-#include "common/logger.hpp"
+
 #include <cerrno>
+#include <common/logger.hpp>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>

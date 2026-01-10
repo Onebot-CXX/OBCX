@@ -1,9 +1,9 @@
 #include "image_extract_plugin.hpp"
-#include "common/logger.hpp"
-#include "core/qq_bot.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <common/logger.hpp>
+#include <core/qq_bot.hpp>
 
 namespace image_extract {
 
@@ -339,7 +339,7 @@ void ImageExtractPlugin::extract_images_and_replies(
           if (data.contains("url") && !data["url"].get<std::string>().empty()) {
             urls.push_back(data["url"].get<std::string>());
           } else if (data.contains("file") &&
-                     data["file"].get<std::string>().find("http") == 0) {
+                     data["file"].get<std::string>().starts_with("http")) {
             urls.push_back(data["file"].get<std::string>());
           }
         }

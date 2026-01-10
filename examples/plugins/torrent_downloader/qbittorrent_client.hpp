@@ -1,10 +1,9 @@
 #pragma once
 
-#include "common/message_type.hpp"
-#include "network/http_client.hpp"
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/io_context.hpp>
 #include <memory>
+#include <network/http_client.hpp>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <thread>

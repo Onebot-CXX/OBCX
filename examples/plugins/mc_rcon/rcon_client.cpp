@@ -1,8 +1,6 @@
 #include "rcon_client.hpp"
 #include "mcrcon.h"
 
-#include <cstring>
-
 namespace mc_rcon {
 
 RconClient::~RconClient() { disconnect(); }
@@ -29,7 +27,7 @@ bool RconClient::connect(const std::string &host, uint16_t port) {
   return socket_ >= 0;
 }
 
-bool RconClient::authenticate(const std::string &password) {
+auto RconClient::authenticate(const std::string &password) -> bool {
   if (socket_ < 0) {
     return false;
   }

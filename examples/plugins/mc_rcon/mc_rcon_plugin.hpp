@@ -1,7 +1,6 @@
 #pragma once
 
-#include "interfaces/plugin.hpp"
-#include <memory>
+#include <interfaces/plugin.hpp>
 #include <string>
 
 namespace mc_rcon {

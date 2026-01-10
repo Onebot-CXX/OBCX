@@ -1,17 +1,14 @@
 #include "torrent_downloader_plugin.hpp"
-#include "common/config_loader.hpp"
-#include "common/logger.hpp"
-#include "common/message_type.hpp"
-#include "core/tg_bot.hpp"
 #include "qbittorrent_client.hpp"
-#include "telegram/network/connection_manager.hpp"
+
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/steady_timer.hpp>
-#include <cerrno>
 #include <chrono>
-#include <cstdlib>
-#include <cstring>
+#include <common/config_loader.hpp>
+#include <common/logger.hpp>
+#include <common/message_type.hpp>
+#include <core/tg_bot.hpp>
 #include <filesystem>
 #include <fmt/format.h>
 #include <fstream>
@@ -19,6 +16,7 @@
 #include <regex>
 #include <sstream>
 #include <sys/wait.h>
+#include <telegram/network/connection_manager.hpp>
 #include <unistd.h>
 
 namespace fs = std::filesystem;
@@ -1063,7 +1061,7 @@ bool TorrentDownloaderPlugin::is_path_safe_to_delete(
       download_path_str += '/';
     }
 
-    bool is_safe = path_str.find(download_path_str) == 0;
+    bool is_safe = path_str.starts_with(download_path_str);
 
     if (!is_safe) {
       PLUGIN_WARN(get_name(),

@@ -1,11 +1,13 @@
 #include "config.hpp"
 
+#include <common/logger.hpp>
+
 namespace mc_rcon {
 
 // Global plugin configuration
 PluginConfig PLUGIN_CONFIG;
 
-bool load_config(const toml::table &config) {
+auto load_config(const toml::table &config) -> bool {
   try {
     PLUGIN_CONFIG = PluginConfig{}; // Reset to defaults
 
@@ -66,8 +68,10 @@ bool load_config(const toml::table &config) {
       const auto &servers = config["servers"];
       if (servers.is_array()) {
         for (const auto &item : *servers.as_array()) {
-          if (!item.is_table())
+          if (!item.is_table()) {
             continue;
+          }
+
           const auto &server_table = *item.as_table();
 
           ServerConfig server;

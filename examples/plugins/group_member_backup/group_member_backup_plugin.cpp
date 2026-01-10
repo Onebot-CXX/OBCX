@@ -1,9 +1,9 @@
 #include "group_member_backup_plugin.hpp"
-#include "common/logger.hpp"
-#include "core/qq_bot.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <common/logger.hpp>
+#include <core/qq_bot.hpp>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <random>
@@ -116,13 +116,13 @@ auto GroupMemberBackupPlugin::handle_qq_message(
   const auto &raw_msg = event.raw_message;
 
   // 处理备份命令
-  if (raw_msg == "/backup" || raw_msg.find("/backup ") == 0) {
+  if (raw_msg == "/backup" || raw_msg.starts_with("/backup ")) {
     co_await handle_backup_command(bot, event);
     co_return;
   }
 
   // 处理恢复命令
-  if (raw_msg == "/restore" || raw_msg.find("/restore ") == 0) {
+  if (raw_msg == "/restore" || raw_msg.starts_with("/restore ")) {
     auto [min_interval, max_interval] = parse_restore_params(raw_msg);
     co_await handle_restore_command(bot, event, min_interval, max_interval);
     co_return;
@@ -538,7 +538,7 @@ auto GroupMemberBackupPlugin::download_and_parse_backup(
     // TODO: 实现真实的文件下载
     // 暂时假设file_url是本地文件路径
     std::string local_path = file_url;
-    if (local_path.find("file://") == 0) {
+    if (local_path.starts_with("file://")) {
       local_path = local_path.substr(7);
     }
 

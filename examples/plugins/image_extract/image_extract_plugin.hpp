@@ -1,9 +1,8 @@
 #pragma once
 
-#include "common/message_type.hpp"
-#include "interfaces/plugin.hpp"
-
 #include <boost/asio/awaitable.hpp>
+#include <common/message_type.hpp>
+#include <interfaces/plugin.hpp>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <string>
@@ -26,9 +25,9 @@ public:
   ImageExtractPlugin();
   ~ImageExtractPlugin() override;
 
-  auto get_name() const -> std::string override;
-  auto get_version() const -> std::string override;
-  auto get_description() const -> std::string override;
+  [[nodiscard]] auto get_name() const -> std::string override;
+  [[nodiscard]] auto get_version() const -> std::string override;
+  [[nodiscard]] auto get_description() const -> std::string override;
 
   auto initialize() -> bool override;
   void deinitialize() override;

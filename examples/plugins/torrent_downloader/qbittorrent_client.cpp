@@ -1,7 +1,8 @@
 #include "qbittorrent_client.hpp"
-#include "common/logger.hpp"
+
 #include <algorithm>
 #include <boost/beast/http.hpp>
+#include <common/logger.hpp>
 #include <fmt/format.h>
 #include <iomanip>
 #include <set>
