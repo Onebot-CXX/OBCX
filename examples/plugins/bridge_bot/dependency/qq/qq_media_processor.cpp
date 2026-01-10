@@ -42,6 +42,8 @@ auto QQMediaProcessor::process_qq_media_segment(
       co_return co_await process_file_segment(qq_bot, segment, event);
     } else if (segment.type == "face") {
       co_return co_await process_face_segment(segment);
+    } else if (segment.type == "mface") {
+      co_return co_await process_mface_segment(segment);
     } else if (segment.type == "at") {
       co_return co_await process_at_segment(qq_bot, segment, event);
     } else if (segment.type == "shake") {
@@ -364,6 +366,46 @@ auto QQMediaProcessor::process_face_segment(
   converted.data.clear();
   converted.data["text"] = fmt::format("[QQ表情:{}]", face_id);
   PLUGIN_DEBUG("qq_to_tg", "转换QQ表情为文本提示: face_id={}", face_id);
+  co_return converted;
+}
+
+auto QQMediaProcessor::process_mface_segment(
+    const obcx::common::MessageSegment &segment)
+    -> boost::asio::awaitable<obcx::common::MessageSegment> {
+
+  obcx::common::MessageSegment converted;
+
+  // mface通常包含GIF表情包，提取URL和summary
+  std::string url = segment.data.value("url", "");
+  std::string summary = segment.data.value("summary", "");
+  std::string emoji_id = segment.data.value("emoji_id", "");
+
+  if (!url.empty()) {
+    // 大部分QQ超级表情都是GIF格式，转换为Telegram的animation类型
+    converted.type = "animation";
+    converted.data["file"] = url;
+
+    // 如果有summary，作为caption
+    if (!summary.empty()) {
+      converted.data["caption"] = summary;
+    }
+
+    PLUGIN_DEBUG("qq_to_tg",
+                 "转换QQ超级表情为动画: url={}, summary={}, emoji_id={}", url,
+                 summary, emoji_id);
+  } else {
+    // 如果没有URL，降级为文本提示
+    converted.type = "text";
+    converted.data.clear();
+    if (!summary.empty()) {
+      converted.data["text"] = fmt::format("[表情包:{}]", summary);
+    } else {
+      converted.data["text"] = "[QQ超级表情]";
+    }
+    PLUGIN_WARN("qq_to_tg", "QQ超级表情缺少URL，转换为文本: summary={}",
+                summary);
+  }
+
   co_return converted;
 }
 

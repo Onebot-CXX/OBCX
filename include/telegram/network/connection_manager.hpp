@@ -5,6 +5,7 @@
 #include "network/http_client.hpp"
 #include "network/proxy_http_client.hpp"
 #include "telegram/adapter/protocol_adapter.hpp"
+
 #include <atomic>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/steady_timer.hpp>

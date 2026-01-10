@@ -3,6 +3,8 @@
 #include "common/message_type.hpp"
 #include "interfaces/connection_manager.hpp"
 #include "network/http_client.hpp"
+#include "onebot11/adapter/protocol_adapter.hpp"
+
 #include <atomic>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/io_context.hpp>

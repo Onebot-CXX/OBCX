@@ -1,8 +1,8 @@
 #pragma once
 
 #include "interfaces/bot.hpp"
-
 #include "telegram/adapter/protocol_adapter.hpp"
+
 #include <boost/asio/awaitable.hpp>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -30,6 +30,11 @@ class TGBot : public IBot {
 public:
   TGBot(adapter::telegram::ProtocolAdapter adapter);
   ~TGBot() override;
+
+  TGBot(const TGBot &) = delete;
+  auto operator=(const TGBot &) -> TGBot & = delete;
+  TGBot(TGBot &&) = delete;
+  auto operator=(TGBot &&) -> TGBot & = delete;
 
   /**
    * @brief 通过指定的连接类型连接到 Telegram Bot API

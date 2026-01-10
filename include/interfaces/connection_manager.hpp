@@ -1,6 +1,8 @@
 #pragma once
+
 #include "common/message_type.hpp"
-#include "onebot11/adapter/protocol_adapter.hpp"
+#include "interfaces/protocol_adapter.hpp"
+
 #include <boost/asio/awaitable.hpp>
 #include <functional>
 #include <string>
@@ -38,7 +40,7 @@ public:
    * @brief 检查连接状态
    * @return 是否已连接
    */
-  virtual bool is_connected() const = 0;
+  [[nodiscard]] virtual auto is_connected() const -> bool = 0;
 
   /**
    * @brief 发送API请求并等待响应
@@ -46,8 +48,9 @@ public:
    * @param echo_id 用于匹配响应的echo ID
    * @return 包含响应的JSON字符串的awaitable
    */
-  virtual asio::awaitable<std::string> send_action_and_wait_async(
-      std::string action_payload, uint64_t echo_id) = 0;
+  virtual auto send_action_and_wait_async(std::string action_payload,
+                                          uint64_t echo_id)
+      -> asio::awaitable<std::string> = 0;
 
   /**
    * @brief 设置事件回调函数
@@ -59,7 +62,7 @@ public:
    * @brief 获取连接类型的描述
    * @return 连接类型字符串（如"WebSocket", "HTTP"等）
    */
-  virtual std::string get_connection_type() const = 0;
+  [[nodiscard]] virtual auto get_connection_type() const -> std::string = 0;
 };
 
 /**
@@ -72,7 +75,7 @@ public:
   /**
    * @brief 连接类型枚举
    */
-  enum class ConnectionType {
+  enum class ConnectionType : std::uint8_t {
     Onebot11WebSocket, ///< WebSocket正向连接
     Onebot11HTTP,      ///< HTTP轮询连接
     TelegramHTTP,      ///< Telegram Bot API HTTP轮询连接

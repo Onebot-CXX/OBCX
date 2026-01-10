@@ -2,6 +2,7 @@
 
 #include "common/config_loader.hpp"
 #include "interfaces/bot.hpp"
+
 #include <boost/asio/awaitable.hpp>
 #include <functional>
 #include <memory>

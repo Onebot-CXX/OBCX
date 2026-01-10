@@ -3,6 +3,8 @@
 #include "common/message_type.hpp"
 #include "interfaces/connection_manager.hpp"
 #include "network/websocket_client.hpp"
+#include "onebot11/adapter/protocol_adapter.hpp"
+
 #include <boost/asio.hpp>
 #include <functional>
 #include <memory>

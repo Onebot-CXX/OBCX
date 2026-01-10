@@ -452,7 +452,12 @@ auto ProtocolAdapter::parse_callback_query_event(
 // Serialization methods
 auto ProtocolAdapter::serialize_send_message_request(
     std::string_view target_id, const common::Message &message,
-    const std::optional<uint64_t> &echo) -> std::string {
+    const std::optional<uint64_t> &echo,
+    const std::optional<uint8_t> &message_type) -> std::string {
+  // For Telegram, message_type is not strictly necessary as sendMessage
+  // works for all chat types (private, group, supergroup, channel).
+  // The parameter is provided for interface consistency.
+  (void)message_type; // Suppress unused parameter warning
   return serialize_send_topic_message_request(target_id, message, echo,
                                               std::nullopt);
 }

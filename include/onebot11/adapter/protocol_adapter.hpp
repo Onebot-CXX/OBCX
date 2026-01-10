@@ -10,6 +10,18 @@ namespace obcx::adapter::onebot11 {
 
 /**
  * \~chinese
+ * @brief OneBot v11 消息类型枚举
+ *
+ * \~english
+ * @brief OneBot v11 Message Type Enumeration
+ */
+enum class MessageType : uint8_t {
+  Private = 0, // 私聊消息
+  Group = 1,   // 群组消息
+};
+
+/**
+ * \~chinese
  * @brief OneBot v11 协议适配器
  *
  * 协调 OneBot v11 协议和内部模型之间转换的顶层类。
@@ -46,24 +58,28 @@ public:
 
   /**
    * \~chinese
-   * @brief 将“发送私聊消息”或“发送群消息”动作序列化为 v11 兼容的JSON字符串。
+   * @brief 将"发送私聊消息"或"发送群消息"动作序列化为 v11 兼容的JSON字符串。
    * @param target_id 目标用户ID或群ID。
    * @param message 要发送的消息对象。
    * @param echo 可选的echo字符串，用于匹配响应。
+   * @param message_type 可选的消息类型（可使用 MessageType enum 强转）。
    * @return 用于动作请求的JSON字符串负载。
    *
    * \~english
    * @brief Serializes a "send message" action into a v11-compatible
    * JSON string. It determines whether to send a private or group message
-   * based on the target_id.
+   * based on the message_type or target_id.
    * @param target_id The target user ID or group ID.
    * @param message The message object to send.
    * @param echo Optional echo string to match the response.
+   * @param message_type Optional message type (can use MessageType enum cast to
+   * uint8_t).
    * @return The JSON string payload for the action request.
    */
   auto serialize_send_message_request(
       std::string_view target_id, const common::Message &message,
-      const std::optional<uint64_t> &echo = std::nullopt)
+      const std::optional<uint64_t> &echo = std::nullopt,
+      const std::optional<uint8_t> &message_type = std::nullopt)
       -> std::string override;
 
   /**

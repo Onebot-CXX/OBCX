@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/message_type.hpp"
+
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/ssl.hpp>

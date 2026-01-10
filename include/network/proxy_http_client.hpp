@@ -2,6 +2,7 @@
 
 #include "common/message_type.hpp"
 #include "network/http_client.hpp"
+
 #include <boost/asio.hpp>
 #include <cstdint>
 #include <optional>

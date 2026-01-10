@@ -113,6 +113,12 @@ public:
       -> boost::asio::awaitable<obcx::common::MessageSegment>;
 
   /**
+   * @brief 处理QQ超级表情/表情包段 (mface)
+   */
+  static auto process_mface_segment(const obcx::common::MessageSegment &segment)
+      -> boost::asio::awaitable<obcx::common::MessageSegment>;
+
+  /**
    * @brief 处理戳一戳段
    */
   static auto process_shake_segment(const obcx::common::MessageSegment &segment)

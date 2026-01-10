@@ -2,7 +2,6 @@
 
 namespace obcx::interface {
 
-// 静态成员定义
 std::vector<std::unique_ptr<core::IBot>> *IPlugin::bots_ = nullptr;
 std::mutex *IPlugin::bots_mutex_ = nullptr;
 

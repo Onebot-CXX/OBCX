@@ -3,8 +3,8 @@
 #include "core/event_dispatcher.hpp"
 #include "core/task_scheduler.hpp"
 #include "interfaces/connection_manager.hpp"
-
 #include "interfaces/protocol_adapter.hpp"
+
 #include <boost/asio/awaitable.hpp>
 #include <functional>
 #include <memory>

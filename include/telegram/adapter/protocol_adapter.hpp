@@ -2,12 +2,22 @@
 
 #include "common/message_type.hpp"
 #include "interfaces/protocol_adapter.hpp"
+
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
 
 namespace obcx::adapter::telegram {
+
+/**
+ * @brief Telegram 消息类型枚举
+ */
+enum class MessageType : uint8_t {
+  Private = 0, // 私聊消息
+  Group = 1,   // 群组消息
+  Channel = 2, // 频道消息
+};
 
 /**
  * @brief Telegram协议适配器
@@ -76,11 +86,13 @@ public:
    * @param target_id 目标聊天ID。
    * @param message 要发送的消息对象。
    * @param echo 可选的echo字符串，用于匹配响应。
+   * @param message_type 可选的消息类型（可使用 MessageType enum 强转）。
    * @return 用于动作请求的JSON字符串负载。
    */
   auto serialize_send_message_request(
       std::string_view target_id, const common::Message &message,
-      const std::optional<uint64_t> &echo = std::nullopt)
+      const std::optional<uint64_t> &echo = std::nullopt,
+      const std::optional<uint8_t> &message_type = std::nullopt)
       -> std::string override;
 
   /**

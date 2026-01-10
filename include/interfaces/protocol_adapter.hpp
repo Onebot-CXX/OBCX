@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/message_type.hpp"
+
 #include <optional>
 #include <string>
 #include <string_view>
@@ -48,18 +49,23 @@ public:
    * @param target_id 目标ID（用户ID或群组ID）。
    * @param message 要发送的消息对象。
    * @param echo 可选的echo字符串，用于匹配响应。
+   * @param message_type 可选的消息类型标识（派生类可使用 enum 强转为
+   * uint8_t）。
    * @return 用于动作请求的JSON字符串负载。
    *
    * 对于QQ:
-   * - 如果 target_id 是用户ID，则调用 send_private_msg。
-   * - 如果 target_id 是群组ID，则调用 send_group_msg。
+   * - 如果 message_type 指定，则根据其值调用 send_private_msg 或
+   * send_group_msg。
+   * - 如果未指定，则根据平台特定的启发式方法判断。
    *
    * 对于Telegram:
    * - 调用 sendMessage 方法。
    */
   virtual auto serialize_send_message_request(
       std::string_view target_id, const common::Message &message,
-      const std::optional<uint64_t> &echo = std::nullopt) -> std::string = 0;
+      const std::optional<uint64_t> &echo = std::nullopt,
+      const std::optional<uint8_t> &message_type = std::nullopt)
+      -> std::string = 0;
 
   /**
    * @brief 撤回消息。

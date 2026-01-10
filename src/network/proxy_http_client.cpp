@@ -1,5 +1,6 @@
 #include "network/proxy_http_client.hpp"
 #include "common/logger.hpp"
+
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/core.hpp>

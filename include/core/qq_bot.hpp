@@ -1,6 +1,7 @@
 #pragma once
 
 #include "interfaces/bot.hpp"
+#include "onebot11/adapter/protocol_adapter.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <memory>
@@ -15,6 +16,11 @@ class QQBot : public IBot {
 public:
   QQBot(adapter::onebot11::ProtocolAdapter adapter);
   ~QQBot() override;
+
+  QQBot(const QQBot &) = delete;
+  auto operator=(const QQBot &) -> QQBot & = delete;
+  QQBot(QQBot &&) = delete;
+  auto operator=(QQBot &&) -> QQBot & = delete;
 
   /**
    * @brief 通过指定的连接类型连接到 OneBot v11 实现
