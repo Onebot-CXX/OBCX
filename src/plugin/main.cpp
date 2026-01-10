@@ -1,3 +1,4 @@
+#include "common/cli_handler.hpp"
 #include "common/config_loader.hpp"
 #include "common/i18n_log_messages.hpp"
 #include "common/logger.hpp"
@@ -192,8 +193,8 @@ public:
     return config;
   }
 
-  auto setup_bot(core::IBot &bot, const common::BotConfig &config,
-                 common::PluginManager &plugin_manager) -> bool {
+  static auto setup_bot(core::IBot &bot, const common::BotConfig &config,
+                        common::PluginManager &plugin_manager) -> bool {
     try {
       // Load and initialize plugins for this bot
       for (const auto &plugin_name : config.plugins) {
@@ -233,8 +234,10 @@ auto main(int argc, char *argv[]) -> int {
   signal(SIGINT, signal_handler);
   signal(SIGTERM, signal_handler);
 
+  // Get log level from OBCX_LOG_LEVEL environment variable, default to info
+  auto log_level = common::Logger::get_level_from_env();
   common::Logger::initialize(
-      spdlog::level::debug,
+      log_level,
       fmt::format("logs/obcx-bridge-{}.log",
                   boost::posix_time::to_iso_extended_string(
                       boost::posix_time::second_clock::local_time())));
@@ -372,69 +375,21 @@ auto main(int argc, char *argv[]) -> int {
 
   OBCX_I18N_INFO(common::LogMessageKey::ALL_COMPONENTS_STARTED);
 
-  // Start CLI input thread
-  std::thread cli_thread([&plugin_manager, &config_loader, &bot_configs, &bots,
-                          &bots_mutex]() {
-    std::string line;
-    while (!g_should_stop.load(std::memory_order_acquire) &&
-           std::getline(std::cin, line)) {
-      if (line == "\x03" || line == "exit" || line == "quit") {
-        bool expected = false;
-        if (g_should_stop.compare_exchange_strong(expected, true)) {
-          OBCX_I18N_INFO(common::LogMessageKey::SHUTDOWN_SIGNAL_RECEIVED, 0);
-          g_stop_cv.notify_one();
-        }
-        break;
-      }
-
-      if (line == "reload") {
-        OBCX_I18N_INFO(common::LogMessageKey::PLUGIN_RELOAD_START);
-
-        // Step 1: Clear all event handlers from bots to prevent dangling
-        // function pointers after plugin unload
-        {
-          std::lock_guard lock(bots_mutex);
-          for (auto &bot : bots) {
-            bot->clear_event_handlers();
-          }
-        }
-
-        // Step 2: Shutdown and unload all plugins
-        plugin_manager.shutdown_all_plugins();
-        plugin_manager.unload_all_plugins();
-
-        // Step 3: Reload configuration
-        config_loader.reload_config();
-
-        // Step 4: Update bot_configs from reloaded config
-        bot_configs = config_loader.get_bot_configs();
-
-        // Step 5: Load and initialize plugins based on new bot configs
-        for (const auto &config : bot_configs) {
-          if (!config.enabled) {
-            continue;
-          }
-          for (const auto &plugin_name : config.plugins) {
-            if (!plugin_manager.load_plugin(plugin_name)) {
-              OBCX_I18N_WARN(common::LogMessageKey::PLUGIN_LOAD_WARN,
-                             plugin_name);
-              continue;
-            }
-            if (!plugin_manager.initialize_plugin(plugin_name)) {
-              OBCX_I18N_WARN(common::LogMessageKey::PLUGIN_INIT_WARN,
-                             plugin_name);
-              continue;
-            }
-          }
-        }
-
-        OBCX_I18N_INFO(common::LogMessageKey::PLUGIN_RELOAD_COMPLETE);
-        continue;
-      }
-
-      //  Placeholder for future command processing
-    }
-  });
+  // Start CLI input thread using CliHandler
+  std::thread cli_thread(
+      [&plugin_manager, &config_loader, &bot_configs, &bots, &bots_mutex]() {
+        common::CliHandler::Context ctx{
+            .plugin_manager = plugin_manager,
+            .config_loader = config_loader,
+            .bot_configs = bot_configs,
+            .bots = bots,
+            .bots_mutex = bots_mutex,
+            .should_stop = g_should_stop,
+            .stop_cv = g_stop_cv,
+        };
+        common::CliHandler handler(ctx);
+        handler.run();
+      });
   cli_thread.detach();
 
   // Wait for shutdown signal

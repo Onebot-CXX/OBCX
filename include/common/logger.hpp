@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <spdlog/spdlog.h>
 #include <string>
 
@@ -83,6 +84,42 @@ public:
    * \endif
    */
   static void set_level(spdlog::level::level_enum level);
+
+  /**
+   * \if CHINESE
+   * @brief 从字符串解析日志级别
+   * @param level_str 日志级别字符串 (trace, debug, info, warn, error, critical,
+   * off)
+   * @return 解析成功返回日志级别，失败返回std::nullopt
+   * \endif
+   * \if ENGLISH
+   * @brief Parse log level from string
+   * @param level_str Log level string (trace, debug, info, warn, error,
+   * critical, off)
+   * @return Log level if parsing succeeds, std::nullopt otherwise
+   * \endif
+   */
+  static auto parse_level(const std::string &level_str)
+      -> std::optional<spdlog::level::level_enum>;
+
+  /**
+   * \if CHINESE
+   * @brief 从环境变量获取日志级别
+   * @param env_var 环境变量名称 (默认: OBCX_LOG_LEVEL)
+   * @param default_level 默认日志级别 (默认: info)
+   * @return 日志级别
+   * \endif
+   * \if ENGLISH
+   * @brief Get log level from environment variable
+   * @param env_var Environment variable name (default: OBCX_LOG_LEVEL)
+   * @param default_level Default log level (default: info)
+   * @return Log level
+   * \endif
+   */
+  static auto get_level_from_env(
+      const std::string &env_var = "OBCX_LOG_LEVEL",
+      spdlog::level::level_enum default_level = spdlog::level::info)
+      -> spdlog::level::level_enum;
 
   /**
    * \if CHINESE

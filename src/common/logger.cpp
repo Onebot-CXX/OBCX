@@ -1,8 +1,11 @@
 #include "common/logger.hpp"
 
+#include <algorithm>
+#include <cstdlib>
 #include <spdlog/async.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <unordered_map>
 #include <vector>
 
 namespace obcx::common {
@@ -137,10 +140,16 @@ auto Logger::get(const std::string &name) -> std::shared_ptr<spdlog::logger> {
 }
 
 void Logger::set_level(spdlog::level::level_enum level) {
-  if (default_logger_) {
-    default_logger_->set_level(level);
-    spdlog::set_level(level);
-  }
+  // Set global level
+  spdlog::set_level(level);
+
+  // Apply to all registered loggers and their sinks
+  spdlog::apply_all([level](const std::shared_ptr<spdlog::logger> &logger) {
+    logger->set_level(level);
+    for (auto &sink : logger->sinks()) {
+      sink->set_level(level);
+    }
+  });
 }
 
 void Logger::flush() {
@@ -149,6 +158,50 @@ void Logger::flush() {
   }
   spdlog::apply_all(
       [](const std::shared_ptr<spdlog::logger> &l) { l->flush(); });
+}
+
+auto Logger::parse_level(const std::string &level_str)
+    -> std::optional<spdlog::level::level_enum> {
+  // Convert to lowercase for case-insensitive comparison
+  std::string lower_str = level_str;
+  std::transform(lower_str.begin(), lower_str.end(), lower_str.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+
+  static const std::unordered_map<std::string, spdlog::level::level_enum>
+      level_map = {
+          {"trace", spdlog::level::trace},
+          {"debug", spdlog::level::debug},
+          {"info", spdlog::level::info},
+          {"warn", spdlog::level::warn},
+          {"warning", spdlog::level::warn},
+          {"error", spdlog::level::err},
+          {"err", spdlog::level::err},
+          {"critical", spdlog::level::critical},
+          {"off", spdlog::level::off},
+      };
+
+  auto it = level_map.find(lower_str);
+  if (it != level_map.end()) {
+    return it->second;
+  }
+  return std::nullopt;
+}
+
+auto Logger::get_level_from_env(const std::string &env_var,
+                                spdlog::level::level_enum default_level)
+    -> spdlog::level::level_enum {
+  const char *env_value = std::getenv(env_var.c_str());
+  if (env_value == nullptr || env_value[0] == '\0') {
+    return default_level;
+  }
+
+  auto level = parse_level(env_value);
+  if (level.has_value()) {
+    return *level;
+  }
+
+  // Invalid level string, return default
+  return default_level;
 }
 
 } // namespace obcx::common
