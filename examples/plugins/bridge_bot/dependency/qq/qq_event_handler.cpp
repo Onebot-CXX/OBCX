@@ -116,7 +116,6 @@ auto QQEventHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
     // 创建带删除线的消息内容
     std::string edited_content;
     if (show_sender && original_message.has_value()) {
-      // 获取发送者显示名称（使用同步获取）
       std::string sender_display_name = co_await fetch_user_display_name(
           qq_bot, original_message->user_id, qq_group_id);
       // 格式: [用户名]\t~消息内容~
@@ -277,7 +276,7 @@ auto QQEventHandler::handle_poke_event(obcx::core::IBot &telegram_bot,
       co_return;
     }
 
-    // 获取两个用户的显示名称（使用同步获取）
+    // 获取两个用户的显示名称
     std::string user_display_name =
         co_await fetch_user_display_name(qq_bot, user_id, qq_group_id);
     std::string target_display_name =
@@ -424,7 +423,6 @@ auto QQEventHandler::fetch_user_display_name(obcx::core::IBot &qq_bot,
   auto display_name =
       db_manager_->get_user_display_name("qq", user_id, group_id);
 
-  // 如果没有找到用户信息，尝试同步获取一次
   if (!display_name.has_value()) {
     co_await fetch_user_info(qq_bot, user_id, group_id);
     display_name = db_manager_->get_user_display_name("qq", user_id, group_id);
@@ -438,7 +436,7 @@ auto QQEventHandler::fetch_user_info(obcx::core::IBot &qq_bot,
                                      const std::string &group_id)
     -> boost::asio::awaitable<void> {
   try {
-    // 同步获取群成员信息
+    // 获取群成员信息
     std::string response =
         co_await qq_bot.get_group_member_info(group_id, user_id, false);
     nlohmann::json response_json = nlohmann::json::parse(response);
@@ -493,11 +491,11 @@ auto QQEventHandler::fetch_user_info(obcx::core::IBot &qq_bot,
 
       // 保存用户信息
       db_manager_->save_or_update_user(user_info);
-      PLUGIN_DEBUG("qq_to_tg", "同步获取QQ用户信息成功：{} -> {}", user_id,
+      PLUGIN_DEBUG("qq_to_tg", "获取QQ用户信息成功：{} -> {}", user_id,
                    user_info.nickname);
     }
   } catch (const std::exception &e) {
-    PLUGIN_DEBUG("qq_to_tg", "同步获取QQ用户信息失败：{}", e.what());
+    PLUGIN_DEBUG("qq_to_tg", "获取QQ用户信息失败：{}", e.what());
   }
 }
 

@@ -28,7 +28,7 @@ public:
 
   /**
    * @brief 格式化消息发送者信息
-   * @param qq_bot QQ机器人实例（用于同步获取用户信息）
+   * @param qq_bot QQ机器人实例
    * @param event 消息事件
    * @param bridge_config 桥接配置
    * @param qq_group_id QQ群ID
