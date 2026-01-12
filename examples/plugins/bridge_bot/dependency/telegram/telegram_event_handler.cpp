@@ -1,16 +1,18 @@
-#include "telegram_event_handler.hpp"
-#include "common/logger.hpp"
+#include "telegram/telegram_event_handler.hpp"
 
+#include <common/logger.hpp>
 #include <nlohmann/json.hpp>
+#include <utility>
 
 namespace bridge::telegram {
 
 TelegramEventHandler::TelegramEventHandler(
-    std::shared_ptr<obcx::storage::DatabaseManager> db_manager,
+    std::shared_ptr<storage::DatabaseManager> db_manager,
     std::function<boost::asio::awaitable<void>(
         obcx::core::IBot &, obcx::core::IBot &, obcx::common::MessageEvent)>
         forward_function)
-    : db_manager_(db_manager), forward_function_(forward_function) {}
+    : db_manager_(std::move(db_manager)),
+      forward_function_(std::move(forward_function)) {}
 
 auto TelegramEventHandler::handle_message_deleted(
     obcx::core::IBot &telegram_bot, obcx::core::IBot &qq_bot,

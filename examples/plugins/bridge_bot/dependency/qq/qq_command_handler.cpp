@@ -1,13 +1,12 @@
-#include "qq_command_handler.hpp"
-#include "../config.hpp"
-#include "common/logger.hpp"
+#include "qq/qq_command_handler.hpp"
 
+#include <common/logger.hpp>
 #include <fmt/format.h>
 
 namespace bridge::qq {
 
 QQCommandHandler::QQCommandHandler(
-    std::shared_ptr<obcx::storage::DatabaseManager> db_manager)
+    std::shared_ptr<storage::DatabaseManager> db_manager)
     : db_manager_(std::move(db_manager)) {}
 
 auto QQCommandHandler::handle_checkalive_command(

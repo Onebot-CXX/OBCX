@@ -1,10 +1,10 @@
 #pragma once
 
-#include "common/message_type.hpp"
-#include "database_manager.hpp"
-#include "interfaces/bot.hpp"
+#include "database/database_manager.hpp"
 
 #include <boost/asio.hpp>
+#include <common/message_type.hpp>
+#include <interfaces/bot.hpp>
 #include <memory>
 
 namespace bridge {
@@ -32,7 +32,7 @@ public:
    * @param retry_manager 重试队列管理器（可选）
    */
   explicit QQHandler(
-      std::shared_ptr<obcx::storage::DatabaseManager> db_manager,
+      std::shared_ptr<storage::DatabaseManager> db_manager,
       std::shared_ptr<RetryQueueManager> retry_manager = nullptr);
 
   /**
@@ -93,7 +93,7 @@ public:
       -> boost::asio::awaitable<void>;
 
 private:
-  std::shared_ptr<obcx::storage::DatabaseManager> db_manager_;
+  std::shared_ptr<storage::DatabaseManager> db_manager_;
   std::shared_ptr<RetryQueueManager> retry_manager_;
 
   // 子模块处理器

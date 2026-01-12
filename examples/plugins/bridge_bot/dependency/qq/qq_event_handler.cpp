@@ -1,15 +1,15 @@
-#include "qq_event_handler.hpp"
-#include "../config.hpp"
-#include "common/logger.hpp"
-#include "core/tg_bot.hpp"
+#include "qq/qq_event_handler.hpp"
+#include "config.hpp"
 
+#include <common/logger.hpp>
+#include <core/tg_bot.hpp>
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 namespace bridge::qq {
 
 QQEventHandler::QQEventHandler(
-    std::shared_ptr<obcx::storage::DatabaseManager> db_manager)
+    std::shared_ptr<storage::DatabaseManager> db_manager)
     : db_manager_(std::move(db_manager)) {}
 
 auto QQEventHandler::handle_recall_event(obcx::core::IBot &telegram_bot,
@@ -449,7 +449,7 @@ auto QQEventHandler::fetch_user_info(obcx::core::IBot &qq_bot,
       auto data = response_json["data"];
       PLUGIN_DEBUG("qq_to_tg", "QQ群成员信息详细数据: {}", data.dump());
 
-      obcx::storage::UserInfo user_info;
+      storage::UserInfo user_info;
       user_info.platform = "qq";
       user_info.user_id = user_id;
       user_info.group_id = group_id;

@@ -1,7 +1,6 @@
 #include "path_manager.hpp"
 
 #include <common/logger.hpp>
-
 #include <filesystem>
 
 namespace bridge {

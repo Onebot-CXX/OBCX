@@ -1,7 +1,7 @@
-#include "telegram_message_formatter.hpp"
-#include "../config.hpp"
-#include "common/logger.hpp"
+#include "telegram/telegram_message_formatter.hpp"
+#include "config.hpp"
 
+#include <common/logger.hpp>
 #include <fmt/format.h>
 
 namespace bridge::telegram {

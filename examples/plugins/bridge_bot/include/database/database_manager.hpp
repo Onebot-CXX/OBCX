@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace obcx::storage {
+namespace storage {
 
 /**
  * @brief 用户信息结构
@@ -200,10 +200,11 @@ public:
    * @param forwarded_message_id 转发后的消息ID
    * @return 成功返回true，失败返回false
    */
-  bool update_message_forwarding(const std::string &platform,
+  auto update_message_forwarding(const std::string &platform,
                                  const std::string &message_id,
                                  const std::string &forwarded_to_platform,
-                                 const std::string &forwarded_message_id);
+                                 const std::string &forwarded_message_id)
+      -> bool;
 
   // === 用户相关操作 ===
 
@@ -212,7 +213,7 @@ public:
    * @param user_info 用户信息
    * @return 成功返回true，失败返回false
    */
-  bool save_or_update_user(const UserInfo &user_info);
+  auto save_or_update_user(const UserInfo &user_info) -> bool;
 
   /**
    * @brief 根据平台和用户ID查询用户信息
@@ -221,9 +222,8 @@ public:
    * @param group_id 群组ID（可选，用于查询群组特定的昵称）
    * @return 用户信息，如果未找到返回nullopt
    */
-  std::optional<UserInfo> get_user(const std::string &platform,
-                                   const std::string &user_id,
-                                   const std::string &group_id = "");
+  auto get_user(const std::string &platform, const std::string &user_id,
+                const std::string &group_id = "") -> std::optional<UserInfo>;
 
   /**
    * @brief 获取用户的显示名称（优先显示昵称，其次用户名）
@@ -233,9 +233,10 @@ public:
    * 群组ID（可选，用于获取群组特定的昵称，Telegram用户忽略此参数）
    * @return 用户显示名称，如果未找到用户信息返回nullopt
    */
-  std::optional<std::string> get_user_display_name(
-      const std::string &platform, const std::string &user_id,
-      const std::string &group_id = "");
+  auto get_user_display_name(const std::string &platform,
+                             const std::string &user_id,
+                             const std::string &group_id = "")
+      -> std::optional<std::string>;
 
   // === 消息ID映射相关操作 ===
 
@@ -244,7 +245,7 @@ public:
    * @param mapping 映射信息
    * @return 成功返回true，失败返回false
    */
-  bool add_message_mapping(const MessageMapping &mapping);
+  auto add_message_mapping(const MessageMapping &mapping) -> bool;
 
   /**
    * @brief 根据源消息查找目标消息ID
@@ -253,9 +254,10 @@ public:
    * @param target_platform 目标平台
    * @return 目标消息ID，如果未找到返回nullopt
    */
-  std::optional<std::string> get_target_message_id(
-      const std::string &source_platform, const std::string &source_message_id,
-      const std::string &target_platform);
+  auto get_target_message_id(const std::string &source_platform,
+                             const std::string &source_message_id,
+                             const std::string &target_platform)
+      -> std::optional<std::string>;
 
   /**
    * @brief 反向查找：根据目标消息ID查找源消息ID
@@ -264,9 +266,10 @@ public:
    * @param source_platform 源平台
    * @return 源消息ID，如果未找到返回nullopt
    */
-  std::optional<std::string> get_source_message_id(
-      const std::string &target_platform, const std::string &target_message_id,
-      const std::string &source_platform);
+  auto get_source_message_id(const std::string &target_platform,
+                             const std::string &target_message_id,
+                             const std::string &source_platform)
+      -> std::optional<std::string>;
 
   /**
    * @brief 删除消息映射
@@ -275,9 +278,9 @@ public:
    * @param target_platform 目标平台
    * @return 成功返回true，失败返回false
    */
-  bool delete_message_mapping(const std::string &source_platform,
+  auto delete_message_mapping(const std::string &source_platform,
                               const std::string &source_message_id,
-                              const std::string &target_platform);
+                              const std::string &target_platform) -> bool;
 
   /**
    * @brief 更新消息映射的目标消息ID
@@ -287,10 +290,10 @@ public:
    * @param new_target_message_id 新的目标消息ID
    * @return 成功返回true，失败返回false
    */
-  bool update_message_mapping(const std::string &source_platform,
+  auto update_message_mapping(const std::string &source_platform,
                               const std::string &source_message_id,
                               const std::string &target_platform,
-                              const std::string &new_target_message_id);
+                              const std::string &new_target_message_id) -> bool;
 
   // === 辅助功能 ===
 
@@ -300,8 +303,8 @@ public:
    * @param platform 平台名称
    * @return 成功返回true，失败返回false
    */
-  bool save_message_from_event(const common::MessageEvent &event,
-                               const std::string &platform);
+  auto save_message_from_event(const obcx::common::MessageEvent &event,
+                               const std::string &platform) -> bool;
 
   /**
    * @brief 从消息事件中提取用户信息并保存
@@ -309,8 +312,8 @@ public:
    * @param platform 平台名称
    * @return 成功返回true，失败返回false
    */
-  bool save_user_from_event(const common::MessageEvent &event,
-                            const std::string &platform);
+  auto save_user_from_event(const obcx::common::MessageEvent &event,
+                            const std::string &platform) -> bool;
 
   // === 表情包缓存相关操作 ===
 
@@ -319,7 +322,7 @@ public:
    * @param cache_info 缓存信息
    * @return 成功返回true，失败返回false
    */
-  bool save_sticker_cache(const StickerCacheInfo &cache_info);
+  auto save_sticker_cache(const StickerCacheInfo &cache_info) -> bool;
 
   /**
    * @brief 根据平台和哈希查询表情包缓存
@@ -327,8 +330,9 @@ public:
    * @param sticker_hash 表情包哈希值
    * @return 缓存信息，如果未找到返回nullopt
    */
-  std::optional<StickerCacheInfo> get_sticker_cache(
-      const std::string &platform, const std::string &sticker_hash);
+  auto get_sticker_cache(const std::string &platform,
+                         const std::string &sticker_hash)
+      -> std::optional<StickerCacheInfo>;
 
   /**
    * @brief 更新表情包缓存的使用时间
@@ -336,8 +340,8 @@ public:
    * @param sticker_hash 表情包哈希值
    * @return 成功返回true，失败返回false
    */
-  bool update_sticker_last_used(const std::string &platform,
-                                const std::string &sticker_hash);
+  auto update_sticker_last_used(const std::string &platform,
+                                const std::string &sticker_hash) -> bool;
 
   /**
    * @brief 更新表情包缓存的转换状态和路径
@@ -347,10 +351,11 @@ public:
    * @param converted_file_path 转换后文件路径（可选）
    * @return 成功返回true，失败返回false
    */
-  bool update_sticker_conversion(
+  auto update_sticker_conversion(
       const std::string &platform, const std::string &sticker_hash,
       const std::string &conversion_status,
-      const std::optional<std::string> &converted_file_path = std::nullopt);
+      const std::optional<std::string> &converted_file_path = std::nullopt)
+      -> bool;
 
   // === QQ表情包映射相关操作 ===
 
@@ -359,42 +364,42 @@ public:
    * @param mapping 映射信息
    * @return 成功返回true，失败返回false
    */
-  bool save_qq_sticker_mapping(const QQStickerMapping &mapping);
+  auto save_qq_sticker_mapping(const QQStickerMapping &mapping) -> bool;
 
   /**
    * @brief 根据QQ表情包hash查询Telegram file_id
    * @param qq_sticker_hash QQ表情包哈希值
    * @return 映射信息，如果未找到返回nullopt
    */
-  std::optional<QQStickerMapping> get_qq_sticker_mapping(
-      const std::string &qq_sticker_hash);
+  auto get_qq_sticker_mapping(const std::string &qq_sticker_hash)
+      -> std::optional<QQStickerMapping>;
 
   /**
    * @brief 更新QQ表情包映射的使用时间
    * @param qq_sticker_hash QQ表情包哈希值
    * @return 成功返回true，失败返回false
    */
-  bool update_qq_sticker_last_used(const std::string &qq_sticker_hash);
+  auto update_qq_sticker_last_used(const std::string &qq_sticker_hash) -> bool;
 
   /**
    * @brief 计算字符串的哈希值（用于QQ表情包ID）
    * @param input 输入字符串
    * @return 哈希值的十六进制字符串
    */
-  static std::string calculate_hash(const std::string &input);
+  static auto calculate_hash(const std::string &input) -> std::string;
 
   /**
    * @brief 清理过期的图片类型缓存记录
    * @param max_age_days 最大保留天数，超过此天数的记录将被删除
    * @return 删除的记录数量
    */
-  int cleanup_old_image_type_cache(int max_age_days = 30);
+  auto cleanup_old_image_type_cache(int max_age_days = 30) -> int;
 
   /**
    * @brief 获取图片类型缓存统计信息
    * @return 包含缓存统计的字符串
    */
-  std::string get_cache_statistics();
+  auto get_cache_statistics() -> std::string;
 
   // === 消息重试队列相关操作 ===
 
@@ -403,14 +408,15 @@ public:
    * @param retry_info 重试信息
    * @return 成功返回true，失败返回false
    */
-  bool add_message_retry(const MessageRetryInfo &retry_info);
+  auto add_message_retry(const MessageRetryInfo &retry_info) -> bool;
 
   /**
    * @brief 获取需要重试的消息列表
    * @param limit 返回记录的最大数量
    * @return 需要重试的消息列表
    */
-  std::vector<MessageRetryInfo> get_pending_message_retries(int limit = 100);
+  auto get_pending_message_retries(int limit = 100)
+      -> std::vector<MessageRetryInfo>;
 
   /**
    * @brief 更新消息重试信息
@@ -422,11 +428,11 @@ public:
    * @param failure_reason 失败原因
    * @return 成功返回true，失败返回false
    */
-  bool update_message_retry(
+  auto update_message_retry(
       const std::string &source_platform, const std::string &source_message_id,
       const std::string &target_platform, int retry_count,
       const std::chrono::system_clock::time_point &next_retry_at,
-      const std::string &failure_reason);
+      const std::string &failure_reason) -> bool;
 
   /**
    * @brief 删除消息重试记录（成功或达到最大重试次数）
@@ -435,9 +441,9 @@ public:
    * @param target_platform 目标平台
    * @return 成功返回true，失败返回false
    */
-  bool remove_message_retry(const std::string &source_platform,
+  auto remove_message_retry(const std::string &source_platform,
                             const std::string &source_message_id,
-                            const std::string &target_platform);
+                            const std::string &target_platform) -> bool;
 
   // === 媒体下载重试队列相关操作 ===
 
@@ -446,15 +452,16 @@ public:
    * @param retry_info 重试信息
    * @return 成功返回true，失败返回false
    */
-  bool add_media_download_retry(const MediaDownloadRetryInfo &retry_info);
+  auto add_media_download_retry(const MediaDownloadRetryInfo &retry_info)
+      -> bool;
 
   /**
    * @brief 获取需要重试的媒体下载列表
    * @param limit 返回记录的最大数量
    * @return 需要重试的媒体下载列表
    */
-  std::vector<MediaDownloadRetryInfo> get_pending_media_download_retries(
-      int limit = 50);
+  auto get_pending_media_download_retries(int limit = 50)
+      -> std::vector<MediaDownloadRetryInfo>;
 
   /**
    * @brief 更新媒体下载重试信息
@@ -466,10 +473,10 @@ public:
    * @param use_proxy 是否使用代理
    * @return 成功返回true，失败返回false
    */
-  bool update_media_download_retry(
+  auto update_media_download_retry(
       const std::string &platform, const std::string &file_id, int retry_count,
       const std::chrono::system_clock::time_point &next_retry_at,
-      const std::string &failure_reason, bool use_proxy);
+      const std::string &failure_reason, bool use_proxy) -> bool;
 
   /**
    * @brief 删除媒体下载重试记录（成功或达到最大重试次数）
@@ -477,8 +484,8 @@ public:
    * @param file_id 文件ID
    * @return 成功返回true，失败返回false
    */
-  bool remove_media_download_retry(const std::string &platform,
-                                   const std::string &file_id);
+  auto remove_media_download_retry(const std::string &platform,
+                                   const std::string &file_id) -> bool;
 
   // 平台心跳管理
   /**
@@ -487,24 +494,24 @@ public:
    * @param heartbeat_time 心跳时间
    * @return 成功返回true，失败返回false
    */
-  bool update_platform_heartbeat(
+  auto update_platform_heartbeat(
       const std::string &platform,
-      const std::chrono::system_clock::time_point &heartbeat_time);
+      const std::chrono::system_clock::time_point &heartbeat_time) -> bool;
 
   /**
    * @brief 获取平台最后心跳时间
    * @param platform 平台名称 ('qq', 'telegram')
    * @return 心跳信息，如果不存在返回nullopt
    */
-  std::optional<PlatformHeartbeatInfo> get_platform_heartbeat(
-      const std::string &platform);
+  auto get_platform_heartbeat(const std::string &platform)
+      -> std::optional<PlatformHeartbeatInfo>;
 
 private:
   /**
    * @brief 私有构造函数（单例模式）
    * @param db_path 数据库文件路径
    */
-  explicit DatabaseManager(const std::string &db_path);
+  explicit DatabaseManager(std::string db_path);
 
   std::string db_path_;
   sqlite3 *db_;
@@ -518,22 +525,22 @@ private:
    * @brief 创建数据库表
    * @return 成功返回true，失败返回false
    */
-  bool create_tables();
+  auto create_tables() -> bool;
 
   /**
    * @brief 执行SQL语句
    * @param sql SQL语句
    * @return 成功返回true，失败返回false
    */
-  bool execute_sql(const std::string &sql);
+  auto execute_sql(const std::string &sql) -> bool;
 
   /**
    * @brief 时间戳转换辅助函数
    */
-  static int64_t time_point_to_timestamp(
-      const std::chrono::system_clock::time_point &tp);
-  static std::chrono::system_clock::time_point timestamp_to_time_point(
-      int64_t timestamp);
+  static auto time_point_to_timestamp(
+      const std::chrono::system_clock::time_point &tp) -> int64_t;
+  static auto timestamp_to_time_point(int64_t timestamp)
+      -> std::chrono::system_clock::time_point;
 };
 
-} // namespace obcx::storage
+} // namespace storage

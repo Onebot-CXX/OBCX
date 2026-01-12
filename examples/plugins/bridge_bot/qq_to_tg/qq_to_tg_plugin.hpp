@@ -9,7 +9,7 @@ namespace bridge {
 class QQHandler;
 }
 
-namespace obcx::storage {
+namespace storage {
 class DatabaseManager;
 }
 
@@ -69,7 +69,7 @@ private:
   Config config_;
 
   // Bridge components
-  std::shared_ptr<obcx::storage::DatabaseManager> db_manager_;
+  std::shared_ptr<storage::DatabaseManager> db_manager_;
   std::shared_ptr<bridge::RetryQueueManager> retry_manager_;
   std::unique_ptr<bridge::QQHandler> qq_handler_;
 };

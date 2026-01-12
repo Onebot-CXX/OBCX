@@ -1,20 +1,21 @@
-#include "telegram_handler.hpp"
-#include "common/logger.hpp"
-#include "config.hpp"
+#include "telegram/telegram_handler.hpp"
 #include "media_processor.hpp"
 #include "retry_queue_manager.hpp"
 #include "telegram/telegram_message_formatter.hpp"
 
+#include <common/logger.hpp>
+#include <config.hpp>
 #include <fmt/format.h>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <utility>
 
 namespace bridge {
 
 TelegramHandler::TelegramHandler(
-    std::shared_ptr<obcx::storage::DatabaseManager> db_manager,
+    std::shared_ptr<storage::DatabaseManager> db_manager,
     std::shared_ptr<RetryQueueManager> retry_manager)
-    : db_manager_(db_manager), retry_manager_(retry_manager),
+    : db_manager_(db_manager), retry_manager_(std::move(retry_manager)),
       media_processor_(
           std::make_unique<telegram::TelegramMediaProcessor>(db_manager)),
       command_handler_(
@@ -272,7 +273,7 @@ auto TelegramHandler::forward_to_qq(obcx::core::IBot &telegram_bot,
               }
             } else {
               // 首次转发：添加新映射
-              obcx::storage::MessageMapping mapping;
+              storage::MessageMapping mapping;
               mapping.source_platform = "telegram";
               mapping.source_message_id = event.message_id;
               mapping.target_platform = "qq";

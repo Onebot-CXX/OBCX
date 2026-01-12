@@ -1,29 +1,7 @@
 # Telegram to QQ Plugin CMakeLists.txt
 
-# Find required packages
-find_package(tomlplusplus REQUIRED)
-
 # Create the TG to QQ plugin shared library
-add_library(
-  tg_to_qq_plugin SHARED
-  tg_to_qq_plugin.cpp
-  tg_to_qq_plugin.hpp
-  # dependency/bridge_bot dependencies
-  ../dependency/config.cpp
-  ../dependency/qq_handler.cpp
-  ../dependency/telegram_handler.cpp
-  ../dependency/media_processor.cpp
-  ../dependency/path_manager.cpp
-  ../dependency/database_manager.cpp
-  ../dependency/retry_queue_manager.cpp
-  ../dependency/telegram/telegram_media_processor.cpp
-  ../dependency/telegram/telegram_message_formatter.cpp
-  ../dependency/telegram/telegram_command_handler.cpp
-  ../dependency/telegram/telegram_event_handler.cpp
-  ../dependency/qq/qq_media_processor.cpp
-  ../dependency/qq/qq_command_handler.cpp
-  ../dependency/qq/qq_event_handler.cpp
-  ../dependency/qq/qq_message_formatter.cpp)
+add_library(tg_to_qq_plugin SHARED tg_to_qq_plugin.cpp tg_to_qq_plugin.hpp)
 
 # Set the output name to match plugin loading expectations
 set_target_properties(
@@ -40,10 +18,7 @@ target_include_directories(
                           ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src)
 
 # Link against OBCX core and dependency/bridge_bot dependencies
-target_link_libraries(
-  tg_to_qq_plugin
-  PRIVATE obcx_core tomlplusplus::tomlplusplus unofficial::sqlite3::sqlite3
-          OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(tg_to_qq_plugin PRIVATE bridge_core)
 
 # Set the output directory to build/plugins
 set_target_properties(tg_to_qq_plugin PROPERTIES LIBRARY_OUTPUT_DIRECTORY

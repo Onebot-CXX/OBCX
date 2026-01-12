@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common/message_type.hpp"
-#include "database_manager.hpp"
+#include "database/database_manager.hpp"
 
 #include <boost/asio.hpp>
 #include <chrono>
@@ -22,7 +22,7 @@ class RetryQueueManager {
 public:
   using MessageSendCallback =
       std::function<boost::asio::awaitable<std::optional<std::string>>(
-          const obcx::storage::MessageRetryInfo &retry_info,
+          const storage::MessageRetryInfo &retry_info,
           const obcx::common::Message &message)>;
 
   using MediaDownloadCallback =
@@ -35,7 +35,7 @@ public:
    * @param db_manager 数据库管理器
    * @param io_context ASIO IO上下文
    */
-  RetryQueueManager(std::shared_ptr<obcx::storage::DatabaseManager> db_manager,
+  RetryQueueManager(std::shared_ptr<storage::DatabaseManager> db_manager,
                     boost::asio::io_context &io_context);
 
   /**
@@ -114,7 +114,7 @@ public:
   std::string get_retry_statistics() const;
 
 private:
-  std::shared_ptr<obcx::storage::DatabaseManager> db_manager_;
+  std::shared_ptr<storage::DatabaseManager> db_manager_;
   boost::asio::io_context &io_context_;
   std::unique_ptr<boost::asio::steady_timer> retry_timer_;
   bool running_;

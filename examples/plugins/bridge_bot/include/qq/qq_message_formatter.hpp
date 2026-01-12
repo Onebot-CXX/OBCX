@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../config.hpp"
-#include "../database_manager.hpp"
-#include "common/message_type.hpp"
-#include "interfaces/bot.hpp"
+#include "config.hpp"
+#include "database/database_manager.hpp"
 
 #include <boost/asio.hpp>
+#include <common/message_type.hpp>
+#include <interfaces/bot.hpp>
 #include <memory>
 #include <string>
 #include <vector>
@@ -24,7 +24,7 @@ public:
    * @param db_manager 数据库管理器
    */
   explicit QQMessageFormatter(
-      std::shared_ptr<obcx::storage::DatabaseManager> db_manager);
+      std::shared_ptr<storage::DatabaseManager> db_manager);
 
   /**
    * @brief 格式化消息发送者信息
@@ -106,7 +106,7 @@ public:
       const obcx::common::MessageEvent &event) -> boost::asio::awaitable<bool>;
 
 private:
-  std::shared_ptr<obcx::storage::DatabaseManager> db_manager_;
+  std::shared_ptr<storage::DatabaseManager> db_manager_;
 
   /**
    * @brief 获取用户显示名称，如果数据库没有则异步获取

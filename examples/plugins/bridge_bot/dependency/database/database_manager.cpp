@@ -1,21 +1,21 @@
-#include "database_manager.hpp"
-#include "common/logger.hpp"
+#include "database/database_manager.hpp"
 
+#include <common/logger.hpp>
 #include <fmt/format.h>
 #include <iomanip>
 #include <nlohmann/json.hpp>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 #include <sstream>
+#include <utility>
 
-namespace obcx::storage {
+namespace storage {
 
-// 静态成员初始化
 std::shared_ptr<DatabaseManager> DatabaseManager::instance_ = nullptr;
 std::mutex DatabaseManager::instance_mutex_;
 
-std::shared_ptr<DatabaseManager> DatabaseManager::instance(
-    const std::string &db_path) {
+auto DatabaseManager::instance(const std::string &db_path)
+    -> std::shared_ptr<DatabaseManager> {
   std::lock_guard lock(instance_mutex_);
   if (!instance_) {
     if (db_path.empty()) {
@@ -35,8 +35,8 @@ void DatabaseManager::reset_instance() {
   PLUGIN_DEBUG("bridge", "DatabaseManager instance reset");
 }
 
-DatabaseManager::DatabaseManager(const std::string &db_path)
-    : db_path_(db_path), db_(nullptr) {
+DatabaseManager::DatabaseManager(std::string db_path)
+    : db_path_(std::move(db_path)), db_(nullptr) {
   PLUGIN_DEBUG("bridge", "DatabaseManager constructed with path: {}", db_path_);
 }
 
@@ -50,7 +50,7 @@ DatabaseManager::~DatabaseManager() {
   }
 }
 
-bool DatabaseManager::initialize() {
+auto DatabaseManager::initialize() -> bool {
   std::lock_guard lock(db_mutex_);
 
   // 已经初始化过则直接返回
@@ -85,7 +85,7 @@ bool DatabaseManager::initialize() {
   return true;
 }
 
-bool DatabaseManager::create_tables() {
+auto DatabaseManager::create_tables() -> bool {
   // 创建消息表
   const std::string create_messages_table = R"(
         CREATE TABLE IF NOT EXISTS messages (
@@ -270,7 +270,7 @@ bool DatabaseManager::create_tables() {
   return true;
 }
 
-bool DatabaseManager::execute_sql(const std::string &sql) {
+auto DatabaseManager::execute_sql(const std::string &sql) -> bool {
   char *error_msg = nullptr;
   int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &error_msg);
 
@@ -283,7 +283,7 @@ bool DatabaseManager::execute_sql(const std::string &sql) {
   return true;
 }
 
-bool DatabaseManager::save_message(const MessageInfo &message_info) {
+auto DatabaseManager::save_message(const MessageInfo &message_info) -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -348,8 +348,9 @@ bool DatabaseManager::save_message(const MessageInfo &message_info) {
   return true;
 }
 
-std::optional<MessageInfo> DatabaseManager::get_message(
-    const std::string &platform, const std::string &message_id) {
+auto DatabaseManager::get_message(const std::string &platform,
+                                  const std::string &message_id)
+    -> std::optional<MessageInfo> {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -416,10 +417,10 @@ std::optional<MessageInfo> DatabaseManager::get_message(
   return std::nullopt;
 }
 
-bool DatabaseManager::update_message_forwarding(
+auto DatabaseManager::update_message_forwarding(
     const std::string &platform, const std::string &message_id,
     const std::string &forwarded_to_platform,
-    const std::string &forwarded_message_id) {
+    const std::string &forwarded_message_id) -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -455,7 +456,7 @@ bool DatabaseManager::update_message_forwarding(
   return true;
 }
 
-bool DatabaseManager::save_or_update_user(const UserInfo &user_info) {
+auto DatabaseManager::save_or_update_user(const UserInfo &user_info) -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -494,9 +495,10 @@ bool DatabaseManager::save_or_update_user(const UserInfo &user_info) {
   return true;
 }
 
-std::optional<UserInfo> DatabaseManager::get_user(const std::string &platform,
-                                                  const std::string &user_id,
-                                                  const std::string &group_id) {
+auto DatabaseManager::get_user(const std::string &platform,
+                               const std::string &user_id,
+                               const std::string &group_id)
+    -> std::optional<UserInfo> {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -574,9 +576,10 @@ std::optional<UserInfo> DatabaseManager::get_user(const std::string &platform,
   return std::nullopt;
 }
 
-std::optional<std::string> DatabaseManager::get_user_display_name(
-    const std::string &platform, const std::string &user_id,
-    const std::string &group_id) {
+auto DatabaseManager::get_user_display_name(const std::string &platform,
+                                            const std::string &user_id,
+                                            const std::string &group_id)
+    -> std::optional<std::string> {
   // 用户信息过期时间（30分钟）
   constexpr auto kUserInfoExpiration = std::chrono::minutes(30);
 
@@ -657,7 +660,8 @@ std::optional<std::string> DatabaseManager::get_user_display_name(
   return std::nullopt;
 }
 
-bool DatabaseManager::add_message_mapping(const MessageMapping &mapping) {
+auto DatabaseManager::add_message_mapping(const MessageMapping &mapping)
+    -> bool {
   std::lock_guard lock(db_mutex_);
 
   // 验证消息ID不为空
@@ -711,9 +715,9 @@ bool DatabaseManager::add_message_mapping(const MessageMapping &mapping) {
   return true;
 }
 
-std::optional<std::string> DatabaseManager::get_target_message_id(
+auto DatabaseManager::get_target_message_id(
     const std::string &source_platform, const std::string &source_message_id,
-    const std::string &target_platform) {
+    const std::string &target_platform) -> std::optional<std::string> {
   std::lock_guard lock(db_mutex_);
 
   // 验证参数不为空
@@ -757,9 +761,9 @@ std::optional<std::string> DatabaseManager::get_target_message_id(
   return std::nullopt;
 }
 
-std::optional<std::string> DatabaseManager::get_source_message_id(
+auto DatabaseManager::get_source_message_id(
     const std::string &target_platform, const std::string &target_message_id,
-    const std::string &source_platform) {
+    const std::string &source_platform) -> std::optional<std::string> {
   std::lock_guard lock(db_mutex_);
 
   // 验证参数不为空
@@ -803,9 +807,9 @@ std::optional<std::string> DatabaseManager::get_source_message_id(
   return std::nullopt;
 }
 
-bool DatabaseManager::delete_message_mapping(
+auto DatabaseManager::delete_message_mapping(
     const std::string &source_platform, const std::string &source_message_id,
-    const std::string &target_platform) {
+    const std::string &target_platform) -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -839,10 +843,10 @@ bool DatabaseManager::delete_message_mapping(
   }
 }
 
-bool DatabaseManager::update_message_mapping(
+auto DatabaseManager::update_message_mapping(
     const std::string &source_platform, const std::string &source_message_id,
     const std::string &target_platform,
-    const std::string &new_target_message_id) {
+    const std::string &new_target_message_id) -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -878,8 +882,9 @@ bool DatabaseManager::update_message_mapping(
   }
 }
 
-bool DatabaseManager::save_message_from_event(const common::MessageEvent &event,
-                                              const std::string &platform) {
+auto DatabaseManager::save_message_from_event(
+    const obcx::common::MessageEvent &event, const std::string &platform)
+    -> bool {
   MessageInfo msg_info;
   msg_info.platform = platform;
   msg_info.message_id = event.message_id;
@@ -921,8 +926,9 @@ bool DatabaseManager::save_message_from_event(const common::MessageEvent &event,
   return save_message(msg_info);
 }
 
-bool DatabaseManager::save_user_from_event(const common::MessageEvent &event,
-                                           const std::string &platform) {
+auto DatabaseManager::save_user_from_event(
+    const obcx::common::MessageEvent &event, const std::string &platform)
+    -> bool {
   UserInfo user_info;
   user_info.platform = platform;
   user_info.user_id = event.user_id;
@@ -967,20 +973,21 @@ bool DatabaseManager::save_user_from_event(const common::MessageEvent &event,
 }
 
 // 时间戳转换辅助函数
-int64_t DatabaseManager::time_point_to_timestamp(
-    const std::chrono::system_clock::time_point &tp) {
+auto DatabaseManager::time_point_to_timestamp(
+    const std::chrono::system_clock::time_point &tp) -> int64_t {
   return std::chrono::duration_cast<std::chrono::seconds>(tp.time_since_epoch())
       .count();
 }
 
-std::chrono::system_clock::time_point DatabaseManager::timestamp_to_time_point(
-    int64_t timestamp) {
+auto DatabaseManager::timestamp_to_time_point(int64_t timestamp)
+    -> std::chrono::system_clock::time_point {
   return std::chrono::system_clock::time_point(std::chrono::seconds(timestamp));
 }
 
 // === 表情包缓存相关操作实现 ===
 
-bool DatabaseManager::save_sticker_cache(const StickerCacheInfo &cache_info) {
+auto DatabaseManager::save_sticker_cache(const StickerCacheInfo &cache_info)
+    -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1065,8 +1072,9 @@ bool DatabaseManager::save_sticker_cache(const StickerCacheInfo &cache_info) {
   return true;
 }
 
-std::optional<StickerCacheInfo> DatabaseManager::get_sticker_cache(
-    const std::string &platform, const std::string &sticker_hash) {
+auto DatabaseManager::get_sticker_cache(const std::string &platform,
+                                        const std::string &sticker_hash)
+    -> std::optional<StickerCacheInfo> {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1151,8 +1159,9 @@ std::optional<StickerCacheInfo> DatabaseManager::get_sticker_cache(
   return cache_info;
 }
 
-bool DatabaseManager::update_sticker_last_used(
-    const std::string &platform, const std::string &sticker_hash) {
+auto DatabaseManager::update_sticker_last_used(const std::string &platform,
+                                               const std::string &sticker_hash)
+    -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1235,7 +1244,8 @@ auto DatabaseManager::update_sticker_conversion(
 
 // === QQ表情包映射相关操作 ===
 
-bool DatabaseManager::save_qq_sticker_mapping(const QQStickerMapping &mapping) {
+auto DatabaseManager::save_qq_sticker_mapping(const QQStickerMapping &mapping)
+    -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1356,8 +1366,8 @@ auto DatabaseManager::get_qq_sticker_mapping(const std::string &qq_sticker_hash)
   return std::nullopt;
 }
 
-bool DatabaseManager::update_qq_sticker_last_used(
-    const std::string &qq_sticker_hash) {
+auto DatabaseManager::update_qq_sticker_last_used(
+    const std::string &qq_sticker_hash) -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1392,7 +1402,7 @@ bool DatabaseManager::update_qq_sticker_last_used(
   return true;
 }
 
-std::string DatabaseManager::calculate_hash(const std::string &input) {
+auto DatabaseManager::calculate_hash(const std::string &input) -> std::string {
   EVP_MD_CTX *context = EVP_MD_CTX_new();
   if (!context) {
     PLUGIN_ERROR("bridge", "无法创建EVP_MD_CTX");
@@ -1429,7 +1439,7 @@ std::string DatabaseManager::calculate_hash(const std::string &input) {
   return ss.str();
 }
 
-int DatabaseManager::cleanup_old_image_type_cache(int max_age_days) {
+auto DatabaseManager::cleanup_old_image_type_cache(int max_age_days) -> int {
   std::lock_guard lock(db_mutex_);
 
   if (!db_) {
@@ -1478,7 +1488,7 @@ int DatabaseManager::cleanup_old_image_type_cache(int max_age_days) {
   }
 }
 
-std::string DatabaseManager::get_cache_statistics() {
+auto DatabaseManager::get_cache_statistics() -> std::string {
   std::lock_guard lock(db_mutex_);
 
   if (!db_) {
@@ -1562,7 +1572,8 @@ std::string DatabaseManager::get_cache_statistics() {
 
 // === 消息重试队列相关操作 ===
 
-bool DatabaseManager::add_message_retry(const MessageRetryInfo &retry_info) {
+auto DatabaseManager::add_message_retry(const MessageRetryInfo &retry_info)
+    -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1616,8 +1627,8 @@ bool DatabaseManager::add_message_retry(const MessageRetryInfo &retry_info) {
   return true;
 }
 
-std::vector<MessageRetryInfo> DatabaseManager::get_pending_message_retries(
-    int limit) {
+auto DatabaseManager::get_pending_message_retries(int limit)
+    -> std::vector<MessageRetryInfo> {
   std::lock_guard lock(db_mutex_);
   std::vector<MessageRetryInfo> retries;
 
@@ -1685,11 +1696,11 @@ std::vector<MessageRetryInfo> DatabaseManager::get_pending_message_retries(
   return retries;
 }
 
-bool DatabaseManager::update_message_retry(
+auto DatabaseManager::update_message_retry(
     const std::string &source_platform, const std::string &source_message_id,
     const std::string &target_platform, int retry_count,
     const std::chrono::system_clock::time_point &next_retry_at,
-    const std::string &failure_reason) {
+    const std::string &failure_reason) -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1728,9 +1739,10 @@ bool DatabaseManager::update_message_retry(
   return true;
 }
 
-bool DatabaseManager::remove_message_retry(const std::string &source_platform,
+auto DatabaseManager::remove_message_retry(const std::string &source_platform,
                                            const std::string &source_message_id,
-                                           const std::string &target_platform) {
+                                           const std::string &target_platform)
+    -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1765,8 +1777,8 @@ bool DatabaseManager::remove_message_retry(const std::string &source_platform,
 
 // === 媒体下载重试队列相关操作 ===
 
-bool DatabaseManager::add_media_download_retry(
-    const MediaDownloadRetryInfo &retry_info) {
+auto DatabaseManager::add_media_download_retry(
+    const MediaDownloadRetryInfo &retry_info) -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1815,8 +1827,8 @@ bool DatabaseManager::add_media_download_retry(
   return true;
 }
 
-std::vector<MediaDownloadRetryInfo>
-DatabaseManager::get_pending_media_download_retries(int limit) {
+auto DatabaseManager::get_pending_media_download_retries(int limit)
+    -> std::vector<MediaDownloadRetryInfo> {
   std::lock_guard lock(db_mutex_);
   std::vector<MediaDownloadRetryInfo> retries;
 
@@ -1876,10 +1888,10 @@ DatabaseManager::get_pending_media_download_retries(int limit) {
   return retries;
 }
 
-bool DatabaseManager::update_media_download_retry(
+auto DatabaseManager::update_media_download_retry(
     const std::string &platform, const std::string &file_id, int retry_count,
     const std::chrono::system_clock::time_point &next_retry_at,
-    const std::string &failure_reason, bool use_proxy) {
+    const std::string &failure_reason, bool use_proxy) -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1918,8 +1930,9 @@ bool DatabaseManager::update_media_download_retry(
   return true;
 }
 
-bool DatabaseManager::remove_media_download_retry(const std::string &platform,
-                                                  const std::string &file_id) {
+auto DatabaseManager::remove_media_download_retry(const std::string &platform,
+                                                  const std::string &file_id)
+    -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1952,9 +1965,9 @@ bool DatabaseManager::remove_media_download_retry(const std::string &platform,
 }
 
 // === 平台心跳管理相关操作 ===
-bool DatabaseManager::update_platform_heartbeat(
+auto DatabaseManager::update_platform_heartbeat(
     const std::string &platform,
-    const std::chrono::system_clock::time_point &heartbeat_time) {
+    const std::chrono::system_clock::time_point &heartbeat_time) -> bool {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -1992,8 +2005,8 @@ bool DatabaseManager::update_platform_heartbeat(
   return true;
 }
 
-std::optional<PlatformHeartbeatInfo> DatabaseManager::get_platform_heartbeat(
-    const std::string &platform) {
+auto DatabaseManager::get_platform_heartbeat(const std::string &platform)
+    -> std::optional<PlatformHeartbeatInfo> {
   std::lock_guard lock(db_mutex_);
 
   const std::string sql = R"(
@@ -2034,4 +2047,4 @@ std::optional<PlatformHeartbeatInfo> DatabaseManager::get_platform_heartbeat(
   return std::nullopt;
 }
 
-} // namespace obcx::storage
+} // namespace storage

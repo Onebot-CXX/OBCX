@@ -1,13 +1,13 @@
 #pragma once
 
 #include "common/message_type.hpp"
-#include "database_manager.hpp"
-#include "interfaces/bot.hpp"
+#include "database/database_manager.hpp"
 #include "telegram/telegram_command_handler.hpp"
 #include "telegram/telegram_event_handler.hpp"
 #include "telegram/telegram_media_processor.hpp"
 
 #include <boost/asio.hpp>
+#include <interfaces/bot.hpp>
 #include <memory>
 
 namespace bridge {
@@ -28,7 +28,7 @@ public:
    * @param retry_manager 重试队列管理器（可选）
    */
   explicit TelegramHandler(
-      std::shared_ptr<obcx::storage::DatabaseManager> db_manager,
+      std::shared_ptr<storage::DatabaseManager> db_manager,
       std::shared_ptr<RetryQueueManager> retry_manager = nullptr);
 
   /**
@@ -86,7 +86,7 @@ private:
                                    const std::string &bridge_files_dir)
       -> boost::asio::awaitable<std::optional<std::string>>;
 
-  std::shared_ptr<obcx::storage::DatabaseManager> db_manager_;
+  std::shared_ptr<storage::DatabaseManager> db_manager_;
   std::shared_ptr<RetryQueueManager> retry_manager_;
   std::unique_ptr<telegram::TelegramMediaProcessor> media_processor_;
   std::unique_ptr<telegram::TelegramCommandHandler> command_handler_;

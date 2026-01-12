@@ -1,15 +1,15 @@
-#include "qq_message_formatter.hpp"
-#include "common/logger.hpp"
-#include "core/qq_bot.hpp"
-#include "core/tg_bot.hpp"
+#include "qq/qq_message_formatter.hpp"
 
+#include <common/logger.hpp>
+#include <core/qq_bot.hpp>
+#include <core/tg_bot.hpp>
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 namespace bridge::qq {
 
 QQMessageFormatter::QQMessageFormatter(
-    std::shared_ptr<obcx::storage::DatabaseManager> db_manager)
+    std::shared_ptr<storage::DatabaseManager> db_manager)
     : db_manager_(std::move(db_manager)) {}
 
 auto QQMessageFormatter::format_sender_info(
@@ -476,7 +476,7 @@ auto QQMessageFormatter::send_media_group(
               if (first_msg.contains("message_id")) {
                 std::string tg_msg_id =
                     std::to_string(first_msg["message_id"].get<int64_t>());
-                obcx::storage::MessageMapping mapping;
+                storage::MessageMapping mapping;
                 mapping.source_platform = "qq";
                 mapping.source_message_id = event.message_id;
                 mapping.target_platform = "telegram";
@@ -538,7 +538,7 @@ auto QQMessageFormatter::fetch_user_info(obcx::core::IBot &qq_bot,
       auto data = response_json["data"];
       PLUGIN_DEBUG("qq_to_tg", "QQ群成员信息详细数据: {}", data.dump());
 
-      obcx::storage::UserInfo user_info;
+      storage::UserInfo user_info;
       user_info.platform = "qq";
       user_info.user_id = user_id;
       user_info.group_id = group_id; // 群组特定的用户信息

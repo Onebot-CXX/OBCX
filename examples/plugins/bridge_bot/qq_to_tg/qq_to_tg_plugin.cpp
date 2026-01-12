@@ -1,8 +1,8 @@
 #include "qq_to_tg_plugin.hpp"
-#include "../dependency/config.hpp"
-#include "../dependency/database_manager.hpp"
-#include "../dependency/qq_handler.hpp"
-#include "../dependency/retry_queue_manager.hpp"
+#include "config.hpp"
+#include "database/database_manager.hpp"
+#include "qq/qq_handler.hpp"
+#include "retry_queue_manager.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -42,8 +42,7 @@ auto QQToTGPlugin::initialize() -> bool {
     }
 
     // Initialize database manager (singleton)
-    db_manager_ =
-        obcx::storage::DatabaseManager::instance(config_.database_file);
+    db_manager_ = storage::DatabaseManager::instance(config_.database_file);
     if (!db_manager_ || !db_manager_->initialize()) {
       PLUGIN_ERROR(get_name(), "Failed to initialize database");
       return false;

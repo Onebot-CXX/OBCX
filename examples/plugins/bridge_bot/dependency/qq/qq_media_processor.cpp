@@ -1,6 +1,6 @@
-#include "qq_media_processor.hpp"
-#include "../config.hpp"
-#include "../media_processor.hpp"
+#include "qq/qq_media_processor.hpp"
+#include "config.hpp"
+#include "media_processor.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <common/logger.hpp>
@@ -16,7 +16,7 @@
 namespace bridge::qq {
 
 QQMediaProcessor::QQMediaProcessor(
-    std::shared_ptr<obcx::storage::DatabaseManager> db_manager)
+    std::shared_ptr<storage::DatabaseManager> db_manager)
     : db_manager_(std::move(db_manager)) {}
 
 auto QQMediaProcessor::process_qq_media_segment(
@@ -102,7 +102,7 @@ auto QQMediaProcessor::process_image_segment(
     try {
       // 首先检查数据库缓存
       std::string qq_sticker_hash =
-          obcx::storage::DatabaseManager::calculate_hash(url);
+          storage::DatabaseManager::calculate_hash(url);
       auto cached_mapping =
           db_manager_->get_qq_sticker_mapping(qq_sticker_hash);
 
@@ -256,7 +256,7 @@ auto QQMediaProcessor::process_at_segment(
         auto data = response_json["data"];
         PLUGIN_DEBUG("qq_to_tg", "QQ@用户群成员信息详细数据: {}", data.dump());
 
-        obcx::storage::UserInfo user_info;
+        storage::UserInfo user_info;
         user_info.platform = "qq";
         user_info.user_id = qq_user_id;
         user_info.group_id = event.group_id.value_or(""); // 群组特定的用户信息
@@ -663,8 +663,8 @@ auto QQMediaProcessor::detect_gif_format(const std::string &url)
 
         // 创建新的缓存记录
         std::string qq_sticker_hash =
-            obcx::storage::DatabaseManager::calculate_hash(url);
-        obcx::storage::QQStickerMapping new_mapping;
+            storage::DatabaseManager::calculate_hash(url);
+        storage::QQStickerMapping new_mapping;
         new_mapping.qq_sticker_hash = qq_sticker_hash;
         new_mapping.telegram_file_id = ""; // 暂时为空
         new_mapping.file_type = is_gif ? "animation" : "photo";
@@ -730,10 +730,8 @@ auto QQMediaProcessor::handle_sticker_cache(
 
   try {
     // 计算QQ表情包的唯一hash
-    std::string qq_sticker_hash =
-        obcx::storage::DatabaseManager::calculate_hash(
-            segment.data.value("file", "") + "_" +
-            segment.data.value("url", ""));
+    std::string qq_sticker_hash = storage::DatabaseManager::calculate_hash(
+        segment.data.value("file", "") + "_" + segment.data.value("url", ""));
 
     // 查询缓存
     auto cached_mapping = db_manager_->get_qq_sticker_mapping(qq_sticker_hash);

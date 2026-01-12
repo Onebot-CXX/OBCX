@@ -1,20 +1,21 @@
-#include "telegram_media_processor.hpp"
-#include "../media_processor.hpp"
-#include "../path_manager.hpp"
-#include "common/logger.hpp"
-#include "common/media_converter.hpp"
-#include "core/tg_bot.hpp"
-#include "telegram/network/connection_manager.hpp"
+#include "telegram/telegram_media_processor.hpp"
+#include "media_processor.hpp"
 
+#include "path_manager.hpp"
+#include <common/logger.hpp>
+#include <common/media_converter.hpp>
+#include <core/tg_bot.hpp>
 #include <filesystem>
 #include <fmt/format.h>
 #include <fstream>
+#include <telegram/network/connection_manager.hpp>
+#include <utility>
 
 namespace bridge::telegram {
 
 TelegramMediaProcessor::TelegramMediaProcessor(
-    std::shared_ptr<obcx::storage::DatabaseManager> db_manager)
-    : db_manager_(db_manager) {}
+    std::shared_ptr<storage::DatabaseManager> db_manager)
+    : db_manager_(std::move(db_manager)) {}
 
 auto TelegramMediaProcessor::process_media_file(
     obcx::core::IBot &telegram_bot, const std::string &file_type,
@@ -566,7 +567,7 @@ auto TelegramMediaProcessor::download_sticker_with_cache(
 
         if (file_exists && !cache_info->container_path.empty()) {
           // 更新最后使用时间
-          obcx::storage::StickerCacheInfo update_info = *cache_info;
+          storage::StickerCacheInfo update_info = *cache_info;
           update_info.last_used_at = std::chrono::system_clock::now();
           db_manager_->save_sticker_cache(update_info);
 
@@ -714,7 +715,7 @@ auto TelegramMediaProcessor::download_sticker_with_cache(
     // 只有在有 file_unique_id 时才保存到数据库
     if (!media_info.file_unique_id.empty()) {
       // 创建缓存信息
-      obcx::storage::StickerCacheInfo new_cache_info;
+      storage::StickerCacheInfo new_cache_info;
       new_cache_info.platform = "telegram";
       new_cache_info.sticker_id = media_info.file_id; // 原始file_id
       new_cache_info.sticker_hash =
@@ -801,7 +802,7 @@ auto TelegramMediaProcessor::download_animation_with_cache(
 
         if (file_exists && !cache_info->container_path.empty()) {
           // 更新最后使用时间
-          obcx::storage::StickerCacheInfo update_info = *cache_info;
+          storage::StickerCacheInfo update_info = *cache_info;
           update_info.last_used_at = std::chrono::system_clock::now();
           db_manager_->save_sticker_cache(update_info);
 
@@ -950,7 +951,7 @@ auto TelegramMediaProcessor::download_animation_with_cache(
     // 只有在有 file_unique_id 时才保存到数据库
     if (!media_info.file_unique_id.empty()) {
       // 创建缓存信息
-      obcx::storage::StickerCacheInfo new_cache_info;
+      storage::StickerCacheInfo new_cache_info;
       new_cache_info.platform = "telegram_animation";
       new_cache_info.sticker_id = media_info.file_id; // 原始file_id
       new_cache_info.sticker_hash =

@@ -1,14 +1,16 @@
-#include "telegram_command_handler.hpp"
-#include "common/logger.hpp"
-#include "core/qq_bot.hpp"
+#include "telegram/telegram_command_handler.hpp"
+
+#include <common/logger.hpp>
+#include <core/qq_bot.hpp>
 
 #include <nlohmann/json.hpp>
+#include <utility>
 
 namespace bridge::telegram {
 
 TelegramCommandHandler::TelegramCommandHandler(
-    std::shared_ptr<obcx::storage::DatabaseManager> db_manager)
-    : db_manager_(db_manager) {}
+    std::shared_ptr<storage::DatabaseManager> db_manager)
+    : db_manager_(std::move(db_manager)) {}
 
 auto TelegramCommandHandler::handle_recall_command(
     obcx::core::IBot &telegram_bot, obcx::core::IBot &qq_bot,

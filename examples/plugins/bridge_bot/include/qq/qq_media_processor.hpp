@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../config.hpp"
-#include "../database_manager.hpp"
+#include "config.hpp"
+#include "database/database_manager.hpp"
 
 #include <boost/asio.hpp>
 #include <common/message_type.hpp>
@@ -37,7 +37,7 @@ public:
    * @param db_manager 数据库管理器
    */
   explicit QQMediaProcessor(
-      std::shared_ptr<obcx::storage::DatabaseManager> db_manager);
+      std::shared_ptr<storage::DatabaseManager> db_manager);
 
   /**
    * @brief 处理QQ消息段并转换为Telegram格式
@@ -162,7 +162,7 @@ public:
       -> boost::asio::awaitable<obcx::common::MessageSegment>;
 
 private:
-  std::shared_ptr<obcx::storage::DatabaseManager> db_manager_;
+  std::shared_ptr<storage::DatabaseManager> db_manager_;
 
   /**
    * @brief 检测图片是否为GIF格式

@@ -8,7 +8,7 @@
 namespace bridge {
 
 RetryQueueManager::RetryQueueManager(
-    std::shared_ptr<obcx::storage::DatabaseManager> db_manager,
+    std::shared_ptr<storage::DatabaseManager> db_manager,
     boost::asio::io_context &io_context)
     : db_manager_(db_manager), io_context_(io_context),
       retry_timer_(std::make_unique<boost::asio::steady_timer>(io_context)),
@@ -51,7 +51,7 @@ void RetryQueueManager::add_message_retry(
     const std::string &group_id, const std::string &source_group_id,
     int64_t target_topic_id, int max_retries,
     const std::string &failure_reason) {
-  obcx::storage::MessageRetryInfo retry_info;
+  storage::MessageRetryInfo retry_info;
   retry_info.source_platform = source_platform;
   retry_info.target_platform = target_platform;
   retry_info.source_message_id = source_message_id;
@@ -82,7 +82,7 @@ void RetryQueueManager::add_media_download_retry(
     const std::string &file_type, const std::string &download_url,
     const std::string &local_path, bool use_proxy, int max_retries,
     const std::string &failure_reason) {
-  obcx::storage::MediaDownloadRetryInfo retry_info;
+  storage::MediaDownloadRetryInfo retry_info;
   retry_info.platform = platform;
   retry_info.file_id = file_id;
   retry_info.file_type = file_type;
@@ -206,7 +206,7 @@ boost::asio::awaitable<void> RetryQueueManager::process_message_retries() {
 
       if (result.has_value()) {
         // 发送成功，记录消息映射并删除重试记录
-        obcx::storage::MessageMapping mapping;
+        storage::MessageMapping mapping;
         mapping.source_platform = retry_info.source_platform;
         mapping.source_message_id = retry_info.source_message_id;
         mapping.target_platform = retry_info.target_platform;

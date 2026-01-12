@@ -1,15 +1,14 @@
 #pragma once
 
-#include "core/qq_bot.hpp"
-#include "interfaces/plugin.hpp"
-
+#include <core/qq_bot.hpp>
+#include <interfaces/plugin.hpp>
 #include <memory>
 
 // Forward declarations
 namespace bridge {
 class TelegramHandler;
 }
-namespace obcx::storage {
+namespace storage {
 class DatabaseManager;
 }
 namespace bridge {
@@ -54,7 +53,7 @@ private:
   Config config_;
 
   // Bridge components
-  std::shared_ptr<obcx::storage::DatabaseManager> db_manager_;
+  std::shared_ptr<storage::DatabaseManager> db_manager_;
   std::shared_ptr<bridge::RetryQueueManager> retry_manager_;
   std::unique_ptr<bridge::TelegramHandler> telegram_handler_;
 };

@@ -1,4 +1,4 @@
-#include "qq_handler.hpp"
+#include "qq/qq_handler.hpp"
 #include "config.hpp"
 #include "media_processor.hpp"
 #include "qq/qq_command_handler.hpp"
@@ -15,7 +15,7 @@
 
 namespace bridge {
 
-QQHandler::QQHandler(std::shared_ptr<obcx::storage::DatabaseManager> db_manager,
+QQHandler::QQHandler(std::shared_ptr<storage::DatabaseManager> db_manager,
                      std::shared_ptr<RetryQueueManager> retry_manager)
     : db_manager_(std::move(db_manager)),
       retry_manager_(std::move(retry_manager)),
@@ -229,7 +229,7 @@ auto QQHandler::forward_to_telegram(obcx::core::IBot &telegram_bot,
               response_json["result"]["message_id"].get<int64_t>());
 
           // 记录消息ID映射
-          obcx::storage::MessageMapping mapping;
+          storage::MessageMapping mapping;
           mapping.source_platform = "qq";
           mapping.source_message_id = event.message_id;
           mapping.target_platform = "telegram";

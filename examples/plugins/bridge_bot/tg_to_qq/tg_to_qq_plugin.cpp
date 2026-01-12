@@ -1,15 +1,14 @@
 #include "tg_to_qq_plugin.hpp"
-#include "common/logger.hpp"
-#include "core/qq_bot.hpp"
-#include "core/tg_bot.hpp"
+#include "config.hpp"
+#include "database/database_manager.hpp"
+#include "retry_queue_manager.hpp"
+#include "telegram/telegram_handler.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
-
-#include "../dependency/config.hpp"
-#include "../dependency/database_manager.hpp"
-#include "../dependency/retry_queue_manager.hpp"
-#include "../dependency/telegram_handler.hpp"
+#include <common/logger.hpp>
+#include <core/qq_bot.hpp>
+#include <core/tg_bot.hpp>
 
 namespace plugins {
 TGToQQPlugin::TGToQQPlugin() {
@@ -43,8 +42,7 @@ bool TGToQQPlugin::initialize() {
     }
 
     // Initialize database manager (singleton)
-    db_manager_ =
-        obcx::storage::DatabaseManager::instance(config_.database_file);
+    db_manager_ = storage::DatabaseManager::instance(config_.database_file);
     if (!db_manager_ || !db_manager_->initialize()) {
       PLUGIN_ERROR(get_name(), "Failed to initialize database");
       return false;

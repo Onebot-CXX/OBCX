@@ -1,12 +1,11 @@
 #pragma once
 
-#include "../database_manager.hpp"
-#include "common/message_type.hpp"
-#include "interfaces/bot.hpp"
+#include "database/database_manager.hpp"
 
 #include <boost/asio.hpp>
+#include <common/message_type.hpp>
+#include <interfaces/bot.hpp>
 #include <memory>
-#include <string_view>
 
 namespace bridge::qq {
 
@@ -22,7 +21,7 @@ public:
    * @param db_manager 数据库管理器
    */
   explicit QQCommandHandler(
-      std::shared_ptr<obcx::storage::DatabaseManager> db_manager);
+      std::shared_ptr<storage::DatabaseManager> db_manager);
 
   /**
    * @brief 处理 /checkalive 命令
@@ -39,7 +38,7 @@ public:
       -> boost::asio::awaitable<void>;
 
 private:
-  std::shared_ptr<obcx::storage::DatabaseManager> db_manager_;
+  std::shared_ptr<storage::DatabaseManager> db_manager_;
 
   /**
    * @brief 发送回复消息

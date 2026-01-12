@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../config.hpp"
-#include "common/message_type.hpp"
+#include "config.hpp"
 
+#include <common/message_type.hpp>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>

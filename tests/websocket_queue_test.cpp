@@ -28,9 +28,7 @@ public:
     start_accept();
   }
 
-  ~MockWebSocketServer() {
-    stop();
-  }
+  ~MockWebSocketServer() { stop(); }
 
   void stop() {
     accepting_ = false;
@@ -41,8 +39,9 @@ public:
 
 private:
   void start_accept() {
-    if (!accepting_) return;
-    
+    if (!accepting_)
+      return;
+
     auto socket =
         std::make_shared<asio::ip::tcp::socket>(acceptor_.get_executor());
     acceptor_.async_accept(*socket,
@@ -57,8 +56,9 @@ private:
   }
 
   void handle_connection(const std::shared_ptr<asio::ip::tcp::socket> &socket) {
-    if (!accepting_) return;
-    
+    if (!accepting_)
+      return;
+
     // 模拟弱网环境：快速接收，缓慢发送
     auto buffer = std::make_shared<std::vector<char>>(1024);
     socket->async_read_some(

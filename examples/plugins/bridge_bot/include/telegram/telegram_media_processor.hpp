@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../database_manager.hpp"
-#include "common/message_type.hpp"
-#include "core/tg_bot.hpp"
-#include "interfaces/bot.hpp"
+#include "database/database_manager.hpp"
 
 #include <boost/asio.hpp>
+#include <common/message_type.hpp>
+#include <core/tg_bot.hpp>
+#include <interfaces/bot.hpp>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <vector>
@@ -24,7 +24,7 @@ public:
    * @param db_manager 数据库管理器
    */
   explicit TelegramMediaProcessor(
-      std::shared_ptr<obcx::storage::DatabaseManager> db_manager);
+      std::shared_ptr<storage::DatabaseManager> db_manager);
 
   /**
    * @brief 处理Telegram媒体文件并转换为QQ消息段
@@ -69,7 +69,7 @@ public:
       -> boost::asio::awaitable<std::optional<std::string>>;
 
 private:
-  std::shared_ptr<obcx::storage::DatabaseManager> db_manager_;
+  std::shared_ptr<storage::DatabaseManager> db_manager_;
 
   /**
    * @brief 处理图片文件
