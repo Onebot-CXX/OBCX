@@ -23,12 +23,26 @@ using namespace std::chrono_literals;
 class MockWebSocketServer {
 public:
   MockWebSocketServer(asio::io_context &ioc, uint16_t port)
-      : acceptor_(ioc, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)) {
+      : acceptor_(ioc, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)),
+        accepting_(true) {
     start_accept();
+  }
+
+  ~MockWebSocketServer() {
+    stop();
+  }
+
+  void stop() {
+    accepting_ = false;
+    boost::system::error_code ec;
+    acceptor_.cancel(ec);
+    acceptor_.close(ec);
   }
 
 private:
   void start_accept() {
+    if (!accepting_) return;
+    
     auto socket =
         std::make_shared<asio::ip::tcp::socket>(acceptor_.get_executor());
     acceptor_.async_accept(*socket,
@@ -36,11 +50,15 @@ private:
                              if (!ec) {
                                handle_connection(socket);
                              }
-                             start_accept();
+                             if (accepting_) {
+                               start_accept();
+                             }
                            });
   }
 
   void handle_connection(const std::shared_ptr<asio::ip::tcp::socket> &socket) {
+    if (!accepting_) return;
+    
     // 模拟弱网环境：快速接收，缓慢发送
     auto buffer = std::make_shared<std::vector<char>>(1024);
     socket->async_read_some(
@@ -58,11 +76,14 @@ private:
               asio::async_write(*socket, asio::buffer("OK", 2), asio::detached);
             });
           }
-          handle_connection(socket);
+          if (accepting_) {
+            handle_connection(socket);
+          }
         });
   }
 
   asio::ip::tcp::acceptor acceptor_;
+  std::atomic<bool> accepting_;
 };
 
 // 测试并发写入
@@ -159,10 +180,20 @@ auto main() -> int {
     // 等待连接建立
     std::this_thread::sleep_for(500ms);
 
+    // 设置测试超时（30秒）
+    asio::steady_timer timeout_timer(ioc);
+    timeout_timer.expires_after(30s);
+    timeout_timer.async_wait([&ioc](boost::system::error_code ec) {
+      if (!ec) {
+        OBCX_WARN("测试超时，强制停止IO上下文");
+        ioc.stop();
+      }
+    });
+
     // 运行测试
     asio::co_spawn(
         ioc,
-        [client]() -> asio::awaitable<void> {
+        [client, &server, &ioc]() -> asio::awaitable<void> {
           // 等待连接完全建立
           co_await asio::steady_timer(co_await asio::this_coro::executor, 1s)
               .async_wait(asio::use_awaitable);
@@ -175,6 +206,12 @@ auto main() -> int {
 
           // 关闭连接
           co_await client->close();
+
+          // 停止服务器
+          server.stop();
+
+          // 停止IO上下文
+          ioc.stop();
 
           OBCX_INFO("所有测试完成");
         },
