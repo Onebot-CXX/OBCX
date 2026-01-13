@@ -1,6 +1,7 @@
 #include "qq/qq_media_processor.hpp"
 #include "config.hpp"
 #include "media_processor.hpp"
+#include "qq/qq_message_formatter.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <common/logger.hpp>
@@ -243,68 +244,13 @@ auto QQMediaProcessor::process_at_segment(
 
   // 如果没有找到用户信息，尝试获取一次
   if (!at_display_name.has_value()) {
-    try {
-      // 尝试获取群成员信息
-      std::string response = co_await qq_bot.get_group_member_info(
-          event.group_id.value(), qq_user_id, false);
-      nlohmann::json response_json = nlohmann::json::parse(response);
+    // 尝试获取群成员信息并保存
+    co_await QQMessageFormatter::fetch_and_save_user_info(
+        db_manager_, qq_bot, qq_user_id, event.group_id.value());
 
-      PLUGIN_DEBUG("qq_to_tg", "QQ@用户群成员信息API响应: {}", response);
-
-      if (response_json.contains("status") && response_json["status"] == "ok" &&
-          response_json.contains("data") && response_json["data"].is_object()) {
-        auto data = response_json["data"];
-        PLUGIN_DEBUG("qq_to_tg", "QQ@用户群成员信息详细数据: {}", data.dump());
-
-        storage::UserInfo user_info;
-        user_info.platform = "qq";
-        user_info.user_id = qq_user_id;
-        user_info.group_id = event.group_id.value_or(""); // 群组特定的用户信息
-        user_info.last_updated = std::chrono::system_clock::now();
-
-        std::string general_nickname, card, title;
-
-        if (data.contains("nickname") && data["nickname"].is_string()) {
-          general_nickname = data["nickname"];
-        }
-
-        if (data.contains("card") && data["card"].is_string()) {
-          card = data["card"];
-        }
-
-        if (data.contains("title") && data["title"].is_string()) {
-          title = data["title"];
-        }
-
-        // 优先级：群名片 > 群头衔 > 一般昵称
-        if (!card.empty()) {
-          user_info.nickname = card;
-          PLUGIN_DEBUG("qq_to_tg", "使用QQ@用户群名片作为显示名称: {} -> {}",
-                       qq_user_id, card);
-        } else if (!title.empty()) {
-          user_info.nickname = title;
-          PLUGIN_DEBUG("qq_to_tg", "使用QQ@用户群头衔作为显示名称: {} -> {}",
-                       qq_user_id, title);
-        } else if (!general_nickname.empty()) {
-          user_info.nickname = general_nickname;
-          PLUGIN_DEBUG("qq_to_tg", "使用QQ@用户一般昵称作为显示名称: {} -> {}",
-                       qq_user_id, general_nickname);
-        }
-
-        // 同时保存群头衔到title字段供后续使用
-        if (!title.empty()) {
-          user_info.title = title;
-        }
-
-        // 保存用户信息并更新显示名称
-        if (db_manager_->save_or_update_user(user_info)) {
-          at_display_name = db_manager_->get_user_display_name(
-              "qq", qq_user_id, event.group_id.value_or(""));
-        }
-      }
-    } catch (const std::exception &e) {
-      PLUGIN_DEBUG("qq_to_tg", "获取QQ@用户信息失败：{}, 使用用户ID", e.what());
-    }
+    // 更新显示名称
+    at_display_name = db_manager_->get_user_display_name(
+        "qq", qq_user_id, event.group_id.value_or(""));
   }
 
   // 设置最终显示文本

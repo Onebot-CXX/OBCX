@@ -105,6 +105,11 @@ public:
       const obcx::common::Message &message_to_send,
       const obcx::common::MessageEvent &event) -> boost::asio::awaitable<bool>;
 
+  static auto fetch_and_save_user_info(
+      std::shared_ptr<storage::DatabaseManager> db_manager,
+      obcx::core::IBot &qq_bot, const std::string &user_id,
+      const std::string &group_id) -> boost::asio::awaitable<void>;
+
 private:
   std::shared_ptr<storage::DatabaseManager> db_manager_;
 

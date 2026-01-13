@@ -1,5 +1,6 @@
 #include "database/database_manager.hpp"
 
+#include <chrono>
 #include <common/logger.hpp>
 #include <iomanip>
 #include <sstream>

@@ -213,7 +213,8 @@ public:
    * @param user_info 用户信息
    * @return 成功返回true，失败返回false
    */
-  auto save_or_update_user(const UserInfo &user_info) -> bool;
+  auto save_or_update_user(const UserInfo &user_info, bool force_update = false)
+      -> bool;
 
   /**
    * @brief 根据平台和用户ID查询用户信息
@@ -312,8 +313,9 @@ public:
    * @param platform 平台名称
    * @return 成功返回true，失败返回false
    */
-  auto save_user_from_event(const obcx::common::MessageEvent &event,
-                            const std::string &platform) -> bool;
+  [[maybe_unused]] auto save_user_from_event(
+      const obcx::common::MessageEvent &event, const std::string &platform)
+      -> bool;
 
   // === 表情包缓存相关操作 ===
 

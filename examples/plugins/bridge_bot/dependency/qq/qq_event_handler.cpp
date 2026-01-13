@@ -490,9 +490,13 @@ auto QQEventHandler::fetch_user_info(obcx::core::IBot &qq_bot,
       }
 
       // 保存用户信息
-      db_manager_->save_or_update_user(user_info);
-      PLUGIN_DEBUG("qq_to_tg", "获取QQ用户信息成功：{} -> {}", user_id,
-                   user_info.nickname);
+      if (db_manager_->save_or_update_user(user_info, true)) {
+        PLUGIN_DEBUG("qq_to_tg", "获取QQ用户信息成功：{} -> {}", user_id,
+                     user_info.nickname);
+      } else {
+        PLUGIN_WARN("qq_to_tg", "保存QQ用户信息失败：{} -> {}", user_id,
+                    user_info.nickname);
+      }
     }
   } catch (const std::exception &e) {
     PLUGIN_DEBUG("qq_to_tg", "获取QQ用户信息失败：{}", e.what());

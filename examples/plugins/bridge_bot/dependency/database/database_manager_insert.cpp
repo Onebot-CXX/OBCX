@@ -118,13 +118,30 @@ auto DatabaseManager::save_message_from_event(
 
 // === 用户表 INSERT 操作 ===
 
-auto DatabaseManager::save_or_update_user(const UserInfo &user_info) -> bool {
+auto DatabaseManager::save_or_update_user(const UserInfo &user_info,
+                                          bool force_update) -> bool {
   std::lock_guard lock(db_mutex_);
 
-  // 使用 ON CONFLICT 只在关键字段变化时才更新，避免无效 I/O
-  // last_updated 只在有实际变化时才更新
-  // 使用 IFNULL 将 NULL 和空字符串视为相同，避免 NULL vs '' 导致的无效更新
-  const std::string sql = R"(
+  std::string sql;
+  if (force_update) {
+    // 强制更新：无论字段是否变化，都更新所有字段和last_updated
+    sql = R"(
+        INSERT INTO users
+        (platform, user_id, group_id, username, nickname, title, first_name, last_name, last_updated)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(platform, user_id, group_id) DO UPDATE SET
+            username = excluded.username,
+            nickname = excluded.nickname,
+            title = excluded.title,
+            first_name = excluded.first_name,
+            last_name = excluded.last_name,
+            last_updated = CURRENT_TIMESTAMP;
+    )";
+  } else {
+    // 懒更新：只有在关键字段变化时才更新，避免无效 I/O
+    // last_updated 只在有实际变化时才更新
+    // 使用 IFNULL 将 NULL 和空字符串视为相同，避免 NULL vs '' 导致的无效更新
+    sql = R"(
         INSERT INTO users
         (platform, user_id, group_id, username, nickname, title, first_name, last_name, last_updated)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -142,6 +159,7 @@ auto DatabaseManager::save_or_update_user(const UserInfo &user_info) -> bool {
             IFNULL(users.first_name, '') != IFNULL(excluded.first_name, '') OR
             IFNULL(users.last_name, '') != IFNULL(excluded.last_name, '');
     )";
+  }
 
   sqlite3_stmt *stmt;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);

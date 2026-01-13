@@ -525,6 +525,13 @@ auto QQMessageFormatter::fetch_user_info(obcx::core::IBot &qq_bot,
                                          const std::string &user_id,
                                          const std::string &group_id)
     -> boost::asio::awaitable<void> {
+  co_await fetch_and_save_user_info(db_manager_, qq_bot, user_id, group_id);
+}
+
+auto QQMessageFormatter::fetch_and_save_user_info(
+    std::shared_ptr<storage::DatabaseManager> db_manager,
+    obcx::core::IBot &qq_bot, const std::string &user_id,
+    const std::string &group_id) -> boost::asio::awaitable<void> {
   try {
     std::string response =
         co_await qq_bot.get_group_member_info(group_id, user_id, false);
@@ -580,7 +587,7 @@ auto QQMessageFormatter::fetch_user_info(obcx::core::IBot &qq_bot,
       }
 
       // 保存用户信息
-      db_manager_->save_or_update_user(user_info);
+      db_manager->save_or_update_user(user_info, true);
       PLUGIN_DEBUG("qq_to_tg", "获取QQ用户信息成功：{} -> {}", user_id,
                    user_info.nickname);
     }
