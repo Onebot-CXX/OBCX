@@ -308,10 +308,26 @@ auto QQMediaProcessor::process_face_segment(
 
   obcx::common::MessageSegment converted;
   converted.type = "text";
-  std::string face_id = segment.data.value("id", "0");
+  std::string face_id_str = segment.data.value("id", "0");
   converted.data.clear();
-  converted.data["text"] = fmt::format("[QQ表情:{}]", face_id);
-  PLUGIN_DEBUG("qq_to_tg", "转换QQ表情为文本提示: face_id={}", face_id);
+
+  try {
+    int face_id = std::stoi(face_id_str);
+    auto it = QQ_FACE_TO_EMOJI.find(face_id);
+    if (it != QQ_FACE_TO_EMOJI.end()) {
+      converted.data["text"] = it->second;
+      PLUGIN_DEBUG("qq_to_tg", "转换QQ表情为Unicode emoji: face_id={} -> {}",
+                   face_id, it->second);
+    } else {
+      // Fallback for unmapped IDs
+      converted.data["text"] = fmt::format("[QQ表情:{}]", face_id);
+      PLUGIN_DEBUG("qq_to_tg", "未知QQ表情ID，使用占位符: face_id={}", face_id);
+    }
+  } catch (const std::exception &e) {
+    converted.data["text"] = fmt::format("[QQ表情:{}]", face_id_str);
+    PLUGIN_WARN("qq_to_tg", "解析QQ表情ID失败: {}", e.what());
+  }
+
   co_return converted;
 }
 
