@@ -1,10 +1,10 @@
-#include "qq/qq_handler.hpp"
+#include "qq/handler.hpp"
 #include "config.hpp"
 #include "media_processor.hpp"
-#include "qq/qq_command_handler.hpp"
-#include "qq/qq_event_handler.hpp"
-#include "qq/qq_media_processor.hpp"
-#include "qq/qq_message_formatter.hpp"
+#include "qq/command_handler.hpp"
+#include "qq/event_handler.hpp"
+#include "qq/media_processor.hpp"
+#include "qq/message_formatter.hpp"
 #include "retry_queue_manager.hpp"
 
 #include <common/logger.hpp>

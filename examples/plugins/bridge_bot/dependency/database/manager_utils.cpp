@@ -1,4 +1,4 @@
-#include "database/database_manager.hpp"
+#include "database/manager.hpp"
 
 #include <common/logger.hpp>
 #include <iomanip>

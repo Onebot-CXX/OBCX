@@ -1,4 +1,4 @@
-#include "telegram/telegram_command_handler.hpp"
+#include "telegram/command_handler.hpp"
 
 #include <common/logger.hpp>
 #include <core/qq_bot.hpp>

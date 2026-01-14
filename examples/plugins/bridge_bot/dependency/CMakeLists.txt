@@ -5,25 +5,24 @@ add_library(
   retry_queue_manager.cpp
   path_manager.cpp
   # qq
-  qq/qq_command_handler.cpp
-  qq/qq_event_handler.cpp
-  qq/qq_handler.cpp
-  qq/qq_media_processor.cpp
-  qq/qq_message_formatter.cpp
+  qq/command_handler.cpp
+  qq/event_handler.cpp
+  qq/handler.cpp
+  qq/media_processor.cpp
+  qq/message_formatter.cpp
   # telegram
-  telegram/telegram_handler
-  telegram/telegram_command_handler.cpp
-  telegram/telegram_event_handler.cpp
-  telegram/telegram_media_processor.cpp
-  telegram/telegram_message_formatter.cpp
-  telegram/telegram_handler.cpp
+  telegram/command_handler.cpp
+  telegram/event_handler.cpp
+  telegram/media_processor.cpp
+  telegram/message_formatter.cpp
+  telegram/handler.cpp
   # database
-  database/database_manager.cpp
-  database/database_manager_utils.cpp
-  database/database_manager_create.cpp
-  database/database_manager_insert.cpp
-  database/database_manager_query.cpp
-  database/database_manager_update.cpp
-  database/database_manager_delete.cpp)
+  database/manager.cpp
+  database/manager_utils.cpp
+  database/manager_create.cpp
+  database/manager_insert.cpp
+  database/manager_query.cpp
+  database/manager_update.cpp
+  database/manager_delete.cpp)
 
 target_link_libraries(bridge_core PUBLIC obcx_core unofficial::sqlite3::sqlite3)

@@ -1,4 +1,4 @@
-#include "qq/qq_command_handler.hpp"
+#include "qq/command_handler.hpp"
 
 #include <common/logger.hpp>
 #include <fmt/format.h>

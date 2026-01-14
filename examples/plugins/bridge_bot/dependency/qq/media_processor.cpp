@@ -1,7 +1,7 @@
-#include "qq/qq_media_processor.hpp"
+#include "qq/media_processor.hpp"
 #include "config.hpp"
 #include "media_processor.hpp"
-#include "qq/qq_message_formatter.hpp"
+#include "qq/message_formatter.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <common/logger.hpp>

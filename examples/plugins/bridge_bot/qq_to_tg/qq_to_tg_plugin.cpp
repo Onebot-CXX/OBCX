@@ -1,7 +1,7 @@
 #include "qq_to_tg_plugin.hpp"
 #include "config.hpp"
-#include "database/database_manager.hpp"
-#include "qq/qq_handler.hpp"
+#include "database/manager.hpp"
+#include "qq/handler.hpp"
 #include "retry_queue_manager.hpp"
 
 #include <boost/asio/co_spawn.hpp>

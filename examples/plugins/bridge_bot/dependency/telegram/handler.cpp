@@ -1,7 +1,8 @@
-#include "telegram/telegram_handler.hpp"
+#include "telegram/handler.hpp"
 #include "media_processor.hpp"
 #include "retry_queue_manager.hpp"
-#include "telegram/telegram_message_formatter.hpp"
+#include "telegram/media_processor.hpp"
+#include "telegram/message_formatter.hpp"
 
 #include <common/logger.hpp>
 #include <config.hpp>

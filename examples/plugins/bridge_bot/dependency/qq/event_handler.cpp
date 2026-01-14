@@ -1,4 +1,4 @@
-#include "qq/qq_event_handler.hpp"
+#include "qq/event_handler.hpp"
 #include "config.hpp"
 
 #include <common/logger.hpp>

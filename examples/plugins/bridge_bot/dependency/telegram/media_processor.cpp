@@ -1,4 +1,4 @@
-#include "telegram/telegram_media_processor.hpp"
+#include "telegram/media_processor.hpp"
 #include "media_processor.hpp"
 
 #include "path_manager.hpp"

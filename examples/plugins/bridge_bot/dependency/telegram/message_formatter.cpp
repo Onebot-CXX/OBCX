@@ -1,4 +1,4 @@
-#include "telegram/telegram_message_formatter.hpp"
+#include "telegram/message_formatter.hpp"
 #include "config.hpp"
 
 #include <common/logger.hpp>

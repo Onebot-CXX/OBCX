@@ -1,4 +1,4 @@
-#include "telegram/telegram_event_handler.hpp"
+#include "telegram/event_handler.hpp"
 
 #include <common/logger.hpp>
 #include <nlohmann/json.hpp>

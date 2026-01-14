@@ -1,10 +1,10 @@
 #pragma once
 
 #include "common/message_type.hpp"
-#include "database/database_manager.hpp"
-#include "telegram/telegram_command_handler.hpp"
-#include "telegram/telegram_event_handler.hpp"
-#include "telegram/telegram_media_processor.hpp"
+#include "database/manager.hpp"
+#include "telegram/command_handler.hpp"
+#include "telegram/event_handler.hpp"
+#include "telegram/media_processor.hpp"
 
 #include <boost/asio.hpp>
 #include <interfaces/bot.hpp>

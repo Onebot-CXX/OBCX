@@ -1,8 +1,8 @@
 #include "tg_to_qq_plugin.hpp"
 #include "config.hpp"
-#include "database/database_manager.hpp"
+#include "database/manager.hpp"
 #include "retry_queue_manager.hpp"
-#include "telegram/telegram_handler.hpp"
+#include "telegram/handler.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>

@@ -1,4 +1,4 @@
-#include "qq/qq_message_formatter.hpp"
+#include "qq/message_formatter.hpp"
 
 #include <common/logger.hpp>
 #include <core/qq_bot.hpp>
