@@ -44,7 +44,7 @@ _deps
 *.out
 *.app
 
-# Editor
+# Editor && LSP
 .idea/
 .vscode/
 .vim/
@@ -58,9 +58,13 @@ build/
 # Doc
 docs/
 
-# Shit MacOS
+# OSX's shit
 .DS_Store
 
 *.db
+*.zip
 logs/
+*.core
+
+# vcpkg dependencies
 vcpkg_installed/

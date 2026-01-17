@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/asio/io_context.hpp>
 #include <core/qq_bot.hpp>
 #include <interfaces/plugin.hpp>
 #include <memory>
@@ -56,6 +57,9 @@ private:
   std::shared_ptr<storage::DatabaseManager> db_manager_;
   std::shared_ptr<bridge::RetryQueueManager> retry_manager_;
   std::unique_ptr<bridge::TelegramHandler> telegram_handler_;
+
+  // Retry queue io_context (non-static to avoid reload issues)
+  std::unique_ptr<boost::asio::io_context> retry_io_context_;
 };
 
 } // namespace plugins

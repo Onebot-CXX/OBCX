@@ -48,12 +48,12 @@ auto QQToTGPlugin::initialize() -> bool {
       return false;
     }
 
-    // Initialize retry queue manager if enabled
+    // Initialize retry queue manager if enabled (in-memory, non-persistent)
     if (config_.enable_retry_queue) {
-      // Create a dedicated io_context for retry queue
-      static boost::asio::io_context retry_io_context;
-      retry_manager_ = std::make_shared<bridge::RetryQueueManager>(
-          db_manager_, retry_io_context);
+      // Create a dedicated io_context for retry queue (non-static)
+      retry_io_context_ = std::make_unique<boost::asio::io_context>();
+      retry_manager_ =
+          std::make_shared<bridge::RetryQueueManager>(*retry_io_context_);
     }
 
     // Create QQHandler instance
@@ -141,6 +141,9 @@ void QQToTGPlugin::shutdown() {
       retry_manager_->stop();
       retry_manager_.reset();
     }
+
+    // Reset io_context
+    retry_io_context_.reset();
 
     // Release QQ handler
     qq_handler_.reset();

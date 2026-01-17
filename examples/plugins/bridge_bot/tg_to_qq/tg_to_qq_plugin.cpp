@@ -48,12 +48,12 @@ bool TGToQQPlugin::initialize() {
       return false;
     }
 
-    // Initialize retry queue manager if enabled
+    // Initialize retry queue manager if enabled (in-memory, non-persistent)
     if (config_.enable_retry_queue) {
-      // Create a dedicated io_context for retry queue
-      static boost::asio::io_context retry_io_context;
-      retry_manager_ = std::make_shared<bridge::RetryQueueManager>(
-          db_manager_, retry_io_context);
+      // Create a dedicated io_context for retry queue (non-static)
+      retry_io_context_ = std::make_unique<boost::asio::io_context>();
+      retry_manager_ =
+          std::make_shared<bridge::RetryQueueManager>(*retry_io_context_);
     }
 
     // Create TelegramHandler instance
@@ -112,16 +112,23 @@ void TGToQQPlugin::shutdown() {
   try {
     PLUGIN_INFO(get_name(), "Shutting down TG to QQ Plugin...");
 
+    // Clear cached bot pointer first
+    qq_bot_ = nullptr;
+
+    // Stop retry manager if running (this cancels any pending async operations)
     if (retry_manager_) {
       retry_manager_->stop();
       retry_manager_.reset();
     }
 
+    // Reset io_context
+    retry_io_context_.reset();
+
+    // Release Telegram handler
     telegram_handler_.reset();
 
     // Don't reset db_manager_ - it's a singleton shared with other plugins
     db_manager_ = nullptr;
-    qq_bot_ = nullptr;
 
     PLUGIN_INFO(get_name(), "TG to QQ Plugin shutdown complete");
   } catch (const std::exception &e) {

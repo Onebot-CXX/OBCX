@@ -1,28 +1,65 @@
 #pragma once
 
 #include "common/message_type.hpp"
-#include "database/manager.hpp"
 
 #include <boost/asio.hpp>
 #include <chrono>
+#include <deque>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 
 namespace bridge {
 
 /**
- * @brief 重试队列管理器
+ * @brief In-memory message retry info (no database persistence)
+ */
+struct MessageRetryEntry {
+  std::string source_platform;
+  std::string target_platform;
+  std::string source_message_id;
+  obcx::common::Message message; // Store message directly, no serialization
+  std::string group_id;
+  std::string source_group_id;
+  int64_t target_topic_id;
+  int retry_count;
+  int max_retry_count;
+  std::string failure_reason;
+  std::chrono::system_clock::time_point next_retry_at;
+  std::chrono::system_clock::time_point created_at;
+};
+
+/**
+ * @brief In-memory media download retry info (no database persistence)
+ */
+struct MediaDownloadRetryEntry {
+  std::string platform;
+  std::string file_id;
+  std::string file_type;
+  std::string download_url;
+  std::string local_path;
+  bool use_proxy;
+  int retry_count;
+  int max_retry_count;
+  std::string failure_reason;
+  std::chrono::system_clock::time_point next_retry_at;
+  std::chrono::system_clock::time_point created_at;
+};
+
+/**
+ * @brief 重试队列管理器 (In-memory, non-persistent)
  *
  * 负责管理消息发送重试和媒体下载重试的队列处理
  * 实现指数退避算法，避免频繁重试导致的系统压力
+ * 所有数据存储在内存中，重启后清空
  */
 class RetryQueueManager {
 public:
   using MessageSendCallback =
       std::function<boost::asio::awaitable<std::optional<std::string>>(
-          const storage::MessageRetryInfo &retry_info,
+          const MessageRetryEntry &retry_info,
           const obcx::common::Message &message)>;
 
   using MediaDownloadCallback =
@@ -32,11 +69,9 @@ public:
 
   /**
    * @brief 构造函数
-   * @param db_manager 数据库管理器
    * @param io_context ASIO IO上下文
    */
-  RetryQueueManager(std::shared_ptr<storage::DatabaseManager> db_manager,
-                    boost::asio::io_context &io_context);
+  explicit RetryQueueManager(boost::asio::io_context &io_context);
 
   /**
    * @brief 析构函数
@@ -55,13 +90,6 @@ public:
 
   /**
    * @brief 添加消息发送重试
-   * @param source_platform 源平台
-   * @param target_platform 目标平台
-   * @param source_message_id 源消息ID
-   * @param message 消息内容
-   * @param group_id 目标群组ID
-   * @param max_retries 最大重试次数
-   * @param failure_reason 失败原因
    */
   void add_message_retry(const std::string &source_platform,
                          const std::string &target_platform,
@@ -74,14 +102,6 @@ public:
 
   /**
    * @brief 添加媒体下载重试
-   * @param platform 平台
-   * @param file_id 文件ID
-   * @param file_type 文件类型
-   * @param download_url 下载URL
-   * @param local_path 本地路径
-   * @param use_proxy 是否使用代理
-   * @param max_retries 最大重试次数
-   * @param failure_reason 失败原因
    */
   void add_media_download_retry(const std::string &platform,
                                 const std::string &file_id,
@@ -93,41 +113,51 @@ public:
 
   /**
    * @brief 注册消息发送回调函数
-   * @param target_platform 目标平台
-   * @param callback 回调函数
    */
   void register_message_send_callback(const std::string &target_platform,
                                       MessageSendCallback callback);
 
   /**
    * @brief 注册媒体下载回调函数
-   * @param platform 平台
-   * @param callback 回调函数
    */
   void register_media_download_callback(const std::string &platform,
                                         MediaDownloadCallback callback);
 
   /**
    * @brief 获取重试统计信息
-   * @return 统计信息字符串
    */
   std::string get_retry_statistics() const;
 
+  /**
+   * @brief 获取待处理消息重试数量
+   */
+  size_t get_pending_message_retry_count() const;
+
+  /**
+   * @brief 获取待处理媒体下载重试数量
+   */
+  size_t get_pending_media_retry_count() const;
+
 private:
-  std::shared_ptr<storage::DatabaseManager> db_manager_;
   boost::asio::io_context &io_context_;
   std::unique_ptr<boost::asio::steady_timer> retry_timer_;
   bool running_;
 
-  // 回调函数映射
+  // In-memory retry queues (thread-safe)
+  mutable std::mutex message_retry_mutex_;
+  mutable std::mutex media_retry_mutex_;
+  std::deque<MessageRetryEntry> message_retry_queue_;
+  std::deque<MediaDownloadRetryEntry> media_retry_queue_;
+
+  // Callback mappings
   std::unordered_map<std::string, MessageSendCallback> message_send_callbacks_;
   std::unordered_map<std::string, MediaDownloadCallback>
       media_download_callbacks_;
 
-  // 重试配置
+  // Retry configuration
   static constexpr int DEFAULT_MESSAGE_RETRY_INTERVAL_SECONDS = 2;
   static constexpr int DEFAULT_MEDIA_RETRY_INTERVAL_SECONDS = 5;
-  static constexpr int MAX_RETRY_INTERVAL_SECONDS = 300; // 5分钟
+  static constexpr int MAX_RETRY_INTERVAL_SECONDS = 300; // 5 minutes
   static constexpr int RETRY_QUEUE_CHECK_INTERVAL_SECONDS = 10;
 
   /**
@@ -147,32 +177,9 @@ private:
 
   /**
    * @brief 计算下次重试时间（指数退避）
-   * @param retry_count 当前重试次数
-   * @param base_interval_seconds 基础间隔秒数
-   * @return 下次重试时间点
    */
   std::chrono::system_clock::time_point calculate_next_retry_time(
       int retry_count, int base_interval_seconds) const;
-
-  /**
-   * @brief 序列化消息为JSON字符串
-   * @param message 消息对象
-   * @return JSON字符串
-   */
-  std::string serialize_message(const obcx::common::Message &message) const;
-
-  /**
-   * @brief 反序列化JSON字符串为消息对象
-   * @param json_string JSON字符串
-   * @return 消息对象
-   */
-  std::optional<obcx::common::Message> deserialize_message(
-      const std::string &json_string) const;
-
-  /**
-   * @brief 启动重试队列处理定时器
-   */
-  void schedule_retry_check();
 };
 
 } // namespace bridge

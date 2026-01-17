@@ -2,18 +2,15 @@
 
 #include <cmath>
 #include <common/logger.hpp>
-#include <fmt/format.h>
-#include <nlohmann/json.hpp>
+#include <sstream>
 
 namespace bridge {
 
-RetryQueueManager::RetryQueueManager(
-    std::shared_ptr<storage::DatabaseManager> db_manager,
-    boost::asio::io_context &io_context)
-    : db_manager_(db_manager), io_context_(io_context),
+RetryQueueManager::RetryQueueManager(boost::asio::io_context &io_context)
+    : io_context_(io_context),
       retry_timer_(std::make_unique<boost::asio::steady_timer>(io_context)),
       running_(false) {
-  PLUGIN_INFO("bridge", "RetryQueueManager initialized");
+  PLUGIN_INFO("bridge", "RetryQueueManager initialized (in-memory mode)");
 }
 
 RetryQueueManager::~RetryQueueManager() { stop(); }
@@ -27,7 +24,7 @@ void RetryQueueManager::start() {
   running_ = true;
   PLUGIN_INFO("bridge", "Starting RetryQueueManager");
 
-  // 启动重试队列处理
+  // Start retry queue processing coroutine
   boost::asio::co_spawn(io_context_, process_retry_queues(),
                         boost::asio::detached);
 }
@@ -43,6 +40,25 @@ void RetryQueueManager::stop() {
   if (retry_timer_) {
     retry_timer_->cancel();
   }
+
+  // Clear all pending retries
+  {
+    std::lock_guard<std::mutex> lock(message_retry_mutex_);
+    size_t msg_count = message_retry_queue_.size();
+    message_retry_queue_.clear();
+    if (msg_count > 0) {
+      PLUGIN_INFO("bridge", "Cleared {} pending message retries", msg_count);
+    }
+  }
+  {
+    std::lock_guard<std::mutex> lock(media_retry_mutex_);
+    size_t media_count = media_retry_queue_.size();
+    media_retry_queue_.clear();
+    if (media_count > 0) {
+      PLUGIN_INFO("bridge", "Cleared {} pending media download retries",
+                  media_count);
+    }
+  }
 }
 
 void RetryQueueManager::add_message_retry(
@@ -51,30 +67,29 @@ void RetryQueueManager::add_message_retry(
     const std::string &group_id, const std::string &source_group_id,
     int64_t target_topic_id, int max_retries,
     const std::string &failure_reason) {
-  storage::MessageRetryInfo retry_info;
-  retry_info.source_platform = source_platform;
-  retry_info.target_platform = target_platform;
-  retry_info.source_message_id = source_message_id;
-  retry_info.message_content = serialize_message(message);
-  retry_info.group_id = group_id;
-  retry_info.source_group_id = source_group_id;
-  retry_info.target_topic_id = target_topic_id;
-  retry_info.retry_count = 0;
-  retry_info.max_retry_count = max_retries;
-  retry_info.failure_reason = failure_reason;
-  retry_info.retry_type = "message_send";
-  retry_info.created_at = std::chrono::system_clock::now();
-  retry_info.last_attempt_at = std::chrono::system_clock::now();
-  retry_info.next_retry_at =
+
+  MessageRetryEntry entry;
+  entry.source_platform = source_platform;
+  entry.target_platform = target_platform;
+  entry.source_message_id = source_message_id;
+  entry.message = message; // Store directly, no serialization
+  entry.group_id = group_id;
+  entry.source_group_id = source_group_id;
+  entry.target_topic_id = target_topic_id;
+  entry.retry_count = 0;
+  entry.max_retry_count = max_retries;
+  entry.failure_reason = failure_reason;
+  entry.created_at = std::chrono::system_clock::now();
+  entry.next_retry_at =
       calculate_next_retry_time(0, DEFAULT_MESSAGE_RETRY_INTERVAL_SECONDS);
 
-  if (db_manager_->add_message_retry(retry_info)) {
-    PLUGIN_INFO("bridge", "Added message retry: {} -> {} (msg_id: {})",
-                source_platform, target_platform, source_message_id);
-  } else {
-    PLUGIN_ERROR("bridge", "Failed to add message retry: {} -> {} (msg_id: {})",
-                 source_platform, target_platform, source_message_id);
+  {
+    std::lock_guard<std::mutex> lock(message_retry_mutex_);
+    message_retry_queue_.push_back(std::move(entry));
   }
+
+  PLUGIN_INFO("bridge", "Added message retry: {} -> {} (msg_id: {})",
+              source_platform, target_platform, source_message_id);
 }
 
 void RetryQueueManager::add_media_download_retry(
@@ -82,42 +97,41 @@ void RetryQueueManager::add_media_download_retry(
     const std::string &file_type, const std::string &download_url,
     const std::string &local_path, bool use_proxy, int max_retries,
     const std::string &failure_reason) {
-  storage::MediaDownloadRetryInfo retry_info;
-  retry_info.platform = platform;
-  retry_info.file_id = file_id;
-  retry_info.file_type = file_type;
-  retry_info.download_url = download_url;
-  retry_info.local_path = local_path;
-  retry_info.retry_count = 0;
-  retry_info.max_retry_count = max_retries;
-  retry_info.failure_reason = failure_reason;
-  retry_info.use_proxy = use_proxy;
-  retry_info.created_at = std::chrono::system_clock::now();
-  retry_info.last_attempt_at = std::chrono::system_clock::now();
-  retry_info.next_retry_at =
+
+  MediaDownloadRetryEntry entry;
+  entry.platform = platform;
+  entry.file_id = file_id;
+  entry.file_type = file_type;
+  entry.download_url = download_url;
+  entry.local_path = local_path;
+  entry.use_proxy = use_proxy;
+  entry.retry_count = 0;
+  entry.max_retry_count = max_retries;
+  entry.failure_reason = failure_reason;
+  entry.created_at = std::chrono::system_clock::now();
+  entry.next_retry_at =
       calculate_next_retry_time(0, DEFAULT_MEDIA_RETRY_INTERVAL_SECONDS);
 
-  if (db_manager_->add_media_download_retry(retry_info)) {
-    PLUGIN_INFO("bridge",
-                "Added media download retry: {} (file_id: {}, use_proxy: {})",
-                platform, file_id, use_proxy);
-  } else {
-    PLUGIN_ERROR("bridge",
-                 "Failed to add media download retry: {} (file_id: {})",
-                 platform, file_id);
+  {
+    std::lock_guard<std::mutex> lock(media_retry_mutex_);
+    media_retry_queue_.push_back(std::move(entry));
   }
+
+  PLUGIN_INFO("bridge",
+              "Added media download retry: {} (file_id: {}, use_proxy: {})",
+              platform, file_id, use_proxy);
 }
 
 void RetryQueueManager::register_message_send_callback(
     const std::string &target_platform, MessageSendCallback callback) {
-  message_send_callbacks_[target_platform] = callback;
+  message_send_callbacks_[target_platform] = std::move(callback);
   PLUGIN_DEBUG("bridge", "Registered message send callback for platform: {}",
                target_platform);
 }
 
 void RetryQueueManager::register_media_download_callback(
     const std::string &platform, MediaDownloadCallback callback) {
-  media_download_callbacks_[platform] = callback;
+  media_download_callbacks_[platform] = std::move(callback);
   PLUGIN_DEBUG("bridge", "Registered media download callback for platform: {}",
                platform);
 }
@@ -125,13 +139,13 @@ void RetryQueueManager::register_media_download_callback(
 boost::asio::awaitable<void> RetryQueueManager::process_retry_queues() {
   while (running_) {
     try {
-      // 处理消息发送重试
+      // Process message retries
       co_await process_message_retries();
 
-      // 处理媒体下载重试
+      // Process media download retries
       co_await process_media_download_retries();
 
-      // 等待下一次检查
+      // Wait for next check interval
       retry_timer_->expires_after(
           std::chrono::seconds(RETRY_QUEUE_CHECK_INTERVAL_SECONDS));
       co_await retry_timer_->async_wait(boost::asio::use_awaitable);
@@ -147,13 +161,12 @@ boost::asio::awaitable<void> RetryQueueManager::process_retry_queues() {
                    e.what());
     }
 
-    // 短暂等待后继续
+    // Brief wait before continuing on error
     if (running_) {
       try {
         retry_timer_->expires_after(std::chrono::seconds(5));
         co_await retry_timer_->async_wait(boost::asio::use_awaitable);
       } catch (const boost::system::system_error &) {
-        // Timer was cancelled, exit gracefully
         break;
       }
     }
@@ -163,179 +176,183 @@ boost::asio::awaitable<void> RetryQueueManager::process_retry_queues() {
 }
 
 boost::asio::awaitable<void> RetryQueueManager::process_message_retries() {
-  auto pending_retries = db_manager_->get_pending_message_retries(50);
+  auto now = std::chrono::system_clock::now();
 
-  if (pending_retries.empty()) {
+  // Get entries ready for retry
+  std::vector<MessageRetryEntry> ready_entries;
+  {
+    std::lock_guard<std::mutex> lock(message_retry_mutex_);
+    for (auto it = message_retry_queue_.begin();
+         it != message_retry_queue_.end();) {
+      if (it->next_retry_at <= now) {
+        ready_entries.push_back(std::move(*it));
+        it = message_retry_queue_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  if (ready_entries.empty()) {
     co_return;
   }
 
-  PLUGIN_DEBUG("bridge", "Processing {} message retries",
-               pending_retries.size());
+  PLUGIN_DEBUG("bridge", "Processing {} message retries", ready_entries.size());
 
-  for (const auto &retry_info : pending_retries) {
+  for (auto &entry : ready_entries) {
     try {
-      // 查找对应的回调函数
-      auto callback_it =
-          message_send_callbacks_.find(retry_info.target_platform);
+      // Find callback for target platform
+      auto callback_it = message_send_callbacks_.find(entry.target_platform);
       if (callback_it == message_send_callbacks_.end()) {
         PLUGIN_WARN("bridge", "No callback registered for target platform: {}",
-                    retry_info.target_platform);
+                    entry.target_platform);
+        // Put back in queue for later
+        entry.next_retry_at = calculate_next_retry_time(
+            entry.retry_count, DEFAULT_MESSAGE_RETRY_INTERVAL_SECONDS);
+        std::lock_guard<std::mutex> lock(message_retry_mutex_);
+        message_retry_queue_.push_back(std::move(entry));
         continue;
       }
 
-      // 反序列化消息内容
-      auto message_opt = deserialize_message(retry_info.message_content);
-      if (!message_opt.has_value()) {
-        PLUGIN_ERROR("bridge",
-                     "Failed to deserialize message for retry: {} -> {}",
-                     retry_info.source_platform, retry_info.target_platform);
-        // 删除无效的重试记录
-        db_manager_->remove_message_retry(retry_info.source_platform,
-                                          retry_info.source_message_id,
-                                          retry_info.target_platform);
-        continue;
-      }
-
-      // 尝试发送消息
+      // Try to send message
       PLUGIN_INFO("bridge", "Retrying message send: {} -> {} (attempt {})",
-                  retry_info.source_platform, retry_info.target_platform,
-                  retry_info.retry_count + 1);
+                  entry.source_platform, entry.target_platform,
+                  entry.retry_count + 1);
 
-      auto result =
-          co_await callback_it->second(retry_info, message_opt.value());
+      auto result = co_await callback_it->second(entry, entry.message);
 
       if (result.has_value()) {
-        // 发送成功，记录消息映射并删除重试记录
-        storage::MessageMapping mapping;
-        mapping.source_platform = retry_info.source_platform;
-        mapping.source_message_id = retry_info.source_message_id;
-        mapping.target_platform = retry_info.target_platform;
-        mapping.target_message_id = result.value();
-        mapping.created_at = std::chrono::system_clock::now();
-
-        db_manager_->add_message_mapping(mapping);
-        db_manager_->remove_message_retry(retry_info.source_platform,
-                                          retry_info.source_message_id,
-                                          retry_info.target_platform);
-
+        // Success - don't re-add to queue
         PLUGIN_INFO("bridge", "Message retry successful: {} -> {} (msg_id: {})",
-                    retry_info.source_platform, retry_info.target_platform,
+                    entry.source_platform, entry.target_platform,
                     result.value());
       } else {
-        // 发送失败，更新重试信息
-        int new_retry_count = retry_info.retry_count + 1;
+        // Failed - check if we should retry again
+        entry.retry_count++;
 
-        if (new_retry_count >= retry_info.max_retry_count) {
-          // 达到最大重试次数，删除记录
-          db_manager_->remove_message_retry(retry_info.source_platform,
-                                            retry_info.source_message_id,
-                                            retry_info.target_platform);
+        if (entry.retry_count >= entry.max_retry_count) {
           PLUGIN_WARN("bridge",
                       "Message retry failed after {} attempts: {} -> {}",
-                      retry_info.max_retry_count, retry_info.source_platform,
-                      retry_info.target_platform);
+                      entry.max_retry_count, entry.source_platform,
+                      entry.target_platform);
+          // Don't re-add - give up
         } else {
-          // 更新重试信息
-          auto next_retry_time = calculate_next_retry_time(
-              new_retry_count, DEFAULT_MESSAGE_RETRY_INTERVAL_SECONDS);
-          db_manager_->update_message_retry(
-              retry_info.source_platform, retry_info.source_message_id,
-              retry_info.target_platform, new_retry_count, next_retry_time,
-              "Send failed");
-
+          // Re-add with updated retry time
+          entry.next_retry_at = calculate_next_retry_time(
+              entry.retry_count, DEFAULT_MESSAGE_RETRY_INTERVAL_SECONDS);
           PLUGIN_DEBUG("bridge",
-                       "Updated message retry count to {}, next retry at: {}",
-                       new_retry_count,
-                       std::chrono::system_clock::to_time_t(next_retry_time));
+                       "Updated message retry count to {}, next retry in {}s",
+                       entry.retry_count,
+                       std::chrono::duration_cast<std::chrono::seconds>(
+                           entry.next_retry_at - now)
+                           .count());
+
+          std::lock_guard<std::mutex> lock(message_retry_mutex_);
+          message_retry_queue_.push_back(std::move(entry));
         }
       }
 
     } catch (const std::exception &e) {
       PLUGIN_ERROR("bridge", "Error processing message retry: {}", e.what());
+      // Re-add to queue on error
+      entry.retry_count++;
+      if (entry.retry_count < entry.max_retry_count) {
+        entry.next_retry_at = calculate_next_retry_time(
+            entry.retry_count, DEFAULT_MESSAGE_RETRY_INTERVAL_SECONDS);
+        std::lock_guard<std::mutex> lock(message_retry_mutex_);
+        message_retry_queue_.push_back(std::move(entry));
+      }
     }
   }
 }
 
 boost::asio::awaitable<void>
 RetryQueueManager::process_media_download_retries() {
-  auto pending_retries = db_manager_->get_pending_media_download_retries(30);
+  auto now = std::chrono::system_clock::now();
 
-  if (pending_retries.empty()) {
+  // Get entries ready for retry
+  std::vector<MediaDownloadRetryEntry> ready_entries;
+  {
+    std::lock_guard<std::mutex> lock(media_retry_mutex_);
+    for (auto it = media_retry_queue_.begin();
+         it != media_retry_queue_.end();) {
+      if (it->next_retry_at <= now) {
+        ready_entries.push_back(std::move(*it));
+        it = media_retry_queue_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  if (ready_entries.empty()) {
     co_return;
   }
 
   PLUGIN_DEBUG("bridge", "Processing {} media download retries",
-               pending_retries.size());
+               ready_entries.size());
 
-  for (const auto &retry_info : pending_retries) {
+  for (auto &entry : ready_entries) {
     try {
-      // 查找对应的回调函数
-      auto callback_it = media_download_callbacks_.find(retry_info.platform);
+      auto callback_it = media_download_callbacks_.find(entry.platform);
       if (callback_it == media_download_callbacks_.end()) {
         PLUGIN_WARN("bridge", "No callback registered for platform: {}",
-                    retry_info.platform);
+                    entry.platform);
+        entry.next_retry_at = calculate_next_retry_time(
+            entry.retry_count, DEFAULT_MEDIA_RETRY_INTERVAL_SECONDS);
+        std::lock_guard<std::mutex> lock(media_retry_mutex_);
+        media_retry_queue_.push_back(std::move(entry));
         continue;
       }
 
-      // 尝试下载媒体文件
-      PLUGIN_INFO(
-          "bridge", "Retrying media download: {} (attempt {}, use_proxy: {})",
-          retry_info.file_id, retry_info.retry_count + 1, retry_info.use_proxy);
+      PLUGIN_INFO("bridge",
+                  "Retrying media download: {} (attempt {}, use_proxy: {})",
+                  entry.file_id, entry.retry_count + 1, entry.use_proxy);
 
       auto result = co_await callback_it->second(
-          retry_info.download_url, retry_info.local_path, retry_info.use_proxy);
+          entry.download_url, entry.local_path, entry.use_proxy);
 
       if (result.has_value()) {
-        // 下载成功，删除重试记录
-        db_manager_->remove_media_download_retry(retry_info.platform,
-                                                 retry_info.file_id);
         PLUGIN_INFO("bridge", "Media download retry successful: {} -> {}",
-                    retry_info.file_id, result.value());
+                    entry.file_id, result.value());
       } else {
-        // 下载失败，更新重试信息
-        int new_retry_count = retry_info.retry_count + 1;
+        entry.retry_count++;
 
-        if (new_retry_count >= retry_info.max_retry_count) {
-          // 达到最大重试次数
-          // 如果之前使用代理失败，尝试直连一次
-          if (retry_info.use_proxy &&
-              new_retry_count == retry_info.max_retry_count) {
+        if (entry.retry_count >= entry.max_retry_count) {
+          // Try direct connection if proxy failed
+          if (entry.use_proxy) {
             PLUGIN_INFO("bridge",
                         "Proxy download failed, trying direct connection: {}",
-                        retry_info.file_id);
-            auto next_retry_time = calculate_next_retry_time(
-                new_retry_count, DEFAULT_MEDIA_RETRY_INTERVAL_SECONDS);
-            db_manager_->update_media_download_retry(
-                retry_info.platform, retry_info.file_id, new_retry_count,
-                next_retry_time, "Trying direct connection",
-                false); // 不使用代理
+                        entry.file_id);
+            entry.use_proxy = false;
+            entry.retry_count = 0; // Reset count for direct connection
+            entry.next_retry_at = calculate_next_retry_time(
+                0, DEFAULT_MEDIA_RETRY_INTERVAL_SECONDS);
+            std::lock_guard<std::mutex> lock(media_retry_mutex_);
+            media_retry_queue_.push_back(std::move(entry));
           } else {
-            // 彻底失败，删除记录
-            db_manager_->remove_media_download_retry(retry_info.platform,
-                                                     retry_info.file_id);
             PLUGIN_WARN("bridge",
                         "Media download retry failed after {} attempts: {}",
-                        retry_info.max_retry_count, retry_info.file_id);
+                        entry.max_retry_count, entry.file_id);
           }
         } else {
-          // 更新重试信息
-          auto next_retry_time = calculate_next_retry_time(
-              new_retry_count, DEFAULT_MEDIA_RETRY_INTERVAL_SECONDS);
-          db_manager_->update_media_download_retry(
-              retry_info.platform, retry_info.file_id, new_retry_count,
-              next_retry_time, "Download failed", retry_info.use_proxy);
-
-          PLUGIN_DEBUG(
-              "bridge",
-              "Updated media download retry count to {}, next retry at: {}",
-              new_retry_count,
-              std::chrono::system_clock::to_time_t(next_retry_time));
+          entry.next_retry_at = calculate_next_retry_time(
+              entry.retry_count, DEFAULT_MEDIA_RETRY_INTERVAL_SECONDS);
+          std::lock_guard<std::mutex> lock(media_retry_mutex_);
+          media_retry_queue_.push_back(std::move(entry));
         }
       }
 
     } catch (const std::exception &e) {
       PLUGIN_ERROR("bridge", "Error processing media download retry: {}",
                    e.what());
+      entry.retry_count++;
+      if (entry.retry_count < entry.max_retry_count) {
+        entry.next_retry_at = calculate_next_retry_time(
+            entry.retry_count, DEFAULT_MEDIA_RETRY_INTERVAL_SECONDS);
+        std::lock_guard<std::mutex> lock(media_retry_mutex_);
+        media_retry_queue_.push_back(std::move(entry));
+      }
     }
   }
 }
@@ -343,7 +360,7 @@ RetryQueueManager::process_media_download_retries() {
 std::chrono::system_clock::time_point
 RetryQueueManager::calculate_next_retry_time(int retry_count,
                                              int base_interval_seconds) const {
-  // 指数退避：2^retry_count * base_interval，但有最大限制
+  // Exponential backoff: 2^retry_count * base_interval, with max limit
   int delay_seconds =
       static_cast<int>(std::pow(2, retry_count)) * base_interval_seconds;
   delay_seconds = std::min(delay_seconds, MAX_RETRY_INTERVAL_SECONDS);
@@ -351,85 +368,25 @@ RetryQueueManager::calculate_next_retry_time(int retry_count,
   return std::chrono::system_clock::now() + std::chrono::seconds(delay_seconds);
 }
 
-std::string RetryQueueManager::serialize_message(
-    const obcx::common::Message &message) const {
-  nlohmann::json message_json = nlohmann::json::array();
-
-  for (const auto &segment : message) {
-    nlohmann::json segment_json;
-    segment_json["type"] = segment.type;
-    segment_json["data"] = segment.data;
-    message_json.push_back(segment_json);
-  }
-
-  return message_json.dump();
+size_t RetryQueueManager::get_pending_message_retry_count() const {
+  std::lock_guard<std::mutex> lock(message_retry_mutex_);
+  return message_retry_queue_.size();
 }
 
-std::optional<obcx::common::Message> RetryQueueManager::deserialize_message(
-    const std::string &json_string) const {
-  try {
-    nlohmann::json message_json = nlohmann::json::parse(json_string);
-
-    if (!message_json.is_array()) {
-      return std::nullopt;
-    }
-
-    obcx::common::Message message;
-    for (const auto &segment_json : message_json) {
-      if (!segment_json.contains("type") || !segment_json.contains("data")) {
-        return std::nullopt;
-      }
-
-      obcx::common::MessageSegment segment;
-      segment.type = segment_json["type"];
-      segment.data = segment_json["data"];
-      message.push_back(segment);
-    }
-
-    return message;
-  } catch (const std::exception &e) {
-    PLUGIN_ERROR("bridge", "Failed to deserialize message: {}", e.what());
-    return std::nullopt;
-  }
+size_t RetryQueueManager::get_pending_media_retry_count() const {
+  std::lock_guard<std::mutex> lock(media_retry_mutex_);
+  return media_retry_queue_.size();
 }
 
 std::string RetryQueueManager::get_retry_statistics() const {
-  // 获取重试队列统计信息
   std::ostringstream stats;
 
-  try {
-    auto message_retries = db_manager_->get_pending_message_retries(1000);
-    auto media_retries = db_manager_->get_pending_media_download_retries(1000);
+  size_t msg_count = get_pending_message_retry_count();
+  size_t media_count = get_pending_media_retry_count();
 
-    stats << "=== 重试队列统计 ===\n";
-    stats << "待重试消息数: " << message_retries.size() << "\n";
-    stats << "待重试媒体下载数: " << media_retries.size() << "\n";
-
-    // 按重试次数统计
-    std::unordered_map<int, int> message_retry_counts;
-    std::unordered_map<int, int> media_retry_counts;
-
-    for (const auto &retry : message_retries) {
-      message_retry_counts[retry.retry_count]++;
-    }
-
-    for (const auto &retry : media_retries) {
-      media_retry_counts[retry.retry_count]++;
-    }
-
-    stats << "\n消息重试次数分布:\n";
-    for (const auto &[count, num] : message_retry_counts) {
-      stats << "  " << count << "次: " << num << "个\n";
-    }
-
-    stats << "\n媒体下载重试次数分布:\n";
-    for (const auto &[count, num] : media_retry_counts) {
-      stats << "  " << count << "次: " << num << "个\n";
-    }
-
-  } catch (const std::exception &e) {
-    stats << "获取统计信息失败: " << e.what() << "\n";
-  }
+  stats << "=== Retry Queue Statistics (In-Memory) ===\n";
+  stats << "Pending message retries: " << msg_count << "\n";
+  stats << "Pending media download retries: " << media_count << "\n";
 
   return stats.str();
 }
