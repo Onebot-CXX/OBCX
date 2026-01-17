@@ -10,5 +10,6 @@
 ## Core 变更回退（asio 别名）
 
 - **问题**：为修复编译测试临时在 `include/core/task_scheduler.hpp` 增加了 `namespace asio = boost::asio;`。
-- **风险**：容易在 core 中引入非预期的命名别名依赖，后续 refactor 时会误用 `asio::`。
-- **TODO**：把 `TaskScheduler` 内部的 `asio::` 全部改回 `boost::asio::`（或在文件内局部 using），然后移除该别名。
+
+## 历史消息记录
+从database中加载历史消息记录给llm当上下文。
