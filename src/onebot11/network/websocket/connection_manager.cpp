@@ -50,7 +50,7 @@ void WebSocketConnectionManager::disconnect() {
       }
     }
     pending_requests_.clear();
-    OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_PENDING_CLEARED);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_PENDING_CLEARED);
   }
 
   // 关闭WebSocket连接
@@ -119,7 +119,7 @@ void WebSocketConnectionManager::on_ws_message(const beast::error_code &ec,
     return;
   }
 
-  OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_RAW_MSG, message);
+  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_RAW_MSG, message);
 
   try {
     nlohmann::json j = nlohmann::json::parse(message);
@@ -128,8 +128,8 @@ void WebSocketConnectionManager::on_ws_message(const beast::error_code &ec,
       uint64_t echo = j["echo"];
 
       std::lock_guard lock(pending_requests_mutex_);
-      OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_FIND_PENDING, echo,
-                      pending_requests_.size());
+      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_FIND_PENDING,
+                            echo, pending_requests_.size());
       auto it = pending_requests_.find(echo);
       if (it != pending_requests_.end()) {
         auto request = it->second;
@@ -142,8 +142,8 @@ void WebSocketConnectionManager::on_ws_message(const beast::error_code &ec,
         if constexpr (USE_COROUTINE_ASYNC_WAIT) {
           // 协程模式：调用 completion handler
           if (request->completion_handler) {
-            OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_CALL_COMPLETION,
-                            echo);
+            OBCX_I18N_DEBUG_TRACE(
+                common::LogMessageKey::ONEBOT11_WS_CALL_COMPLETION, echo);
             request->completion_handler(boost::system::error_code{}, message);
           } else {
             OBCX_I18N_ERROR(common::LogMessageKey::ONEBOT11_WS_COMPLETION_NULL,
@@ -152,16 +152,16 @@ void WebSocketConnectionManager::on_ws_message(const beast::error_code &ec,
         } else {
           // 轮询模式：调用 resolver
           if (request->resolver) {
-            OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_CALL_RESOLVER,
-                            echo);
+            OBCX_I18N_DEBUG_TRACE(
+                common::LogMessageKey::ONEBOT11_WS_CALL_RESOLVER, echo);
             request->resolver(message);
           } else {
             OBCX_I18N_ERROR(common::LogMessageKey::ONEBOT11_WS_RESOLVER_NULL,
                             echo);
           }
         }
-        OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_API_RESPONSE_HANDLED,
-                        echo);
+        OBCX_I18N_DEBUG_TRACE(
+            common::LogMessageKey::ONEBOT11_WS_API_RESPONSE_HANDLED, echo);
         return;
       }
       OBCX_I18N_WARN(common::LogMessageKey::ONEBOT11_WS_UNKNOWN_API_RESPONSE,
@@ -177,8 +177,8 @@ void WebSocketConnectionManager::on_ws_message(const beast::error_code &ec,
         first = false;
         pending_echos << id;
       }
-      OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_CURRENT_PENDING,
-                      pending_echos.str());
+      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_CURRENT_PENDING,
+                            pending_echos.str());
 #endif
     }
   } catch (const nlohmann::json::exception &e) {
@@ -192,7 +192,7 @@ void WebSocketConnectionManager::on_ws_message(const beast::error_code &ec,
       event_callback_(event_opt.value());
     }
   } else {
-    OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_INVALID_EVENT);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_INVALID_EVENT);
   }
 }
 
@@ -222,7 +222,7 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
 
   // if constexpr (USE_COROUTINE_ASYNC_WAIT) {
 
-  OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_USE_COROUTINE);
+  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_USE_COROUTINE);
 
   // 用于存储响应结果
   std::optional<std::string> response_result;
@@ -250,8 +250,9 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
   {
     std::lock_guard lock(pending_requests_mutex_);
     pending_requests_[echo_id] = request;
-    OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_ADD_PENDING_COROUTINE,
-                    echo_id, pending_requests_.size());
+    OBCX_I18N_DEBUG_TRACE(
+        common::LogMessageKey::ONEBOT11_WS_ADD_PENDING_COROUTINE, echo_id,
+        pending_requests_.size());
   }
 
   try {
@@ -263,20 +264,20 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
         },
         asio::use_awaitable);
 
-    OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_MSG_SENT_COROUTINE,
-                    echo_id);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_MSG_SENT_COROUTINE,
+                          echo_id);
 
     if (request->need_wait.load(std::memory_order_acquire)) {
       try {
         co_await request->timeout_timer.async_wait(asio::use_awaitable);
         // 如果走到这里，说明真的超时了
-        OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_REQUEST_TIMEOUT,
-                        echo_id);
+        OBCX_I18N_DEBUG_TRACE(
+            common::LogMessageKey::ONEBOT11_WS_REQUEST_TIMEOUT, echo_id);
         response_error = asio::error::timed_out;
       } catch (const boost::system::system_error &e) {
         if (e.code() == asio::error::operation_aborted) {
           // timer 被取消，说明收到了响应
-          OBCX_I18N_DEBUG(
+          OBCX_I18N_DEBUG_TRACE(
               common::LogMessageKey::ONEBOT11_WS_RESPONSE_RECEIVED_TIMER,
               echo_id);
         } else {
@@ -289,7 +290,7 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
     {
       std::lock_guard lock(pending_requests_mutex_);
       pending_requests_.erase(echo_id);
-      OBCX_I18N_DEBUG(
+      OBCX_I18N_DEBUG_TRACE(
           common::LogMessageKey::ONEBOT11_WS_CLEAN_PENDING_COROUTINE, echo_id,
           pending_requests_.size());
     }
@@ -309,7 +310,7 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
       }
 
       if (response_result) {
-        OBCX_I18N_DEBUG(
+        OBCX_I18N_DEBUG_TRACE(
             common::LogMessageKey::ONEBOT11_WS_API_SUCCESS_COROUTINE, echo_id,
             response_result->length());
         co_return *response_result;
@@ -331,7 +332,7 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
 
   //} else {
   //// ============ 轮询等待模式（原有逻辑）============
-  // OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_USE_POLLING);
+  // OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_USE_POLLING);
 
   //// 使用shared_ptr来管理状态，确保生命周期正确
   // struct RequestState {
@@ -349,12 +350,13 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
 
   //// 设置resolver - 使用shared_ptr确保安全访问
   // request->resolver = [state, echo_id](std::string response) {
-  // OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_RESOLVER_CALLED,
+  // OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_RESOLVER_CALLED,
   // echo_id);
   // std::lock_guard<std::mutex> lock(state->state_mutex);
   // state->result = std::move(response);
   // state->response_received.store(true, std::memory_order_release);
-  // OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_RESPONSE_SET, echo_id);
+  // OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_RESPONSE_SET,
+  // echo_id);
   //};
 
   // request->rejecter = [state](const std::exception_ptr &ex) {
@@ -363,14 +365,14 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
   // state->response_received.store(true, std::memory_order_release);
   //};
 
-  // OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_POLLING_RESOLVER_SET,
+  // OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_POLLING_RESOLVER_SET,
   // echo_id);
 
   //// 添加到pending requests
   //{
   // std::lock_guard lock(pending_requests_mutex_);
   // pending_requests_[echo_id] = request;
-  // OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_ADD_PENDING_POLLING,
+  // OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_ADD_PENDING_POLLING,
   // echo_id, pending_requests_.size());
   //}
 
@@ -383,7 +385,7 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
   //},
   // asio::use_awaitable);
 
-  // OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_MSG_SENT_POLLING,
+  // OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_MSG_SENT_POLLING,
   // echo_id);
 
   //// 启动超时检查
@@ -393,7 +395,7 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
   // try {
   // co_await request->timeout_timer.async_wait(asio::use_awaitable);
   //// 超时发生
-  // OBCX_I18N_DEBUG(
+  // OBCX_I18N_DEBUG_TRACE(
   // common::LogMessageKey::ONEBOT11_WS_TIMEOUT_DETECTED, echo_id);
   // std::lock_guard<std::mutex> lock(state->state_mutex);
   // if (!state->response_received.load(std::memory_order_acquire)) {
@@ -410,7 +412,7 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
   // asio::detached);
 
   //// 轮询等待响应或超时
-  // OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_START_POLLING_WAIT,
+  // OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_START_POLLING_WAIT,
   // echo_id);
 
   // while (!state->response_received.load(std::memory_order_acquire)) {
@@ -434,7 +436,7 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
   //{
   // std::lock_guard lock(pending_requests_mutex_);
   // pending_requests_.erase(echo_id);
-  // OBCX_I18N_DEBUG(
+  // OBCX_I18N_DEBUG_TRACE(
   // common::LogMessageKey::ONEBOT11_WS_CLEAN_PENDING_POLLING, echo_id,
   // pending_requests_.size());
   //}
@@ -453,7 +455,7 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
   // common::LogMessageKey::ONEBOT11_WS_API_TIMEOUT_MSG));
   //}
 
-  // OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_API_SUCCESS_POLLING,
+  // OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_WS_API_SUCCESS_POLLING,
   // echo_id, state->result.length());
   // co_return state->result;
   //}

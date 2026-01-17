@@ -149,7 +149,7 @@ auto HttpConnectionManager::poll_events() -> asio::awaitable<void> {
     }
   }
 
-  OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_HTTP_POLLING_EXIT);
+  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_HTTP_POLLING_EXIT);
 }
 
 void HttpConnectionManager::process_events(std::string_view events_json) {

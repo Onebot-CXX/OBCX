@@ -208,7 +208,7 @@ private:
 
 #define OBCX_I18N_TRACE(__key, ...)                                            \
   OBCX_I18N_LOG_IMPL(trace, __key, ##__VA_ARGS__)
-#define OBCX_I18N_DEBUG(__key, ...)                                            \
+#define OBCX_I18N_DEBUG_TRACE(__key, ...)                                      \
   OBCX_I18N_LOG_IMPL(debug, __key, ##__VA_ARGS__)
 #define OBCX_I18N_INFO(__key, ...)                                             \
   OBCX_I18N_LOG_IMPL(info, __key, ##__VA_ARGS__)
@@ -344,7 +344,7 @@ private:
 
 #define PLUGIN_I18N_TRACE(__plugin_name, __key, ...)                           \
   PLUGIN_I18N_LOG_IMPL(__plugin_name, trace, __key, ##__VA_ARGS__)
-#define PLUGIN_I18N_DEBUG(__plugin_name, __key, ...)                           \
+#define PLUGIN_I18N_DEBUG_TRACE(__plugin_name, __key, ...)                     \
   PLUGIN_I18N_LOG_IMPL(__plugin_name, debug, __key, ##__VA_ARGS__)
 #define PLUGIN_I18N_INFO(__plugin_name, __key, ...)                            \
   PLUGIN_I18N_LOG_IMPL(__plugin_name, info, __key, ##__VA_ARGS__)

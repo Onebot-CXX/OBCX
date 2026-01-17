@@ -90,8 +90,8 @@ public:
 
     std::stringstream ss;
     ss << std::this_thread::get_id();
-    OBCX_I18N_DEBUG(common::LogMessageKey::TASK_SCHEDULER_SUBMIT_HEAVY_TASK,
-                    ss.str());
+    OBCX_I18N_DEBUG_TRACE(
+        common::LogMessageKey::TASK_SCHEDULER_SUBMIT_HEAVY_TASK, ss.str());
 
     // 使用 promise/future 机制实现线程池任务调度
     auto promise = std::make_shared<std::promise<ReturnType>>();
@@ -102,18 +102,19 @@ public:
       try {
         std::stringstream worker_ss;
         worker_ss << std::this_thread::get_id();
-        OBCX_I18N_DEBUG(common::LogMessageKey::TASK_SCHEDULER_HEAVY_TASK_START,
-                        worker_ss.str());
+        OBCX_I18N_DEBUG_TRACE(
+            common::LogMessageKey::TASK_SCHEDULER_HEAVY_TASK_START,
+            worker_ss.str());
 
         // 在线程池中执行实际的重负载任务
         if constexpr (std::is_void_v<ReturnType>) {
           task();
-          OBCX_I18N_DEBUG(
+          OBCX_I18N_DEBUG_TRACE(
               common::LogMessageKey::TASK_SCHEDULER_HEAVY_TASK_COMPLETE_VOID);
           promise->set_value();
         } else {
           auto result = task();
-          OBCX_I18N_DEBUG(
+          OBCX_I18N_DEBUG_TRACE(
               common::LogMessageKey::TASK_SCHEDULER_HEAVY_TASK_COMPLETE_RESULT);
           promise->set_value(std::move(result));
         }
@@ -190,8 +191,9 @@ public:
 
     using ReturnType = std::invoke_result_t<Func>;
 
-    OBCX_I18N_DEBUG(common::LogMessageKey::TASK_SCHEDULER_TIMEOUT_TASK_START,
-                    timeout.count());
+    OBCX_I18N_DEBUG_TRACE(
+        common::LogMessageKey::TASK_SCHEDULER_TIMEOUT_TASK_START,
+        timeout.count());
 
     try {
       // 这里可以使用 asio::steady_timer 实现真正的超时逻辑

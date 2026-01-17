@@ -105,8 +105,8 @@ auto TGBot::poll_updates() -> asio::awaitable<void> {
       // Parse and dispatch events
       // In a real implementation, we would parse the updates and dispatch
       // events For now, we'll just log that we received updates
-      OBCX_I18N_DEBUG(common::LogMessageKey::TELEGRAMBOT_RECEIVED_UPDATES,
-                      updates.length());
+      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::TELEGRAMBOT_RECEIVED_UPDATES,
+                            updates.length());
 
       // Update offset for next poll
       // In a real implementation, we would parse the actual update IDs
@@ -582,15 +582,15 @@ auto TGBot::extract_media_files(const nlohmann::json &message_data)
         info.file_id = largest_photo["file_id"].get<std::string>();
 
         // 调试：打印photo对象结构
-        OBCX_I18N_DEBUG(common::LogMessageKey::TELEGRAMBOT_PHOTO_CONTENT,
-                        largest_photo.dump());
+        OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::TELEGRAMBOT_PHOTO_CONTENT,
+                              largest_photo.dump());
 
         info.file_unique_id =
             largest_photo.contains("file_unique_id")
                 ? largest_photo["file_unique_id"].get<std::string>()
                 : "";
 
-        OBCX_I18N_DEBUG(
+        OBCX_I18N_DEBUG_TRACE(
             common::LogMessageKey::TELEGRAMBOT_FILE_UNIQUE_ID_EXTRACTED,
             info.file_unique_id, info.file_unique_id.empty());
 
@@ -616,15 +616,16 @@ auto TGBot::extract_media_files(const nlohmann::json &message_data)
           info.file_id = media_obj["file_id"].get<std::string>();
 
           // 调试：打印媒体对象结构
-          OBCX_I18N_DEBUG(common::LogMessageKey::TELEGRAMBOT_MEDIA_CONTENT,
-                          media_type, media_obj.dump());
+          OBCX_I18N_DEBUG_TRACE(
+              common::LogMessageKey::TELEGRAMBOT_MEDIA_CONTENT, media_type,
+              media_obj.dump());
 
           info.file_unique_id =
               media_obj.contains("file_unique_id")
                   ? media_obj["file_unique_id"].get<std::string>()
                   : "";
 
-          OBCX_I18N_DEBUG(
+          OBCX_I18N_DEBUG_TRACE(
               common::LogMessageKey::TELEGRAMBOT_MEDIA_FILE_UNIQUE_ID_EXTRACTED,
               media_type, info.file_unique_id, info.file_unique_id.empty());
 

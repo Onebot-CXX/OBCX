@@ -90,7 +90,8 @@ auto TelegramConnectionManager::send_action_and_wait_async(
   try {
     // 解析action_payload以获取方法名和参数
     auto payload_json = json::parse(action_payload);
-    OBCX_I18N_DEBUG(common::LogMessageKey::SENDING_ACTION, action_payload);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::SENDING_ACTION,
+                          action_payload);
     std::string method = payload_json.value("method", "");
 
     // 设置请求头
@@ -301,19 +302,20 @@ auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
     }
   }
 
-  OBCX_I18N_DEBUG(common::LogMessageKey::POLLING_COROUTINE_EXIT);
+  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::POLLING_COROUTINE_EXIT);
 }
 
 void TelegramConnectionManager::process_updates(std::string_view updates_json) {
   try {
     auto json_data = json::parse(updates_json);
-    OBCX_I18N_DEBUG(common::LogMessageKey::RECEIVED_UPDATES, updates_json);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::RECEIVED_UPDATES,
+                          updates_json);
 
     // 检查是否有result字段
     if (json_data.contains("result") && json_data["result"].is_array()) {
       auto result_array = json_data["result"];
-      OBCX_I18N_DEBUG(common::LogMessageKey::PROCESSING_UPDATES,
-                      result_array.size());
+      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROCESSING_UPDATES,
+                            result_array.size());
 
       // 更新offset为最新的update_id + 1
       if (!result_array.empty()) {
@@ -326,16 +328,16 @@ void TelegramConnectionManager::process_updates(std::string_view updates_json) {
       // 处理每个更新
       for (const auto &update_json : result_array) {
         std::string single_update = update_json.dump();
-        OBCX_I18N_DEBUG(common::LogMessageKey::PROCESSING_UPDATE,
-                        single_update);
+        OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROCESSING_UPDATE,
+                              single_update);
         auto event_opt = adapter_.parse_event(single_update);
         if (event_opt && event_callback_) {
-          OBCX_I18N_DEBUG(common::LogMessageKey::DISPATCHING_EVENT);
+          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::DISPATCHING_EVENT);
           event_callback_(event_opt.value());
         } else if (!event_opt) {
-          OBCX_I18N_DEBUG(common::LogMessageKey::FAILED_PARSE_EVENT);
+          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::FAILED_PARSE_EVENT);
         } else {
-          OBCX_I18N_DEBUG(common::LogMessageKey::EVENT_CALLBACK_NOT_SET);
+          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EVENT_CALLBACK_NOT_SET);
         }
       }
     }

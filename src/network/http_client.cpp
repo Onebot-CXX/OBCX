@@ -189,7 +189,7 @@ auto HttpClient::head_async(std::string_view path,
 auto HttpClient::post_sync(std::string_view path, std::string_view body,
                            const std::map<std::string, std::string> &headers)
     -> HttpResponse {
-  OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_POST_DEBUG, path, body);
+  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_POST_DEBUG, path, body);
 
   try {
     // 创建请求
@@ -261,9 +261,10 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
       response.raw_response = std::move(res);
     }
 
-    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_STATUS,
-                    response.status_code);
-    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_BODY, response.body);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_RESPONSE_STATUS,
+                          response.status_code);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_RESPONSE_BODY,
+                          response.body);
 
     return response;
   } catch (const std::exception &e) {
@@ -275,7 +276,7 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
 auto HttpClient::get_sync(std::string_view path,
                           const std::map<std::string, std::string> &headers)
     -> HttpResponse {
-  OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_GET_DEBUG, path);
+  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_GET_DEBUG, path);
 
   try {
     // 创建请求
@@ -344,9 +345,10 @@ auto HttpClient::get_sync(std::string_view path,
       response.raw_response = std::move(res);
     }
 
-    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_STATUS,
-                    response.status_code);
-    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_BODY, response.body);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_RESPONSE_STATUS,
+                          response.status_code);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_RESPONSE_BODY,
+                          response.body);
 
     return response;
   } catch (const std::exception &e) {

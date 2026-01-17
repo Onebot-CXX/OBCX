@@ -48,8 +48,8 @@ auto MediaConverter::convert_webm_to_gif(const std::string &webm_url,
           << "2>/dev/null";
     }
 
-    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_EXECUTE_FFMPEG,
-                    cmd.str());
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_EXECUTE_FFMPEG,
+                          cmd.str());
 
     bool success = execute_command(cmd.str());
 
@@ -88,7 +88,7 @@ auto MediaConverter::convert_webm_to_gif_with_fallback(
         webm_url, output_path);
 
     // 第一次尝试：完全无损转换（保持原始分辨率、帧率、颜色）
-    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_TRY_LOSSLESS);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_TRY_LOSSLESS);
     bool lossless_success =
         convert_webm_to_gif(webm_url, output_path, max_duration, 0);
 
@@ -138,8 +138,8 @@ auto MediaConverter::convert_tgs_to_gif(const std::string &tgs_url,
         << "--width " << max_width << " --height " << max_width << " "
         << "2>/dev/null";
 
-    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_EXECUTE_TGS,
-                    cmd.str());
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_EXECUTE_TGS,
+                          cmd.str());
 
     bool success = execute_command(cmd.str());
 
@@ -179,8 +179,8 @@ auto MediaConverter::generate_temp_path(const std::string &extension)
           "convert_" + std::to_string(dis(gen)) + "." + extension;
       std::filesystem::path temp_file = shared_dir / filename;
 
-      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_DOCKER_PATH,
-                      temp_file.string());
+      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_DOCKER_PATH,
+                            temp_file.string());
       return temp_file.string();
     }
 
@@ -198,8 +198,8 @@ auto MediaConverter::generate_temp_path(const std::string &extension)
         "convert_" + std::to_string(dis(gen)) + "." + extension;
     std::filesystem::path temp_file = temp_dir / filename;
 
-    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_TEMP_PATH,
-                    temp_file.string());
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_TEMP_PATH,
+                          temp_file.string());
     return temp_file.string();
   } catch (const std::exception &e) {
     OBCX_I18N_ERROR(common::LogMessageKey::MEDIA_CONVERT_TEMP_PATH_FAILED,
@@ -214,7 +214,8 @@ auto MediaConverter::cleanup_temp_file(const std::string &file_path) -> void {
   try {
     if (std::filesystem::exists(file_path)) {
       std::filesystem::remove(file_path);
-      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_CLEANUP, file_path);
+      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_CLEANUP,
+                            file_path);
     }
   } catch (const std::exception &e) {
     OBCX_I18N_WARN(common::LogMessageKey::MEDIA_CONVERT_CLEANUP_FAILED,
@@ -224,14 +225,16 @@ auto MediaConverter::cleanup_temp_file(const std::string &file_path) -> void {
 
 auto MediaConverter::execute_command(const std::string &command) -> bool {
   try {
-    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_EXECUTE_CMD, command);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_EXECUTE_CMD,
+                          command);
     int result = std::system(command.c_str());
     bool success = (result == 0);
 
     if (success) {
-      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_CMD_SUCCESS);
+      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_CMD_SUCCESS);
     } else {
-      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_CMD_FAILED, result);
+      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_CMD_FAILED,
+                            result);
     }
 
     return success;
@@ -245,20 +248,20 @@ auto MediaConverter::execute_command(const std::string &command) -> bool {
 auto MediaConverter::is_valid_file(const std::string &file_path) -> bool {
   try {
     if (!std::filesystem::exists(file_path)) {
-      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_FILE_NOT_EXIST,
-                      file_path);
+      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_FILE_NOT_EXIST,
+                            file_path);
       return false;
     }
 
     auto file_size = std::filesystem::file_size(file_path);
     if (file_size == 0) {
-      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_FILE_EMPTY,
-                      file_path);
+      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_FILE_EMPTY,
+                            file_path);
       return false;
     }
 
-    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_FILE_VALID, file_path,
-                    file_size);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MEDIA_CONVERT_FILE_VALID,
+                          file_path, file_size);
     return true;
   } catch (const std::exception &e) {
     OBCX_I18N_ERROR(common::LogMessageKey::MEDIA_CONVERT_CHECK_FILE_EXCEPTION,

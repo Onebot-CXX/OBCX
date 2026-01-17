@@ -24,9 +24,9 @@ ProxyHttpClient::ProxyHttpClient(asio::io_context &ioc,
     : HttpClient(ioc, config), ioc_(ioc),
       proxy_config_(std::move(proxy_config)), resolver_(ioc),
       target_host_(config.host), target_port_(config.port) {
-  OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_CLIENT_CREATED,
-                  proxy_config_.host, proxy_config_.port, target_host_,
-                  target_port_);
+  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROXY_CLIENT_CREATED,
+                        proxy_config_.host, proxy_config_.port, target_host_,
+                        target_port_);
 }
 
 auto ProxyHttpClient::post_sync(
@@ -119,7 +119,7 @@ auto ProxyHttpClient::connect_through_proxy() -> tcp::socket {
           ec.message()));
     }
 
-    OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_HTTPS_SSL_SUCCESS);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROXY_HTTPS_SSL_SUCCESS);
     return establish_https_tunnel(ssl_socket, target_host_, target_port_);
   }
   case ProxyType::SOCKS5: {
@@ -204,7 +204,8 @@ tcp::socket ProxyHttpClient::establish_http_tunnel(
       break; // 空行表示头部结束
     }
 
-    OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_RESPONSE_HEADER, header_line);
+    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROXY_RESPONSE_HEADER,
+                          header_line);
   }
 
   return std::move(proxy_socket);
@@ -265,8 +266,8 @@ auto ProxyHttpClient::send_http_request(
       for (int retry = 0; retry < max_retries; ++retry) {
         ssl_stream.handshake(ssl::stream_base::client, ec);
         if (!ec) {
-          OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_SSL_HANDSHAKE_SUCCESS,
-                          retry);
+          OBCX_I18N_DEBUG_TRACE(
+              common::LogMessageKey::PROXY_SSL_HANDSHAKE_SUCCESS, retry);
           break;
         }
 
@@ -276,13 +277,14 @@ auto ProxyHttpClient::send_http_request(
         if (retry < max_retries - 1) {
           // 指数退避重试策略：100ms, 200ms, 400ms (每次翻倍)
           auto wait_time = std::chrono::milliseconds(1000 << retry);
-          OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_RETRY_WAIT,
-                          wait_time.count());
+          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROXY_RETRY_WAIT,
+                                wait_time.count());
           std::this_thread::sleep_for(wait_time);
 
           // 如果是stream truncated错误，可能需要重新创建连接
           if (ec.message().find("stream truncated") != std::string::npos) {
-            OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_STREAM_TRUNCATED);
+            OBCX_I18N_DEBUG_TRACE(
+                common::LogMessageKey::PROXY_STREAM_TRUNCATED);
             // TODO: implement this
           }
         } else {
@@ -361,8 +363,8 @@ auto ProxyHttpClient::establish_https_tunnel(
     connect_req.set(http::field::proxy_authorization, "Basic " + credentials);
   }
 
-  OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_HTTPS_CONNECT_SEND,
-                  connect_target);
+  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROXY_HTTPS_CONNECT_SEND,
+                        connect_target);
 
   // 通过SSL连接发送CONNECT请求
   boost::system::error_code ec;
@@ -396,9 +398,9 @@ auto ProxyHttpClient::establish_https_tunnel(
   // 清空buffer中的任何额外数据
   buffer.consume(buffer.size());
 
-  OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_HTTPS_TUNNEL_SUCCESS,
-                  proxy_config_.host, proxy_config_.port, target_host,
-                  target_port);
+  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROXY_HTTPS_TUNNEL_SUCCESS,
+                        proxy_config_.host, proxy_config_.port, target_host,
+                        target_port);
 
   // 返回底层socket，现在它已经通过SSL代理建立了到目标的隧道
   return std::move(ssl_socket.next_layer());
@@ -408,8 +410,8 @@ auto ProxyHttpClient::establish_socks5_tunnel(tcp::socket &proxy_socket,
                                               const std::string &target_host,
                                               uint16_t target_port)
     -> tcp::socket {
-  OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_SOCKS5_TUNNEL_START,
-                  proxy_config_.host, target_host, target_port);
+  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROXY_SOCKS5_TUNNEL_START,
+                        proxy_config_.host, target_host, target_port);
 
   boost::system::error_code ec;
 
@@ -540,9 +542,9 @@ auto ProxyHttpClient::establish_socks5_tunnel(tcp::socket &proxy_socket,
     }
   }
 
-  OBCX_I18N_DEBUG(common::LogMessageKey::PROXY_SOCKS5_TUNNEL_SUCCESS,
-                  proxy_config_.host, proxy_config_.port, target_host,
-                  target_port);
+  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROXY_SOCKS5_TUNNEL_SUCCESS,
+                        proxy_config_.host, proxy_config_.port, target_host,
+                        target_port);
 
   return std::move(proxy_socket);
 }
