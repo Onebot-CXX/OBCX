@@ -17,7 +17,6 @@
 #include <thread>
 
 namespace obcx::core {
-namespace asio = boost::asio;
 
 /**
  * @brief 基于 Boost.Asio async_compose 的优雅任务调度器
