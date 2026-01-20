@@ -121,7 +121,8 @@ required = ["plugin_a"]
 
   PluginManager pm;
   std::vector<std::string> plugin_names = {"plugin_a", "plugin_b"};
-  EXPECT_THROW(pm.sort_plugins_by_priority_and_dependencies(plugin_names),
+  EXPECT_THROW(auto _ =
+                   pm.sort_plugins_by_priority_and_dependencies(plugin_names),
                std::runtime_error);
 }
 
@@ -142,7 +143,8 @@ required = ["plugin_a"]
 
   PluginManager pm;
   std::vector<std::string> plugin_names = {"plugin_a", "plugin_b", "plugin_c"};
-  EXPECT_THROW(pm.sort_plugins_by_priority_and_dependencies(plugin_names),
+  EXPECT_THROW(auto _ =
+                   pm.sort_plugins_by_priority_and_dependencies(plugin_names),
                std::runtime_error);
 }
 
@@ -155,7 +157,8 @@ required = ["non_existent"]
 
   PluginManager pm;
   std::vector<std::string> plugin_names = {"plugin_a"};
-  EXPECT_THROW(pm.sort_plugins_by_priority_and_dependencies(plugin_names),
+  EXPECT_THROW(auto _ =
+                   pm.sort_plugins_by_priority_and_dependencies(plugin_names),
                std::runtime_error);
 }
 

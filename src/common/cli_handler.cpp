@@ -5,6 +5,7 @@
 #include <iostream>
 #include <print>
 #include <spdlog/common.h>
+#include <string_view>
 
 namespace obcx::common {
 
@@ -23,8 +24,10 @@ auto CliHandler::process_command(const std::string &line) -> bool {
   }
 
   // Check for log_level=xxx pattern
-  if (line.starts_with("log_level=")) {
-    std::string level_str = line.substr(10); // length of "log_level="
+  constexpr std::string_view loglevel_prefix = "log_level=";
+  if (line.starts_with(loglevel_prefix)) {
+    std::string level_str =
+        line.substr(loglevel_prefix.length()); // length of "log_level="
     return handle_log_level(ctx_, level_str);
   }
 
