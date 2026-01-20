@@ -558,6 +558,10 @@ void I18nLogMessages::setup_message_keys() {
       "Failed to load config file {}: {}";
   message_keys_[LogMessageKey::CONFIG_LOADED_FROM] =
       "Configuration loaded from: {}";
+  message_keys_[LogMessageKey::CONFIG_MISSING_FIELD] =
+      "Config field missing or invalid: {}";
+  message_keys_[LogMessageKey::CONFIG_INVALID_VALUE] =
+      "Config value is invalid: {}";
 
   // Plugin Manager
   message_keys_[LogMessageKey::PLUGIN_DIR_ADDED] = "Added plugin directory: {}";
@@ -600,6 +604,14 @@ void I18nLogMessages::setup_message_keys() {
       "Starting plugin reload...";
   message_keys_[LogMessageKey::PLUGIN_RELOAD_COMPLETE] =
       "Plugin reload completed";
+  message_keys_[LogMessageKey::PLUGIN_DEPENDENCY_MISSING] =
+      "Plugin '{}' requires '{}' which is not in the plugin list";
+  message_keys_[LogMessageKey::PLUGIN_CIRCULAR_DEPENDENCY] =
+      "Circular dependency detected among plugins: {}";
+  message_keys_[LogMessageKey::PLUGIN_PRIORITY_OUT_OF_RANGE] =
+      "Plugin '{}' priority out of range [0-255], using default 0";
+  message_keys_[LogMessageKey::PLUGIN_LOAD_ORDER_INFO] =
+      "Plugin initialization order: {}";
 
   // Main / Framework
   message_keys_[LogMessageKey::SHUTDOWN_IN_PROGRESS] =

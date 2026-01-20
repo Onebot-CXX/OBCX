@@ -130,6 +130,14 @@ public:
 
   void shutdown_all_plugins();
 
+  /// Sort plugins by priority and topological order
+  /// @param plugin_names Names of plugins to sort
+  /// @return Sorted plugin names, or empty vector if circular dependency
+  /// detected
+  [[nodiscard]] auto sort_plugins_by_priority_and_dependencies(
+      const std::vector<std::string> &plugin_names) const
+      -> std::vector<std::string>;
+
 private:
   [[nodiscard]] auto find_plugin_file(const std::string &plugin_name) const
       -> std::string;

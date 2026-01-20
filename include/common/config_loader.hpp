@@ -21,6 +21,9 @@ struct PluginConfig {
   bool enabled;
   toml::table config;
   std::vector<std::string> callbacks;
+  uint8_t priority = 0; // 0 = lowest, 255 = highest
+  std::vector<std::string>
+      required; // plugins that must be loaded before this one
 };
 
 class ConfigLoader {

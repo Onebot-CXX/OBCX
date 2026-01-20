@@ -1,7 +1,12 @@
 #include "common/plugin_manager.hpp"
+#include "common/config_loader.hpp"
 #include "common/logger.hpp"
 
+#include <algorithm>
 #include <filesystem>
+#include <queue>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace obcx::common {
 
@@ -244,6 +249,134 @@ auto PluginManager::load_plugin_library(const std::string &plugin_path)
     dlclose(handle);
     return nullptr;
   }
+}
+
+auto PluginManager::sort_plugins_by_priority_and_dependencies(
+    const std::vector<std::string> &plugin_names) const
+    -> std::vector<std::string> {
+
+  // Build plugin config map
+  std::unordered_map<std::string, common::PluginConfig> plugin_configs;
+  auto &config_loader = common::ConfigLoader::instance();
+
+  for (const auto &name : plugin_names) {
+    if (auto config = config_loader.get_plugin_config(name)) {
+      plugin_configs[name] = *config;
+    } else {
+      // Plugin has no config, create default
+      common::PluginConfig default_config;
+      default_config.name = name;
+      default_config.enabled = true;
+      default_config.priority = 0;
+      plugin_configs[name] = default_config;
+    }
+  }
+
+  // Build adjacency graph and in-degree map
+  std::unordered_map<std::string, std::vector<std::string>> graph;
+  std::unordered_map<std::string, int> in_degree;
+
+  for (const auto &name : plugin_names) {
+    in_degree[name] = 0;
+    graph[name] = {};
+  }
+
+  // Build edges: if B requires A, then A -> B
+  for (const auto &[name, config] : plugin_configs) {
+    for (const auto &required : config.required) {
+      // Check if required plugin is in the list
+      if (std::find(plugin_names.begin(), plugin_names.end(), required) ==
+          plugin_names.end()) {
+        OBCX_I18N_ERROR(common::LogMessageKey::PLUGIN_DEPENDENCY_MISSING, name,
+                        required);
+        throw std::runtime_error("Plugin '" + name + "' requires '" + required +
+                                 "' which is not in the plugin list");
+      }
+
+      graph[required].push_back(name);
+      in_degree[name]++;
+    }
+  }
+
+  // Kahn's algorithm with priority queue
+  // Use max heap: higher priority comes first
+  auto cmp = [&plugin_configs](const std::string &a, const std::string &b) {
+    return plugin_configs[a].priority < plugin_configs[b].priority;
+  };
+  std::priority_queue<std::string, std::vector<std::string>, decltype(cmp)> pq(
+      cmp);
+
+  // Add all nodes with in-degree 0
+  for (const auto &[name, degree] : in_degree) {
+    if (degree == 0) {
+      pq.push(name);
+    }
+  }
+
+  std::vector<std::string> sorted_plugins;
+
+  while (!pq.empty()) {
+    std::string current = pq.top();
+    pq.pop();
+    sorted_plugins.push_back(current);
+
+    // Reduce in-degree for neighbors
+    for (const auto &neighbor : graph[current]) {
+      in_degree[neighbor]--;
+      if (in_degree[neighbor] == 0) {
+        pq.push(neighbor);
+      }
+    }
+  }
+
+  // Check for circular dependencies
+  if (sorted_plugins.size() != plugin_names.size()) {
+    // Find plugins involved in the cycle
+    std::vector<std::string> cycle_plugins;
+    for (const auto &[name, degree] : in_degree) {
+      if (degree > 0) {
+        cycle_plugins.push_back(name);
+      }
+    }
+
+    std::string cycle_info;
+    for (size_t i = 0; i < cycle_plugins.size(); ++i) {
+      cycle_info += cycle_plugins[i];
+      if (i < cycle_plugins.size() - 1) {
+        cycle_info += ", ";
+      }
+    }
+
+    // Log circular dependency error
+    OBCX_I18N_ERROR(common::LogMessageKey::PLUGIN_CIRCULAR_DEPENDENCY,
+                    cycle_info);
+
+    // Log detailed dependency information
+    std::string detail_info;
+    for (const auto &name : cycle_plugins) {
+      const auto &config = plugin_configs[name];
+      if (!config.required.empty()) {
+        std::string deps;
+        for (size_t i = 0; i < config.required.size(); ++i) {
+          deps += config.required[i];
+          if (i < config.required.size() - 1) {
+            deps += ", ";
+          }
+        }
+        std::string line = "Plugin '" + name + "' requires: " + deps;
+        OBCX_I18N_ERROR(common::LogMessageKey::CONFIG_INVALID_VALUE, line);
+        if (!detail_info.empty()) {
+          detail_info += "; ";
+        }
+        detail_info += line;
+      }
+    }
+
+    throw std::runtime_error("Circular dependency detected among plugins: " +
+                             cycle_info + ". " + detail_info);
+  }
+
+  return sorted_plugins;
 }
 
 } // namespace obcx::common

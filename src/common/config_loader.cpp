@@ -96,6 +96,30 @@ auto ConfigLoader::get_plugin_config(const std::string &plugin_name) const
         }
       }
 
+      // Parse priority field (default: 0)
+      if (auto priority_section = plugin_table->get("priority")) {
+        if (auto priority_val = priority_section->value<int64_t>()) {
+          if (*priority_val < 0 || *priority_val > 255) {
+            OBCX_I18N_WARN(common::LogMessageKey::PLUGIN_PRIORITY_OUT_OF_RANGE,
+                           plugin_name);
+            config.priority = 0;
+          } else {
+            config.priority = static_cast<uint8_t>(*priority_val);
+          }
+        }
+      }
+
+      // Parse required field (default: empty array)
+      if (auto required_section = plugin_table->get("required")) {
+        if (auto required_array = required_section->as_array()) {
+          for (const auto &req : *required_array) {
+            if (auto req_str = req.value<std::string>()) {
+              config.required.push_back(*req_str);
+            }
+          }
+        }
+      }
+
       return config;
     }
   }
@@ -130,6 +154,31 @@ auto ConfigLoader::get_all_plugin_configs() const -> std::vector<PluginConfig> {
               for (const auto &callback : *callbacks_array) {
                 if (auto callback_str = callback.value<std::string>()) {
                   config.callbacks.push_back(*callback_str);
+                }
+              }
+            }
+          }
+
+          // Parse priority field (default: 0)
+          if (auto priority_section = plugin_table->get("priority")) {
+            if (auto priority_val = priority_section->value<int64_t>()) {
+              if (*priority_val < 0 || *priority_val > 255) {
+                OBCX_I18N_WARN(
+                    common::LogMessageKey::PLUGIN_PRIORITY_OUT_OF_RANGE,
+                    config.name);
+                config.priority = 0;
+              } else {
+                config.priority = static_cast<uint8_t>(*priority_val);
+              }
+            }
+          }
+
+          // Parse required field (default: empty array)
+          if (auto required_section = plugin_table->get("required")) {
+            if (auto required_array = required_section->as_array()) {
+              for (const auto &req : *required_array) {
+                if (auto req_str = req.value<std::string>()) {
+                  config.required.push_back(*req_str);
                 }
               }
             }

@@ -196,8 +196,26 @@ public:
   static auto setup_bot(core::IBot &bot, const common::BotConfig &config,
                         common::PluginManager &plugin_manager) -> bool {
     try {
-      // Load and initialize plugins for this bot
-      for (const auto &plugin_name : config.plugins) {
+      // Sort plugins by priority and dependencies
+      auto sorted_plugins =
+          plugin_manager.sort_plugins_by_priority_and_dependencies(
+              config.plugins);
+
+      // Log the sorted plugin order
+      if (!sorted_plugins.empty()) {
+        std::string order_info;
+        for (size_t i = 0; i < sorted_plugins.size(); ++i) {
+          order_info += sorted_plugins[i];
+          if (i < sorted_plugins.size() - 1) {
+            order_info += " -> ";
+          }
+        }
+        OBCX_I18N_INFO(common::LogMessageKey::PLUGIN_LOAD_ORDER_INFO,
+                       order_info);
+      }
+
+      // Load and initialize plugins in sorted order
+      for (const auto &plugin_name : sorted_plugins) {
         if (!plugin_manager.load_plugin(plugin_name)) {
           OBCX_I18N_WARN(common::LogMessageKey::PLUGIN_LOAD_WARN, plugin_name);
           continue;
