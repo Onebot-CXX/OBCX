@@ -1,13 +1,12 @@
 #pragma once
 
 #include <boost/asio.hpp>
+#include <boost/asio/experimental/channel.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
 #include <functional>
 #include <future>
 #include <memory>
-#include <mutex>
-#include <queue>
 #include <string>
 
 namespace obcx::network {
@@ -94,10 +93,9 @@ private:
   beast::flat_buffer buffer_;
 
   // 写入队列相关
-  std::queue<std::shared_ptr<WriteRequest>> write_queue_;
-  std::mutex write_queue_mutex_;
-  asio::steady_timer write_queue_timer_;
-  bool writer_running_ = false;
+  using Channel = asio::experimental::channel<void(
+      boost::system::error_code, std::shared_ptr<WriteRequest>)>;
+  Channel channel_;
   std::exception_ptr writer_error_;
 };
 

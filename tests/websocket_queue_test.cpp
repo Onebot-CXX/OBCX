@@ -17,6 +17,7 @@
 #include <future>
 #include <gtest/gtest.h>
 #include <memory>
+#include <queue>
 #include <thread>
 
 // NOLINTBEGIN
@@ -136,14 +137,38 @@ private:
         timer->expires_after(std::chrono::milliseconds(WEAK_NETWORK_DELAY_MS));
         timer->async_wait([this, ws, timer](beast::error_code ec) {
           if (!ec) {
-            std::string response = "OK";
-            ws->async_write(asio::buffer(response), asio::detached);
+            queue_write("OK");
           }
         });
 
         start_read_loop(ws);
       }
     });
+  }
+
+  void queue_write(std::string message) {
+    bool write_in_progress = !write_queue_.empty();
+    write_queue_.push(std::move(message));
+
+    if (!write_in_progress) {
+      do_write();
+    }
+  }
+
+  void do_write() {
+    if (write_queue_.empty() || !ws_ || !ws_->is_open()) {
+      return;
+    }
+
+    ws_->async_write(asio::buffer(write_queue_.front()),
+                     [this](beast::error_code ec, std::size_t /*bytes*/) {
+                       if (!ec) {
+                         write_queue_.pop();
+                         if (!write_queue_.empty()) {
+                           do_write();
+                         }
+                       }
+                     });
   }
 
   asio::io_context ioc_;
@@ -155,6 +180,8 @@ private:
   std::shared_ptr<beast::websocket::stream<tcp::socket>> ws_;
   std::atomic<bool> accepting_;
   std::atomic<size_t> received_count_{0};
+
+  std::queue<std::string> write_queue_;
 };
 
 /**
@@ -212,7 +239,9 @@ protected:
               "127.0.0.1", std::to_string(server_->get_port()), "",
               [](const beast::error_code &ec, const std::string &msg) {
                 if (ec) {
-                  OBCX_ERROR("WebSocket错误: {}", ec.message());
+                  if (ec != asio::error::operation_aborted) {
+                    OBCX_ERROR("WebSocket错误: {}", ec.message());
+                  }
                 } else if (!msg.empty()) {
                   OBCX_DEBUG("收到消息: {}", msg);
                 }

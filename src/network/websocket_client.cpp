@@ -10,7 +10,7 @@
 namespace obcx::network {
 
 WebsocketClient::WebsocketClient(asio::io_context &ioc)
-    : ws_(ioc), write_queue_timer_(ioc) {}
+    : ws_(ioc), channel_(ioc, 100) {}
 
 auto WebsocketClient::run(std::string host, std::string port,
                           std::string access_token, MessageHandler on_message)
@@ -127,7 +127,8 @@ auto WebsocketClient::run(std::string host, std::string port,
      * Log error if not actively closing connection
      * \endif
      */
-    if (se.code() != websocket::error::closed) {
+    if (se.code() != websocket::error::closed &&
+        se.code() != asio::error::operation_aborted) {
       OBCX_I18N_ERROR(common::LogMessageKey::WEBSOCKET_RUN_ERROR, se.what());
     }
     /*
@@ -169,14 +170,12 @@ auto WebsocketClient::send(std::string message) -> asio::awaitable<void> {
   auto request = std::make_shared<WriteRequest>(std::move(message));
   auto future = request->promise.get_future();
 
-  // 将请求加入队列
-  {
-    std::lock_guard lock(write_queue_mutex_);
-    write_queue_.push(request);
-  }
-
-  // 通知写入器有新消息
-  write_queue_timer_.cancel();
+  // 将请求发送到通道
+  // 使用 try_send
+  // 避免阻塞，如果通道满了（这里配置了100），则会失败或者我们可以选择
+  // async_send 在这个协程上下文中，async_send 是安全的
+  co_await channel_.async_send(boost::system::error_code{}, request,
+                               asio::use_awaitable);
 
   // 等待写入完成
   try {
@@ -212,11 +211,6 @@ auto WebsocketClient::close() -> asio::awaitable<void> {
 }
 
 void WebsocketClient::start_writer() {
-  if (writer_running_) {
-    return;
-  }
-
-  writer_running_ = true;
   writer_error_ = nullptr;
 
   // 启动写入器协程
@@ -227,16 +221,18 @@ void WebsocketClient::start_writer() {
 }
 
 auto WebsocketClient::writer_coro() -> asio::awaitable<void> {
-  while (writer_running_ && ws_.is_open()) {
+  while (ws_.is_open()) {
     std::shared_ptr<WriteRequest> request = nullptr;
+    beast::error_code ec;
 
-    // 从队列中取出一个请求
-    {
-      std::lock_guard lock(write_queue_mutex_);
-      if (!write_queue_.empty()) {
-        request = write_queue_.front();
-        write_queue_.pop();
+    // 从通道接收请求
+    try {
+      request = co_await channel_.async_receive(asio::use_awaitable);
+    } catch (const boost::system::system_error &e) {
+      if (e.code() == asio::experimental::error::channel_closed) {
+        break;
       }
+      throw;
     }
 
     if (request) {
@@ -263,37 +259,10 @@ auto WebsocketClient::writer_coro() -> asio::awaitable<void> {
         // 记录错误
         writer_error_ = std::current_exception();
       }
-    } else {
-      // 队列为空，等待一段时间
-      co_await asio::steady_timer(co_await asio::this_coro::executor,
-                                  std::chrono::milliseconds(10))
-          .async_wait(asio::use_awaitable);
     }
   }
 }
 
-void WebsocketClient::stop_writer() {
-  writer_running_ = false;
-
-  // 清空队列中的所有请求
-  std::lock_guard lock(write_queue_mutex_);
-  while (!write_queue_.empty()) {
-    auto request = write_queue_.front();
-    write_queue_.pop();
-
-    // 通知所有未完成的请求
-    try {
-      if (writer_error_) {
-        request->promise.set_exception(writer_error_);
-      } else {
-        request->promise.set_exception(std::make_exception_ptr(
-            std::runtime_error(common::I18nLogMessages::get_message(
-                common::LogMessageKey::WEBSOCKET_CONNECTION_CLOSED))));
-      }
-    } catch (...) {
-      // 忽略设置异常时的错误
-    }
-  }
-}
+void WebsocketClient::stop_writer() { channel_.close(); }
 
 } // namespace obcx::network

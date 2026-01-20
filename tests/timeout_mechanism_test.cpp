@@ -73,6 +73,9 @@ public:
                            work_guard_.reset();
                            ioc_.stop();
                          });
+      } else {
+        work_guard_.reset();
+        ioc_.stop();
       }
     });
 
