@@ -28,7 +28,8 @@ struct MediaFileInfo {
  */
 class TGBot : public IBot {
 public:
-  TGBot(adapter::telegram::ProtocolAdapter adapter);
+  TGBot(adapter::telegram::ProtocolAdapter adapter,
+        std::shared_ptr<TaskScheduler> task_scheduler = nullptr);
   ~TGBot() override;
 
   TGBot(const TGBot &) = delete;

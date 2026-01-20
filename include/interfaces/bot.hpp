@@ -17,7 +17,8 @@ namespace obcx::core {
  */
 class IBot {
 public:
-  explicit IBot(std::unique_ptr<adapter::BaseProtocolAdapter> adapter);
+  explicit IBot(std::unique_ptr<adapter::BaseProtocolAdapter> adapter,
+                std::shared_ptr<TaskScheduler> task_scheduler = nullptr);
   IBot(const IBot &) = delete;
   auto operator=(const IBot &) -> IBot & = delete;
   IBot(IBot &&) = delete;
@@ -421,7 +422,7 @@ protected:
   std::shared_ptr<asio::io_context> io_context_;
   std::unique_ptr<adapter::BaseProtocolAdapter> adapter_;
   std::unique_ptr<EventDispatcher> dispatcher_;
-  std::unique_ptr<TaskScheduler> task_scheduler_;
+  std::shared_ptr<TaskScheduler> task_scheduler_;
   std::unique_ptr<network::IConnectionManager> connection_manager_;
   common::ConnectionConfig conection_config_;
 };

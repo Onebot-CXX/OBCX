@@ -14,7 +14,8 @@ namespace obcx::core {
  */
 class QQBot : public IBot {
 public:
-  QQBot(adapter::onebot11::ProtocolAdapter adapter);
+  QQBot(adapter::onebot11::ProtocolAdapter adapter,
+        std::shared_ptr<TaskScheduler> task_scheduler = nullptr);
   ~QQBot() override;
 
   QQBot(const QQBot &) = delete;

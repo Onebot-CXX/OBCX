@@ -369,6 +369,8 @@ void I18nLogMessages::setup_message_keys() {
   // Task scheduler messages
   message_keys_[LogMessageKey::TASK_SCHEDULER_CREATED] =
       "TaskScheduler created with thread pool size: {}";
+  message_keys_[LogMessageKey::SHARED_TASK_SCHEDULER_CREATED] =
+      "Created shared TaskScheduler with {} threads";
   message_keys_[LogMessageKey::TASK_SCHEDULER_STOPPING] =
       "Stopping TaskScheduler...";
   message_keys_[LogMessageKey::TASK_SCHEDULER_STOPPED] =

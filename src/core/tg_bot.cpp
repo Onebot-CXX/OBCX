@@ -10,9 +10,11 @@
 
 namespace obcx::core {
 
-TGBot::TGBot(adapter::telegram::ProtocolAdapter adapter)
+TGBot::TGBot(adapter::telegram::ProtocolAdapter adapter,
+             std::shared_ptr<TaskScheduler> task_scheduler)
     : IBot{std::make_unique<adapter::telegram::ProtocolAdapter>(
-          std::move(adapter))} {
+               std::move(adapter)),
+           std::move(task_scheduler)} {
   OBCX_I18N_INFO(common::LogMessageKey::TELEGRAMBOT_INSTANCE_CREATED);
 }
 

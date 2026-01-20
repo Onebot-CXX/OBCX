@@ -36,7 +36,7 @@ const uint16_t DEFAULT_PORT = 8080;
 constexpr int BOT_SHUTDOWN_TIMEOUT_SECONDS = 5;
 
 void print_version() {
-  std::println("OBCX Robot Framework v1.0.0");
+  std::println("OBCX Robot Framework v1.1.0");
   std::println("A modular bot framework supporting QQ and Telegram");
 }
 
@@ -68,15 +68,16 @@ public:
     return instance;
   }
 
-  static auto create_bot(const common::BotConfig &config)
+  static auto create_bot(const common::BotConfig &config,
+                         std::shared_ptr<core::TaskScheduler> task_scheduler)
       -> std::unique_ptr<core::IBot> {
     if (config.type == "qq") {
-      return std::make_unique<core::QQBot>(
-          adapter::onebot11::ProtocolAdapter{});
+      return std::make_unique<core::QQBot>(adapter::onebot11::ProtocolAdapter{},
+                                           task_scheduler);
     }
     if (config.type == "telegram") {
-      return std::make_unique<core::TGBot>(
-          adapter::telegram::ProtocolAdapter{});
+      return std::make_unique<core::TGBot>(adapter::telegram::ProtocolAdapter{},
+                                           task_scheduler);
     }
 
     OBCX_I18N_ERROR(common::LogMessageKey::UNKNOWN_BOT_TYPE, config.type);
@@ -348,13 +349,18 @@ auto main(int argc, char *argv[]) -> int {
 
   interface::IPlugin::set_bots(&bots, &bots_mutex);
 
+  // Create shared TaskScheduler for all bots
+  auto shared_task_scheduler = std::make_shared<core::TaskScheduler>();
+  OBCX_I18N_INFO(common::LogMessageKey::SHARED_TASK_SCHEDULER_CREATED,
+                 std::thread::hardware_concurrency());
+
   for (const auto &config : bot_configs) {
     if (!config.enabled) {
       OBCX_I18N_INFO(common::LogMessageKey::SKIPPING_DISABLED_BOT, config.type);
       continue;
     }
 
-    auto bot = ComponentManager::create_bot(config);
+    auto bot = ComponentManager::create_bot(config, shared_task_scheduler);
     if (!bot) {
       OBCX_I18N_ERROR(common::LogMessageKey::BOT_CREATE_FAILED, config.type);
       continue;
@@ -446,6 +452,12 @@ auto main(int argc, char *argv[]) -> int {
         timeout_thread.join();
       }
     }
+  }
+
+  // Stop shared TaskScheduler (bots are already stopped)
+  if (shared_task_scheduler) {
+    shared_task_scheduler->stop();
+    shared_task_scheduler.reset();
   }
 
   // Shutdown all plugins

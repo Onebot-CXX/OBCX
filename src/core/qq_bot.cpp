@@ -6,9 +6,11 @@
 
 namespace obcx::core {
 
-QQBot::QQBot(adapter::onebot11::ProtocolAdapter adapter)
+QQBot::QQBot(adapter::onebot11::ProtocolAdapter adapter,
+             std::shared_ptr<TaskScheduler> task_scheduler)
     : IBot{std::make_unique<adapter::onebot11::ProtocolAdapter>(
-          std::move(adapter))} {
+               std::move(adapter)),
+           std::move(task_scheduler)} {
   OBCX_I18N_INFO(common::LogMessageKey::QQBOT_INSTANCE_CREATED);
 }
 

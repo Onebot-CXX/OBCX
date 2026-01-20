@@ -8,11 +8,13 @@
 
 namespace obcx::core {
 
-IBot::IBot(std::unique_ptr<adapter::BaseProtocolAdapter> adapter)
+IBot::IBot(std::unique_ptr<adapter::BaseProtocolAdapter> adapter,
+           std::shared_ptr<TaskScheduler> task_scheduler)
     : io_context_(std::make_shared<asio::io_context>()),
       adapter_{std::move(adapter)},
       dispatcher_{std::make_unique<EventDispatcher>(*io_context_)},
-      task_scheduler_{std::make_unique<TaskScheduler>()},
+      task_scheduler_{task_scheduler ? std::move(task_scheduler)
+                                     : std::make_shared<TaskScheduler>()},
       connection_manager_{nullptr} {}
 
 IBot::~IBot() {
@@ -22,10 +24,11 @@ IBot::~IBot() {
     connection_manager_.reset();
   }
 
-  if (task_scheduler_) {
+  if (task_scheduler_ && task_scheduler_.use_count() == 1) {
+    // Only stop if this is the last owner (solo mode)
     task_scheduler_->stop();
-    task_scheduler_.reset();
   }
+  task_scheduler_.reset();
 
   if (dispatcher_) {
     dispatcher_.reset();
