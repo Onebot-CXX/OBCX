@@ -1,5 +1,6 @@
 #include "chat_llm_plugin.hpp"
 
+#include <algorithm>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <common/config_loader.hpp>
@@ -11,6 +12,7 @@
 #include <network/http_client.hpp>
 #include <nlohmann/json.hpp>
 #include <regex>
+#include <sqlite3.h>
 #include <sstream>
 
 namespace plugins {
@@ -173,6 +175,19 @@ auto ChatLLMPlugin::load_configuration() -> bool {
       max_reply_chars_ = *val;
     }
 
+    // Optional: history database path (no default - if not set, history is
+    // disabled)
+    if (auto val = config["history_db_path"].value<std::string>()) {
+      history_db_path_ = *val;
+      PLUGIN_INFO(get_name(), "History DB path configured: {}",
+                  history_db_path_);
+    }
+
+    // Optional: history limit (default 10)
+    if (auto val = config["history_limit"].value<int64_t>()) {
+      history_limit_ = *val;
+    }
+
     PLUGIN_INFO(get_name(), "Configuration loaded successfully");
     return true;
   } catch (const std::exception &e) {
@@ -324,6 +339,19 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
       "Processing /chat request from user {} in group {}, text length: {}",
       user_id, group_id, user_text.size());
 
+  // Determine platform based on bot type
+  std::string platform;
+  if (dynamic_cast<obcx::core::QQBot *>(&bot) != nullptr) {
+    platform = "qq";
+  } else if (dynamic_cast<obcx::core::TGBot *>(&bot) != nullptr) {
+    platform = "telegram";
+  } else {
+    platform = "unknown";
+  }
+
+  // Get self_id for role determination
+  const std::string &self_id = event.self_id;
+
   // Call LLM API in thread pool to avoid blocking
   std::string response;
   std::string error_msg;
@@ -331,7 +359,9 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
 
   try {
     response = co_await bot.run_heavy_task(
-        [this, user_text]() { return call_llm_api(user_text); });
+        [this, user_text, group_id, platform, self_id, user_id]() {
+          return call_llm_api(user_text, group_id, platform, self_id, user_id);
+        });
   } catch (const std::exception &e) {
     PLUGIN_ERROR(get_name(), "LLM API call failed: {}", e.what());
     error_msg = std::string("LLM 请求失败: ") + e.what();
@@ -366,7 +396,11 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
               process_duration_ms);
 }
 
-auto ChatLLMPlugin::call_llm_api(const std::string &user_text) -> std::string {
+auto ChatLLMPlugin::call_llm_api(const std::string &user_text,
+                                 const std::string &group_id,
+                                 const std::string &platform,
+                                 const std::string &self_id,
+                                 const std::string &user_id) -> std::string {
   auto start_time = std::chrono::steady_clock::now();
   PLUGIN_INFO(get_name(), "[TIMING] call_llm_api START at: {} ms",
               std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -388,10 +422,37 @@ auto ChatLLMPlugin::call_llm_api(const std::string &user_text) -> std::string {
     request_body["model"] = model_name_;
     request_body["stream"] = false;
     request_body["messages"] = nlohmann::json::array();
+
+    // Add system prompt
     request_body["messages"].push_back(
         {{"role", "system"}, {"content", system_prompt_}});
+
+    // Fetch and add history messages (if history_db_path_ is configured)
+    if (!history_db_path_.empty() && platform != "unknown") {
+      auto history = fetch_history_messages(group_id, platform);
+      PLUGIN_INFO(get_name(),
+                  "Fetched {} history messages for group {} platform {}",
+                  history.size(), group_id, platform);
+
+      for (const auto &item : history) {
+        // Determine role: if user_id matches self_id, it's assistant
+        std::string role = "user";
+        if (!self_id.empty() && item.user_id == self_id) {
+          role = "assistant";
+        }
+
+        // Format content with user_id prefix for multi-user context
+        std::string content = item.user_id + ": " + item.content;
+
+        request_body["messages"].push_back(
+            {{"role", role}, {"content", content}});
+      }
+    }
+
+    // Add current user message
+    std::string current_content = user_id + ": " + user_text;
     request_body["messages"].push_back(
-        {{"role", "user"}, {"content", user_text}});
+        {{"role", "user"}, {"content", current_content}});
 
     std::string body = request_body.dump();
 
@@ -474,6 +535,93 @@ auto ChatLLMPlugin::call_llm_api(const std::string &user_text) -> std::string {
                          .count();
   PLUGIN_INFO(get_name(), "[TIMING] call_llm_api END after: {} ms",
               duration_ms);
+}
+
+auto ChatLLMPlugin::fetch_history_messages(const std::string &group_id,
+                                           const std::string &platform)
+    -> std::vector<HistoryItem> {
+  std::vector<HistoryItem> result;
+
+  if (history_db_path_.empty()) {
+    return result;
+  }
+
+  // Resolve database path (relative to base_dir_ if not absolute)
+  std::filesystem::path db_path;
+  if (std::filesystem::path(history_db_path_).is_absolute()) {
+    db_path = history_db_path_;
+  } else {
+    db_path = std::filesystem::path(base_dir_) / history_db_path_;
+  }
+
+  PLUGIN_DEBUG(get_name(), "Opening history database: {}", db_path.string());
+
+  // Open database in read-only mode
+  sqlite3 *db = nullptr;
+  int rc =
+      sqlite3_open_v2(db_path.string().c_str(), &db,
+                      SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nullptr);
+  if (rc != SQLITE_OK) {
+    PLUGIN_WARN(get_name(), "Failed to open history database: {} (error: {})",
+                db_path.string(), sqlite3_errmsg(db));
+    if (db) {
+      sqlite3_close(db);
+    }
+    return result;
+  }
+
+  // Query recent messages
+  const std::string sql = R"(
+    SELECT user_id, content, timestamp
+    FROM messages
+    WHERE group_id = ? AND platform = ? AND message_type = 'text'
+    ORDER BY timestamp DESC
+    LIMIT ?;
+  )";
+
+  sqlite3_stmt *stmt = nullptr;
+  rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+  if (rc != SQLITE_OK) {
+    PLUGIN_WARN(get_name(), "Failed to prepare SQL statement: {}",
+                sqlite3_errmsg(db));
+    sqlite3_close(db);
+    return result;
+  }
+
+  // Bind parameters
+  sqlite3_bind_text(stmt, 1, group_id.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, platform.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_int64(stmt, 3, history_limit_);
+
+  // Fetch results (in DESC order, newest first)
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    HistoryItem item;
+
+    const char *user_id_ptr =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+    const char *content_ptr =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+
+    item.user_id = user_id_ptr ? user_id_ptr : "";
+    item.content = content_ptr ? content_ptr : "";
+    item.timestamp = sqlite3_column_int64(stmt, 2);
+
+    // Skip empty content
+    if (!item.content.empty()) {
+      result.push_back(item);
+    }
+  }
+
+  sqlite3_finalize(stmt);
+  sqlite3_close(db);
+
+  // Reverse to get oldest-first order (for LLM context)
+  std::reverse(result.begin(), result.end());
+
+  PLUGIN_DEBUG(get_name(), "Fetched {} history messages from database",
+               result.size());
+
+  return result;
 }
 
 auto ChatLLMPlugin::send_response(obcx::core::IBot &bot,

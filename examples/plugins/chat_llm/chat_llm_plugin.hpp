@@ -5,6 +5,7 @@
 #include <interfaces/plugin.hpp>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace obcx::network {
 class HttpClient;
@@ -70,15 +71,40 @@ private:
   /**
    * @brief Call LLM API and get response
    * @param user_text User's input text
+   * @param group_id Group ID for history lookup
+   * @param platform Platform name (qq/telegram) for history lookup
+   * @param self_id Bot's self ID for role determination
+   * @param user_id Current user's ID
    * @return LLM response text or error message
    */
-  auto call_llm_api(const std::string &user_text) -> std::string;
+  auto call_llm_api(const std::string &user_text, const std::string &group_id,
+                    const std::string &platform, const std::string &self_id,
+                    const std::string &user_id) -> std::string;
 
   /**
    * @brief Send text response to group
    */
   auto send_response(obcx::core::IBot &bot, const std::string &group_id,
                      const std::string &text) -> boost::asio::awaitable<void>;
+
+  /**
+   * @brief History message item from database
+   */
+  struct HistoryItem {
+    std::string user_id;
+    std::string content;
+    int64_t timestamp;
+  };
+
+  /**
+   * @brief Fetch history messages from database
+   * @param group_id Group ID to filter
+   * @param platform Platform name to filter
+   * @return Vector of history items (oldest first)
+   */
+  auto fetch_history_messages(const std::string &group_id,
+                              const std::string &platform)
+      -> std::vector<HistoryItem>;
 
   // Configuration
   std::string model_url_;
@@ -87,6 +113,10 @@ private:
   std::string prompt_path_;
   std::string bot_nickname_;
   int64_t max_reply_chars_ = 500;
+
+  // History configuration
+  std::string history_db_path_;
+  int64_t history_limit_ = 10;
 
   // Parsed URL components
   std::string url_host_;

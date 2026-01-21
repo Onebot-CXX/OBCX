@@ -2,6 +2,7 @@
 
 # Find required packages
 find_package(nlohmann_json REQUIRED)
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
 # Create the Chat LLM plugin shared library
 add_library(
@@ -27,7 +28,7 @@ target_include_directories(
 
 # Link against OBCX core and required libraries
 target_link_libraries(chat_llm_plugin
-                      PRIVATE obcx_core nlohmann_json::nlohmann_json)
+                      PRIVATE obcx_core nlohmann_json::nlohmann_json unofficial::sqlite3::sqlite3)
 
 # Set the output directory to build/plugins
 set_target_properties(
