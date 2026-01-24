@@ -1,14 +1,17 @@
 #include "chat_llm_plugin.hpp"
 
-#include <algorithm>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
 #include <common/config_loader.hpp>
 #include <common/logger.hpp>
 #include <core/qq_bot.hpp>
 #include <core/tg_bot.hpp>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <network/http_client.hpp>
 #include <nlohmann/json.hpp>
 #include <regex>
@@ -339,6 +342,21 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
       "Processing /chat request from user {} in group {}, text length: {}",
       user_id, group_id, user_text.size());
 
+  // Global busy check: only one LLM request at a time across all groups
+  if (llm_busy_.exchange(true)) {
+    PLUGIN_INFO(get_name(),
+                "LLM busy, discarding request from user {} in group {}",
+                user_id, group_id);
+    co_return; // Silent discard
+  }
+
+  uint64_t req_id = ++llm_req_seq_;
+  llm_active_req_ = req_id;
+  PLUGIN_INFO(get_name(), "LLM request started, req_id={}, busy=true", req_id);
+
+  // Get executor from current coroutine
+  auto executor = co_await boost::asio::this_coro::executor;
+
   // Determine platform based on bot type
   std::string platform;
   if (dynamic_cast<obcx::core::QQBot *>(&bot) != nullptr) {
@@ -352,40 +370,106 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
   // Get self_id for role determination
   const std::string &self_id = event.self_id;
 
-  // Call LLM API in thread pool to avoid blocking
-  std::string response;
-  std::string error_msg;
-  bool has_error = false;
+  // Shared state for watchdog + result communication
+  using AsyncResult = std::pair<std::string, std::exception_ptr>;
+  auto result_promise = std::make_shared<std::promise<AsyncResult>>();
+  auto result_future = result_promise->get_future();
 
-  try {
-    response = co_await bot.run_heavy_task(
-        [this, user_text, group_id, platform, self_id, user_id]() {
-          return call_llm_api(user_text, group_id, platform, self_id, user_id);
-        });
-  } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "LLM API call failed: {}", e.what());
-    error_msg = std::string("LLM 请求失败: ") + e.what();
-    has_error = true;
+  // Shared timer pointer so background coroutine can cancel it
+  auto watchdog_ptr =
+      std::make_shared<boost::asio::steady_timer>(executor, llm_watchdog_);
+
+  // Spawn background coroutine to execute LLM request
+  boost::asio::co_spawn(
+      executor,
+      [this, &bot, req_id, user_text, group_id, platform, self_id, user_id,
+       result_promise, watchdog_ptr]() -> boost::asio::awaitable<void> {
+        AsyncResult result;
+        try {
+          result.first = co_await bot.run_heavy_task(
+              [this, user_text, group_id, platform, self_id, user_id]() {
+                return call_llm_api(user_text, group_id, platform, self_id,
+                                    user_id);
+              });
+          result.second = nullptr;
+          result_promise->set_value(result);
+          watchdog_ptr->cancel();
+          PLUGIN_INFO(get_name(), "LLM request completed, req_id={}", req_id);
+        } catch (...) {
+          result.first.clear();
+          result.second = std::current_exception();
+          result_promise->set_value(result);
+          watchdog_ptr->cancel();
+          PLUGIN_ERROR(get_name(),
+                       "LLM request failed with exception, req_id={}", req_id);
+        }
+      },
+      boost::asio::detached);
+
+  // Wait for either: task completion OR watchdog timeout
+  boost::system::error_code ec;
+  co_await watchdog_ptr->async_wait(boost::asio::redirect_error(ec));
+
+  // Helper to release busy safely
+  auto release_busy = [this, req_id]() {
+    uint64_t expected = req_id;
+    if (llm_active_req_.compare_exchange_strong(expected, 0)) {
+      llm_busy_ = false;
+      PLUGIN_INFO(get_name(),
+                  "Busy released, req_id={}. Next request can proceed", req_id);
+    } else {
+      PLUGIN_WARN(get_name(),
+                  "Busy release skipped: req_id mismatch (expected {}, got {})",
+                  req_id, expected);
+    }
+  };
+
+  if (ec == boost::asio::error::operation_aborted) {
+    // Timer was cancelled - task completed first
+    PLUGIN_INFO(get_name(), "LLM request finished before timeout, req_id={}",
+                req_id);
+
+    // Get result
+    auto [response, eptr] = result_future.get();
+
+    if (eptr) {
+      // Exception occurred
+      std::string error_msg;
+      try {
+        std::rethrow_exception(eptr);
+      } catch (const std::exception &e) {
+        PLUGIN_ERROR(get_name(), "LLM API call failed: {}", e.what());
+        error_msg = std::string("LLM 请求失败: ") + e.what();
+      }
+      co_await send_response(bot, group_id, error_msg);
+    } else {
+      // Success
+      // Check response length
+      if (static_cast<int64_t>(response.size()) > max_reply_chars_) {
+        PLUGIN_INFO(get_name(),
+                    "LLM response too long ({} chars), full response: {}",
+                    response.size(), response);
+        co_await send_response(bot, group_id,
+                               "LLM 返回过长（" +
+                                   std::to_string(response.size()) +
+                                   " chars），已记录到日志");
+      } else {
+        co_await send_response(bot, group_id, response);
+      }
+    }
+
+    release_busy();
+
+  } else {
+    // Watchdog timeout: silently discard this request and release busy
+    PLUGIN_WARN(get_name(),
+                "LLM request watchdog timeout ({} ms), req_id={}. Silently "
+                "discarding request.",
+                llm_watchdog_.count(), req_id);
+    release_busy();
+
+    co_return; // Do NOT send any response
   }
-
-  if (has_error) {
-    co_await send_response(bot, group_id, error_msg);
-    co_return;
-  }
-
-  // Check response length
-  if (static_cast<int64_t>(response.size()) > max_reply_chars_) {
-    PLUGIN_INFO(get_name(),
-                "LLM response too long ({} chars), full response: {}",
-                response.size(), response);
-    co_await send_response(bot, group_id,
-                           "LLM 返回过长（" + std::to_string(response.size()) +
-                               " chars），已记录到日志");
-    co_return;
-  }
-
-  // Send response
-  co_await send_response(bot, group_id, response);
 
   auto process_end = std::chrono::steady_clock::now();
   auto process_duration_ms =
@@ -467,6 +551,9 @@ auto ChatLLMPlugin::call_llm_api(const std::string &user_text,
     headers["Accept-Encoding"] = "identity";
 
     // Send request
+    PLUGIN_INFO(get_name(),
+                "Sending LLM request to {}:{}{} (body size: {} bytes)",
+                url_host_, url_port_, url_path_, body.size());
     auto response = http_client.post_sync(url_path_, body, headers);
 
     PLUGIN_DEBUG(get_name(), "LLM API response status: {}",

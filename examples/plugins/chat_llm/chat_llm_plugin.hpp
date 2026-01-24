@@ -1,7 +1,10 @@
 #pragma once
 
+#include <atomic>
 #include <boost/asio/awaitable.hpp>
+#include <chrono>
 #include <common/message_type.hpp>
+#include <cstdint>
 #include <interfaces/plugin.hpp>
 #include <memory>
 #include <string>
@@ -129,6 +132,12 @@ private:
 
   // Base directory for resolving relative paths (repo root)
   std::string base_dir_;
+
+  // Concurrency control: only one LLM request at a time across all groups
+  std::atomic<bool> llm_busy_{false};
+  std::atomic<uint64_t> llm_req_seq_{0};
+  std::atomic<uint64_t> llm_active_req_{0};
+  std::chrono::milliseconds llm_watchdog_{60000}; // 30 seconds watchdog
 };
 
 } // namespace plugins
