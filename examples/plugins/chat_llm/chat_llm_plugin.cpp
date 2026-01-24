@@ -22,15 +22,9 @@ namespace plugins {
 ChatLLMPlugin::ChatLLMPlugin() {
   static int instance_counter = 0;
   instance_id_ = ++instance_counter;
-  PLUGIN_INFO(get_name(), "ChatLLMPlugin constructor called (instance_id: {})",
-              instance_id_);
 }
 
-ChatLLMPlugin::~ChatLLMPlugin() {
-  PLUGIN_INFO(get_name(), "ChatLLMPlugin destructor called (instance_id: {})",
-              instance_id_);
-  shutdown();
-}
+ChatLLMPlugin::~ChatLLMPlugin() { shutdown(); }
 
 auto ChatLLMPlugin::get_name() const -> std::string { return "chat_llm"; }
 
@@ -43,8 +37,6 @@ auto ChatLLMPlugin::get_description() const -> std::string {
 
 auto ChatLLMPlugin::initialize() -> bool {
   try {
-    PLUGIN_INFO(get_name(), "Initializing Chat LLM Plugin (instance_id: {})",
-                instance_id_);
 
     // Determine base directory (repo root) from config path
     auto config_path = obcx::common::ConfigLoader::instance().get_config_path();
@@ -93,12 +85,6 @@ auto ChatLLMPlugin::initialize() -> bool {
       return false;
     }
 
-    PLUGIN_INFO(get_name(),
-                "Config after database init: collect_enabled={}, "
-                "allowed_groups_count={}",
-                runtime_config_.collect_enabled,
-                runtime_config_.collect_allowed_groups.size());
-
     // Register event callbacks for both QQ and Telegram bots
     auto [lock, bots] = get_bots();
     for (auto &bot_ptr : bots) {
@@ -111,13 +97,6 @@ auto ChatLLMPlugin::initialize() -> bool {
     }
 
     PLUGIN_INFO(get_name(), "Registered message callbacks");
-
-    // Final verification before returning
-    PLUGIN_INFO(get_name(),
-                "Final config check before init complete: collect_enabled={}, "
-                "allowed_groups_count={}",
-                runtime_config_.collect_enabled,
-                runtime_config_.collect_allowed_groups.size());
 
     PLUGIN_INFO(get_name(), "Chat LLM Plugin initialized successfully");
     PLUGIN_INFO(get_name(), "  Model: {}", model_name_);
@@ -205,7 +184,6 @@ auto ChatLLMPlugin::load_configuration() -> bool {
         prompt_builder_->set_max_reply_chars(static_cast<int>(*val));
       }
       runtime_config_.max_reply_chars = static_cast<int>(*val);
-      PLUGIN_DEBUG(get_name(), "Loaded max_reply_chars: {}", *val);
     }
 
     if (auto val = config["history_limit"].value<int64_t>()) {
@@ -213,34 +191,24 @@ auto ChatLLMPlugin::load_configuration() -> bool {
         prompt_builder_->set_history_limit(static_cast<int>(*val));
       }
       runtime_config_.history_limit = static_cast<int>(*val);
-      PLUGIN_DEBUG(get_name(), "Loaded history_limit: {}", *val);
     }
 
     if (auto val = config["history_ttl_days"].value<int64_t>()) {
       runtime_config_.history_ttl_days = static_cast<int>(*val);
-      PLUGIN_DEBUG(get_name(), "Loaded history_ttl_days: {}", *val);
     }
 
     if (auto val = config["collect_enabled"].value<bool>()) {
       runtime_config_.collect_enabled = *val;
-      PLUGIN_INFO(get_name(), "Loaded collect_enabled: {}", *val);
-    } else {
-      PLUGIN_INFO(get_name(),
-                  "collect_enabled not found in config, using default: {}",
-                  runtime_config_.collect_enabled);
     }
 
     if (auto val = get_config_value<std::vector<std::string>>(
             "collect_allowed_groups")) {
       runtime_config_.collect_allowed_groups = *val;
-      PLUGIN_INFO(get_name(), "Loaded collect_allowed_groups (count: {})",
-                  val->size());
     }
 
     if (auto val = config["cleanup_interval_ms"].value<int64_t>()) {
       runtime_config_.cleanup_interval =
           std::chrono::milliseconds(static_cast<int64_t>(*val));
-      PLUGIN_DEBUG(get_name(), "Loaded cleanup_interval_ms: {}", *val);
     }
 
     PLUGIN_INFO(get_name(),
@@ -250,14 +218,6 @@ auto ChatLLMPlugin::load_configuration() -> bool {
                 runtime_config_.max_reply_chars,
                 runtime_config_.history_ttl_days);
     PLUGIN_INFO(get_name(), "Configuration loaded successfully");
-
-    // Immediately verify config is still correct (debug potential memory
-    // corruption)
-    PLUGIN_INFO(get_name(),
-                "Config verification after load_configuration(): "
-                "collect_enabled={}, allowed_groups_count={}",
-                runtime_config_.collect_enabled,
-                runtime_config_.collect_allowed_groups.size());
     return true;
   } catch (const std::exception &e) {
     PLUGIN_ERROR(get_name(), "Failed to load configuration: {}", e.what());
@@ -356,11 +316,6 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
   }
 
   const auto &rt_config = rt->get_config();
-  PLUGIN_DEBUG(get_name(),
-               "process_message using instance_id={}, runtime config: "
-               "collect_enabled={}, allowed_groups_count={}",
-               instance_id_, rt_config.collect_enabled,
-               rt_config.collect_allowed_groups.size());
 
   // Only process group messages
   if (event.message_type != "group" || !event.group_id.has_value()) {
@@ -369,10 +324,6 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
 
   PLUGIN_INFO(get_name(), "Processing message from group: {}",
               event.group_id.value());
-  PLUGIN_DEBUG(get_name(),
-               "Collection config: collect_enabled={}, allowed_groups_count={}",
-               rt_config.collect_enabled,
-               rt_config.collect_allowed_groups.size());
   if (!rt_config.collect_allowed_groups.empty()) {
     std::string groups_str;
     for (size_t i = 0; i < rt_config.collect_allowed_groups.size(); ++i) {
@@ -608,22 +559,8 @@ auto ChatLLMPlugin::ensure_runtime(obcx::core::IBot &bot)
     return it->second;
   }
 
-  PLUGIN_INFO(get_name(),
-              "Creating new Runtime for bot (instance_id={}) with config: "
-              "collect_enabled={}, allowed_groups_count={}",
-              instance_id_, runtime_config_.collect_enabled,
-              runtime_config_.collect_allowed_groups.size());
-
   auto executor = bot.get_task_scheduler().get_io_context().get_executor();
   auto runtime = std::make_shared<chat_llm::Runtime>(executor, runtime_config_);
-
-  // Verify config in runtime
-  const auto &runtime_cfg = runtime->get_config();
-  PLUGIN_INFO(get_name(),
-              "Runtime created (instance_id={}) with actual config: "
-              "collect_enabled={}, allowed_groups_count={}",
-              instance_id_, runtime_cfg.collect_enabled,
-              runtime_cfg.collect_allowed_groups.size());
 
   // Schedule TTL cleanup task immediately
   runtime->schedule_cleanup_task([this, weak_rt = std::weak_ptr(runtime)]() {
