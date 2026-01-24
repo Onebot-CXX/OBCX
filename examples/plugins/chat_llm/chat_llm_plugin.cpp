@@ -404,13 +404,17 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
     }
   }
 
-  if (!text_content.empty()) {
+  // Only process /chat commands or save non-command messages
+  bool is_chat_command =
+      (cmd.type == chat_llm::ParsedCommand::Type::chat && cmd.is_valid);
+
+  // Save non-command text messages to history immediately
+  if (!text_content.empty() && !is_chat_command) {
     int64_t timestamp_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             event.time.time_since_epoch())
             .count();
 
-    // Save non-command text messages to history
     chat_llm::MessageRecord record;
     record.platform = platform;
     record.group_id = group_id;
@@ -418,8 +422,6 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
     record.user_id = user_id;
     record.content = text_content;
     record.timestamp_ms = timestamp_ms;
-    // Check if message is from a bot (Telegram stores this in
-    // event.data["from"]["is_bot"])
     record.is_bot = false;
     try {
       if (event.data.contains("from") &&
@@ -428,7 +430,7 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
       }
     } catch (...) {
     }
-    record.is_command = (cmd.type == chat_llm::ParsedCommand::Type::chat);
+    record.is_command = false;
 
     co_await bot.run_heavy_task([this, record, &rt_config]() {
       return repo_->append_message(record, rt_config.collect_enabled,
@@ -437,11 +439,11 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
   }
 
   // Only process /chat commands
-  if (cmd.type != chat_llm::ParsedCommand::Type::chat || !cmd.is_valid) {
+  if (!is_chat_command) {
     co_return;
   }
 
-  // Build LLM prompt with history
+  // Step 1: Query database to build LLM request
   int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::system_clock::now().time_since_epoch())
                        .count();
@@ -468,7 +470,34 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
     history_records.push_back(rec);
   }
 
-  // Build messages for LLM
+  // Step 2: Insert /chat command to history (use cmd.text without prefix)
+  int64_t cmd_timestamp_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          event.time.time_since_epoch())
+          .count();
+
+  chat_llm::MessageRecord cmd_record;
+  cmd_record.platform = platform;
+  cmd_record.group_id = group_id;
+  cmd_record.message_id = message_id;
+  cmd_record.user_id = user_id;
+  cmd_record.content = cmd.text;
+  cmd_record.timestamp_ms = cmd_timestamp_ms;
+  cmd_record.is_bot = false;
+  try {
+    if (event.data.contains("from") && event.data["from"].contains("is_bot")) {
+      cmd_record.is_bot = event.data["from"]["is_bot"].get<bool>();
+    }
+  } catch (...) {
+  }
+  cmd_record.is_command = true;
+
+  co_await bot.run_heavy_task([this, cmd_record, &rt_config]() {
+    return repo_->append_message(cmd_record, rt_config.collect_enabled,
+                                 rt_config.collect_allowed_groups);
+  });
+
+  // Step 3: Build messages for LLM
   auto messages =
       prompt_builder_->build(history_records, user_id, cmd.text, self_id);
 
@@ -488,7 +517,7 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
     messages_json.push_back(m.dump());
   }
 
-  // Call LLM API
+  // Step 4: Call LLM API
   auto response_text =
       co_await bot.run_heavy_task([this, messages_json]() -> std::string {
         // Create LLM client with new io_context per call (safer)
@@ -519,7 +548,7 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
                     " chars），已记录到日志";
   }
 
-  // Send response
+  // Step 5: Send response
   co_await send_response(bot, cmd, response_text);
 }
 

@@ -273,7 +273,7 @@ auto MessageRepository::fetch_context(const ContextQuery &query)
   const std::string sql = R"(
     SELECT platform, group_id, message_id, user_id, content, timestamp_ms, is_bot
     FROM messages_v2
-    WHERE platform = ? AND group_id = ? AND timestamp_ms < ? AND is_command = 0
+    WHERE platform = ? AND group_id = ? AND timestamp_ms < ?
     ORDER BY timestamp_ms DESC
     LIMIT ?;
   )";

@@ -117,6 +117,7 @@ auto OpenAiCompatClient::build_request_body(
     const std::vector<std::string> &messages_json) -> std::string {
   nlohmann::json request_body;
   request_body["model"] = config_.model_name;
+  request_body["thinking"] = {{"type", "disabled"}};
   request_body["stream"] = false;
   request_body["messages"] = nlohmann::json::array();
 
