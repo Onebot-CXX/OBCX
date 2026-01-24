@@ -8,7 +8,12 @@ find_package(unofficial-sqlite3 CONFIG REQUIRED)
 add_library(
   chat_llm_plugin SHARED
   chat_llm_plugin.cpp
-  chat_llm_plugin.hpp)
+  chat_llm_plugin.hpp
+  src/runtime.cpp
+  src/command_parser.cpp
+  src/message_repository.cpp
+  src/prompt_builder.cpp
+  src/llm_client.cpp)
 
 # Set the output name to match plugin loading expectations
 set_target_properties(
@@ -24,7 +29,8 @@ target_include_directories(
   chat_llm_plugin
   PRIVATE ${CMAKE_SOURCE_DIR}/examples
           ${CMAKE_SOURCE_DIR}/include
-          ${CMAKE_SOURCE_DIR}/src)
+          ${CMAKE_SOURCE_DIR}/src
+          ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Link against OBCX core and required libraries
 target_link_libraries(chat_llm_plugin
