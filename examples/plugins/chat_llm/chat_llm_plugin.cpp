@@ -775,6 +775,9 @@ auto ChatLLMPlugin::call_llm_api(const std::string &user_text,
     request_body["messages"].push_back(
         {{"role", "user"}, {"content", current_content}});
 
+    // Disable thinking for GLM-4.7
+    request_body["thinking"] = {{"type", "disabled"}};
+
     std::string body = request_body.dump();
 
     PLUGIN_DEBUG(get_name(), "Sending LLM request to {}:{}{}", url_host_,
