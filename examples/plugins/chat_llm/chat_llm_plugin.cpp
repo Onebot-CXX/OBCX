@@ -69,6 +69,12 @@ auto ChatLLMPlugin::initialize() -> bool {
       return false;
     }
 
+    // Initialize database (must succeed)
+    if (!initialize_database()) {
+      PLUGIN_ERROR(get_name(), "Failed to initialize database");
+      return false;
+    }
+
     // Register event callbacks for both QQ and Telegram bots
     try {
       auto [lock, bots] = get_bots();
@@ -169,6 +175,16 @@ auto ChatLLMPlugin::load_configuration() -> bool {
       return false;
     }
 
+    // Required: history database path
+    if (auto val = config["history_db_path"].value<std::string>()) {
+      history_db_path_ = *val;
+      PLUGIN_INFO(get_name(), "History DB path configured: {}",
+                  history_db_path_);
+    } else {
+      PLUGIN_ERROR(get_name(), "Missing required config: history_db_path");
+      return false;
+    }
+
     // Optional fields
     if (auto val = config["bot_nickname"].value<std::string>()) {
       bot_nickname_ = *val;
@@ -176,14 +192,6 @@ auto ChatLLMPlugin::load_configuration() -> bool {
 
     if (auto val = config["max_reply_chars"].value<int64_t>()) {
       max_reply_chars_ = *val;
-    }
-
-    // Optional: history database path (no default - if not set, history is
-    // disabled)
-    if (auto val = config["history_db_path"].value<std::string>()) {
-      history_db_path_ = *val;
-      PLUGIN_INFO(get_name(), "History DB path configured: {}",
-                  history_db_path_);
     }
 
     // Optional: history limit (default 10)
@@ -240,6 +248,219 @@ auto ChatLLMPlugin::load_system_prompt() -> bool {
   } catch (const std::exception &e) {
     PLUGIN_ERROR(get_name(), "Failed to load system prompt: {}", e.what());
     return false;
+  }
+}
+
+auto ChatLLMPlugin::initialize_database() -> bool {
+  try {
+    // Resolve database path
+    std::filesystem::path db_path;
+    if (std::filesystem::path(history_db_path_).is_absolute()) {
+      db_path = history_db_path_;
+    } else {
+      db_path = std::filesystem::path(base_dir_) / history_db_path_;
+    }
+
+    // Ensure parent directory exists
+    std::filesystem::path parent_dir = db_path.parent_path();
+    if (!parent_dir.empty() && !std::filesystem::exists(parent_dir)) {
+      std::filesystem::create_directories(parent_dir);
+      PLUGIN_INFO(get_name(), "Created database directory: {}",
+                  parent_dir.string());
+    }
+
+    PLUGIN_INFO(get_name(), "Initializing database: {}", db_path.string());
+
+    // Open database
+    sqlite3 *db = nullptr;
+    int rc = sqlite3_open_v2(db_path.string().c_str(), &db,
+                             SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
+                                 SQLITE_OPEN_FULLMUTEX,
+                             nullptr);
+    if (rc != SQLITE_OK) {
+      PLUGIN_ERROR(get_name(), "Failed to open database: {} (error: {})",
+                   db_path.string(), sqlite3_errmsg(db));
+      if (db != nullptr) {
+        sqlite3_close(db);
+      }
+      return false;
+    }
+
+    // Create table if not exists
+    const std::string create_table_sql = R"(
+      CREATE TABLE IF NOT EXISTS messages (
+        platform TEXT NOT NULL,
+        group_id TEXT NOT NULL,
+        message_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        is_bot INTEGER NOT NULL,
+        PRIMARY KEY (platform, message_id)
+      );
+    )";
+
+    char *err_msg = nullptr;
+    rc = sqlite3_exec(db, create_table_sql.c_str(), nullptr, nullptr, &err_msg);
+    if (rc != SQLITE_OK) {
+      std::string error = err_msg != nullptr ? err_msg : "unknown error";
+      PLUGIN_ERROR(get_name(), "Failed to create messages table: {}", error);
+      if (err_msg != nullptr) {
+        sqlite3_free(err_msg);
+      }
+      sqlite3_close(db);
+      return false;
+    }
+
+    // Create index for faster queries
+    const std::string create_index_sql = R"(
+      CREATE INDEX IF NOT EXISTS idx_group_time 
+      ON messages(group_id, timestamp DESC);
+    )";
+
+    rc = sqlite3_exec(db, create_index_sql.c_str(), nullptr, nullptr, &err_msg);
+    if (rc != SQLITE_OK) {
+      std::string error = err_msg != nullptr ? err_msg : "unknown error";
+      PLUGIN_WARN(get_name(), "Failed to create index: {}", error);
+      if (err_msg != nullptr) {
+        sqlite3_free(err_msg);
+      }
+      // Non-fatal, continue
+    }
+
+    sqlite3_close(db);
+    PLUGIN_INFO(get_name(), "Database initialized successfully");
+    return true;
+
+  } catch (const std::exception &e) {
+    PLUGIN_ERROR(get_name(), "Exception during database initialization: {}",
+                 e.what());
+    return false;
+  }
+}
+
+auto ChatLLMPlugin::get_text_content(const obcx::common::Message &msg)
+    -> std::string {
+  std::string result;
+  for (const auto &segment : msg) {
+    if (segment.type == "text") {
+      // Extract text from segment.data["text"]
+      if (segment.data.contains("text")) {
+        try {
+          std::string text = segment.data["text"].get<std::string>();
+          result += text;
+        } catch (const std::exception &e) {
+          PLUGIN_WARN(get_name(), "Failed to extract text from segment: {}",
+                      e.what());
+        }
+      }
+    }
+  }
+  return result;
+}
+
+auto ChatLLMPlugin::save_message_impl(const std::string &platform,
+                                      const std::string &group_id,
+                                      const std::string &message_id,
+                                      const std::string &user_id,
+                                      const std::string &content,
+                                      int64_t timestamp, bool is_bot) -> bool {
+  if (content.empty()) {
+    return true; // Skip empty messages
+  }
+
+  try {
+    // Resolve database path
+    std::filesystem::path db_path;
+    if (std::filesystem::path(history_db_path_).is_absolute()) {
+      db_path = history_db_path_;
+    } else {
+      db_path = std::filesystem::path(base_dir_) / history_db_path_;
+    }
+
+    // Open database
+    sqlite3 *db = nullptr;
+    int rc =
+        sqlite3_open_v2(db_path.string().c_str(), &db,
+                        SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nullptr);
+    if (rc != SQLITE_OK) {
+      PLUGIN_ERROR(get_name(), "Failed to open database for saving: {}",
+                   sqlite3_errmsg(db));
+      if (db != nullptr) {
+        sqlite3_close(db);
+      }
+      return false;
+    }
+
+    // Prepare INSERT OR IGNORE statement (prevents duplicates)
+    const std::string sql = R"(
+      INSERT OR IGNORE INTO messages (platform, group_id, message_id, user_id, content, timestamp, is_bot)
+      VALUES (?, ?, ?, ?, ?, ?, ?);
+    )";
+
+    sqlite3_stmt *stmt = nullptr;
+    rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+      PLUGIN_ERROR(get_name(), "Failed to prepare INSERT statement: {}",
+                   sqlite3_errmsg(db));
+      sqlite3_close(db);
+      return false;
+    }
+
+    // Bind parameters
+    sqlite3_bind_text(stmt, 1, platform.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, group_id.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, message_id.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 4, user_id.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 5, content.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmt, 6, timestamp);
+    sqlite3_bind_int(stmt, 7, is_bot ? 1 : 0);
+
+    // Execute
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+      PLUGIN_ERROR(get_name(), "Failed to execute INSERT: {}",
+                   sqlite3_errmsg(db));
+      sqlite3_finalize(stmt);
+      sqlite3_close(db);
+      return false;
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    return true;
+
+  } catch (const std::exception &e) {
+    PLUGIN_ERROR(get_name(), "Exception during save_message_impl: {}",
+                 e.what());
+    return false;
+  }
+}
+
+auto ChatLLMPlugin::save_message_async(
+    obcx::core::IBot &bot, const std::string &platform,
+    const std::string &group_id, const std::string &message_id,
+    const std::string &user_id, const std::string &content, int64_t timestamp,
+    bool is_bot) -> boost::asio::awaitable<void> {
+  try {
+    // Run database write in background thread pool
+    bool success =
+        co_await bot.run_heavy_task([this, platform, group_id, message_id,
+                                     user_id, content, timestamp, is_bot]() {
+          return save_message_impl(platform, group_id, message_id, user_id,
+                                   content, timestamp, is_bot);
+        });
+
+    if (!success) {
+      PLUGIN_WARN(get_name(), "Failed to save message from user {} in group {}",
+                  user_id, group_id);
+    } else {
+      PLUGIN_DEBUG(get_name(), "Saved message from user {} in group {}",
+                   user_id, group_id);
+    }
+  } catch (const std::exception &e) {
+    PLUGIN_ERROR(get_name(), "Exception in save_message_async: {}", e.what());
   }
 }
 
@@ -302,8 +523,36 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
     co_return;
   }
 
+  // Determine platform based on bot type
+  std::string platform;
+  if (dynamic_cast<obcx::core::QQBot *>(&bot) != nullptr) {
+    platform = "qq";
+  } else if (dynamic_cast<obcx::core::TGBot *>(&bot) != nullptr) {
+    platform = "telegram";
+  } else {
+    platform = "unknown";
+  }
+
+  // Save all group text messages to database
   const std::string &group_id = event.group_id.value();
   const std::string &user_id = event.user_id;
+  const std::string &self_id = event.self_id;
+  const std::string &message_id = event.message_id;
+
+  // Extract text content from message segments
+  std::string text_content = get_text_content(event.message);
+
+  if (!text_content.empty()) {
+    // Convert event.time to milliseconds timestamp
+    int64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            event.time.time_since_epoch())
+                            .count();
+
+    // Save user message asynchronously
+    co_await save_message_async(bot, platform, group_id, message_id, user_id,
+                                text_content, timestamp, false);
+  }
+
   const std::string &raw_message = event.raw_message;
 
   // Check if message starts with /chat
@@ -333,7 +582,8 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
 
   // Check if user text is empty
   if (user_text.empty()) {
-    co_await send_response(bot, group_id, "用法: /chat <内容>");
+    co_await send_response(bot, platform, group_id, self_id,
+                           "用法: /chat <内容>");
     co_return;
   }
 
@@ -356,19 +606,6 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
 
   // Get executor from current coroutine
   auto executor = co_await boost::asio::this_coro::executor;
-
-  // Determine platform based on bot type
-  std::string platform;
-  if (dynamic_cast<obcx::core::QQBot *>(&bot) != nullptr) {
-    platform = "qq";
-  } else if (dynamic_cast<obcx::core::TGBot *>(&bot) != nullptr) {
-    platform = "telegram";
-  } else {
-    platform = "unknown";
-  }
-
-  // Get self_id for role determination
-  const std::string &self_id = event.self_id;
 
   // Shared state for watchdog + result communication
   using AsyncResult = std::pair<std::string, std::exception_ptr>;
@@ -441,7 +678,7 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
         PLUGIN_ERROR(get_name(), "LLM API call failed: {}", e.what());
         error_msg = std::string("LLM 请求失败: ") + e.what();
       }
-      co_await send_response(bot, group_id, error_msg);
+      co_await send_response(bot, platform, group_id, self_id, error_msg);
     } else {
       // Success
       // Check response length
@@ -449,12 +686,12 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
         PLUGIN_INFO(get_name(),
                     "LLM response too long ({} chars), full response: {}",
                     response.size(), response);
-        co_await send_response(bot, group_id,
+        co_await send_response(bot, platform, group_id, self_id,
                                "LLM 返回过长（" +
                                    std::to_string(response.size()) +
                                    " chars），已记录到日志");
       } else {
-        co_await send_response(bot, group_id, response);
+        co_await send_response(bot, platform, group_id, self_id, response);
       }
     }
 
@@ -661,7 +898,7 @@ auto ChatLLMPlugin::fetch_history_messages(const std::string &group_id,
   const std::string sql = R"(
     SELECT user_id, content, timestamp
     FROM messages
-    WHERE group_id = ? AND platform = ? AND message_type = 'text'
+    WHERE group_id = ? AND platform = ?
     ORDER BY timestamp DESC
     LIMIT ?;
   )";
@@ -712,7 +949,9 @@ auto ChatLLMPlugin::fetch_history_messages(const std::string &group_id,
 }
 
 auto ChatLLMPlugin::send_response(obcx::core::IBot &bot,
+                                  const std::string &platform,
                                   const std::string &group_id,
+                                  const std::string &self_id,
                                   const std::string &text)
     -> boost::asio::awaitable<void> {
   auto send_start_time = std::chrono::steady_clock::now();
@@ -730,6 +969,18 @@ auto ChatLLMPlugin::send_response(obcx::core::IBot &bot,
     message.push_back(text_segment);
 
     co_await bot.send_group_message(group_id, message);
+
+    // Save bot's reply to database
+    // Generate local message ID for bot replies
+    int64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::system_clock::now().time_since_epoch())
+                            .count();
+    std::string message_id =
+        "local-bot-" + std::to_string(timestamp) + "-" + group_id;
+
+    co_await save_message_async(bot, platform, group_id, message_id, self_id,
+                                text, timestamp, true);
+
   } catch (const std::exception &e) {
     PLUGIN_ERROR(get_name(), "Failed to send response: {}", e.what());
   }

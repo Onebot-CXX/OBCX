@@ -85,9 +85,15 @@ private:
                     const std::string &user_id) -> std::string;
 
   /**
-   * @brief Send text response to group
+   * @brief Send text response to group and save to database
+   * @param bot Bot instance
+   * @param platform Platform name (qq/telegram)
+   * @param group_id Group ID
+   * @param self_id Bot's self ID
+   * @param text Response text
    */
-  auto send_response(obcx::core::IBot &bot, const std::string &group_id,
+  auto send_response(obcx::core::IBot &bot, const std::string &platform,
+                     const std::string &group_id, const std::string &self_id,
                      const std::string &text) -> boost::asio::awaitable<void>;
 
   /**
@@ -108,6 +114,54 @@ private:
   auto fetch_history_messages(const std::string &group_id,
                               const std::string &platform)
       -> std::vector<HistoryItem>;
+
+  /**
+   * @brief Initialize database and create table structure
+   * @return true if successful, false on error
+   */
+  auto initialize_database() -> bool;
+
+  /**
+   * @brief Extract text content from Message segments
+   * @param msg Message containing segments
+   * @return Concatenated text content
+   */
+  auto get_text_content(const obcx::common::Message &msg) -> std::string;
+
+  /**
+   * @brief Save message to database (synchronous, for thread pool)
+   * @param platform Platform name (qq/telegram)
+   * @param group_id Group ID
+   * @param message_id Platform message ID or generated local ID
+   * @param user_id User ID (or bot's self_id for bot messages)
+   * @param content Message text content
+   * @param timestamp Unix timestamp in milliseconds
+   * @param is_bot True if message is from bot
+   * @return true if successful, false on error
+   */
+  auto save_message_impl(const std::string &platform,
+                         const std::string &group_id,
+                         const std::string &message_id,
+                         const std::string &user_id, const std::string &content,
+                         int64_t timestamp, bool is_bot) -> bool;
+
+  /**
+   * @brief Save message to database (async wrapper)
+   * @param bot Bot instance for heavy task scheduling
+   * @param platform Platform name (qq/telegram)
+   * @param group_id Group ID
+   * @param message_id Platform message ID or generated local ID
+   * @param user_id User ID (or bot's self_id for bot messages)
+   * @param content Message text content
+   * @param timestamp Unix timestamp in milliseconds
+   * @param is_bot True if message is from bot
+   */
+  auto save_message_async(obcx::core::IBot &bot, const std::string &platform,
+                          const std::string &group_id,
+                          const std::string &message_id,
+                          const std::string &user_id,
+                          const std::string &content, int64_t timestamp,
+                          bool is_bot) -> boost::asio::awaitable<void>;
 
   // Configuration
   std::string model_url_;
@@ -137,7 +191,7 @@ private:
   std::atomic<bool> llm_busy_{false};
   std::atomic<uint64_t> llm_req_seq_{0};
   std::atomic<uint64_t> llm_active_req_{0};
-  std::chrono::milliseconds llm_watchdog_{60000}; // 30 seconds watchdog
+  std::chrono::milliseconds llm_watchdog_{120000}; // 30 seconds watchdog
 };
 
 } // namespace plugins
