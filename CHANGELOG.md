@@ -7,6 +7,31 @@
 
 ---
 
+## [Unreleased] (2026-01-25)
+
+### 新增
+- **HTTP Client**: 完善HTTP客户端超时机制，支持请求超时控制
+- **Test**: 添加HTTP客户端超时测试 `http_client_timeout_test.cpp`
+
+### 重构
+- **HTTP Client**: 大幅重构HTTP客户端实现，优化代码结构和错误处理
+- **Bot Interface**: 简化机器人接口设计，移除冗余方法
+- **Core**: 精简QQBot和TGBot核心实现
+
+### 修复
+- **Chat LLM**: 添加响应过滤器，去除LLM回复中的user_id前缀（如 "6545430341: content"）
+- **Test Chat LLM**: 修复chat_llm测试中引用已移除的connect_ws和connect_http方法导致的编译错误
+
+### 优化
+- **Bridge Plugin**: 增强QQ到Telegram和Telegram到QQ的桥接功能
+- **Retry Queue**: 改进重试队列管理器，提升消息转发可靠性
+- **Proxy HTTP**: 优化代理HTTP客户端实现
+
+### 国际化
+- 添加HTTP相关日志消息的中英文支持
+
+---
+
 ## [Unreleased] (2026-01-17)
 
 ### 新增

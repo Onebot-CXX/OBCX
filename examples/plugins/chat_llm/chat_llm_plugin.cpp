@@ -536,6 +536,14 @@ auto ChatLLMPlugin::send_response(obcx::core::IBot &bot,
 
   try {
     obcx::common::Message message;
+
+    if (cmd.platform == "telegram" && !cmd.message_id.empty()) {
+      obcx::common::MessageSegment reply_segment;
+      reply_segment.type = "reply";
+      reply_segment.data["id"] = cmd.message_id;
+      message.push_back(reply_segment);
+    }
+
     obcx::common::MessageSegment text_segment;
     text_segment.type = "text";
     text_segment.data["text"] = text;
