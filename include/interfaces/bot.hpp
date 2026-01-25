@@ -1,4 +1,11 @@
 #pragma once
+
+namespace obcx::common {
+class CliHandler;
+class ComponentManager;
+class MainApplication;
+} // namespace obcx::common
+
 #include "common/message_type.hpp"
 #include "core/event_dispatcher.hpp"
 #include "core/task_scheduler.hpp"
@@ -16,6 +23,10 @@ namespace obcx::core {
  * @brief Bot 基类，定义所有 Bot 实现的公共接口
  */
 class IBot {
+  friend class common::ComponentManager;
+  friend class common::CliHandler;
+  friend class common::MainApplication;
+
 public:
   explicit IBot(std::unique_ptr<adapter::BaseProtocolAdapter> adapter,
                 std::shared_ptr<TaskScheduler> task_scheduler = nullptr);
@@ -35,39 +46,6 @@ public:
       std::function<asio::awaitable<void>(IBot &, EventType)> handler) {
     dispatcher_->on<EventType>(std::move(handler));
   }
-
-  /**
-   * @brief 清除所有已注册的事件处理器
-   *        在插件reload时调用，防止悬空函数指针
-   */
-  void clear_event_handlers() {
-    if (dispatcher_) {
-      dispatcher_->clear_handlers();
-    }
-  }
-
-  /**
-   * @brief 通过指定的连接类型连接到实现
-   * @param type 连接类型
-   * @param config 连接配置
-   */
-  virtual void connect(network::ConnectionManagerFactory::ConnectionType type,
-                       const common::ConnectionConfig &config) = 0;
-
-  /**
-   * @brief 通过正向 WebSocket 连接到实现（兼容方法）
-   */
-  virtual void connect_ws(std::string_view host, uint16_t port,
-                          std::string_view access_token = "") = 0;
-
-  /**
-   * @brief 通过 HTTP 连接到实现
-   * @param host 主机地址
-   * @param port 端口
-   * @param access_token 访问令牌
-   */
-  virtual void connect_http(std::string_view host, uint16_t port,
-                            std::string_view access_token = "") = 0;
 
   /**
    * @brief 启动 Bot 并运行事件循环 (此函数会阻塞)
@@ -425,6 +403,16 @@ protected:
   std::shared_ptr<TaskScheduler> task_scheduler_;
   std::unique_ptr<network::IConnectionManager> connection_manager_;
   common::ConnectionConfig conection_config_;
+
+private:
+  void clear_event_handlers() {
+    if (dispatcher_) {
+      dispatcher_->clear_handlers();
+    }
+  }
+
+  virtual void connect(network::ConnectionManagerFactory::ConnectionType type,
+                       const common::ConnectionConfig &config) = 0;
 };
 
 } // namespace obcx::core

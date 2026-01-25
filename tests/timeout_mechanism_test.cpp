@@ -24,6 +24,13 @@ constexpr size_t SERVER_STARTUP_DELAY = 1000;
 constexpr size_t CONNECTION_ESTABLISH_DELAY = 200;
 constexpr size_t NORMAL_RESPONSE_DELAY = 100;
 constexpr size_t DELAYED_RESPONSE_TIME = 3000;
+
+inline uint16_t get_random_port() {
+  static std::mt19937 gen(static_cast<unsigned>(
+      std::chrono::steady_clock::now().time_since_epoch().count()));
+  static std::uniform_int_distribution<uint16_t> dist(40000, 65535);
+  return dist(gen);
+}
 // 客户端的默认超时时间，根据 TimeoutScenario 测试推断为30秒
 constexpr std::chrono::seconds CLIENT_DEFAULT_TIMEOUT{5};
 // 为测试用例设置一个比客户端默认超时更长的等待时间
@@ -194,7 +201,8 @@ class WsTimeoutMechanismTest : public testing::Test {
 protected:
   void SetUp() override {
     common::Logger::initialize(spdlog::level::trace);
-    server_ = std::make_unique<MockWebSocketServer>("127.0.0.1", 61221);
+    test_port_ = get_random_port();
+    server_ = std::make_unique<MockWebSocketServer>("127.0.0.1", test_port_);
     server_->start();
 
     std::this_thread::sleep_for(
@@ -243,6 +251,7 @@ protected:
   std::thread client_thread_;
   std::optional<asio::executor_work_guard<asio::io_context::executor_type>>
       work_guard_;
+  uint16_t test_port_{0};
 };
 
 /**

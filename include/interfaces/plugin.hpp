@@ -126,7 +126,7 @@ private:
       }                                                                        \
     }                                                                          \
   }                                                                            \
-  const char *obcx_get_plugin_name() {                                         \
+  auto obcx_get_plugin_name() -> const char * {                                \
     static thread_local std::string name;                                      \
     try {                                                                      \
       PluginClass temp;                                                        \
@@ -136,7 +136,7 @@ private:
       return "unknown";                                                        \
     }                                                                          \
   }                                                                            \
-  const char *obcx_get_plugin_version() {                                      \
+  auto obcx_get_plugin_version() -> const char * {                             \
     static thread_local std::string version;                                   \
     try {                                                                      \
       PluginClass temp;                                                        \

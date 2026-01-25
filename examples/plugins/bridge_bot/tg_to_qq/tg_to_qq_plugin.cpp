@@ -9,6 +9,7 @@
 #include <common/logger.hpp>
 #include <core/qq_bot.hpp>
 #include <core/tg_bot.hpp>
+#include <nlohmann/json.hpp>
 
 namespace plugins {
 TGToQQPlugin::TGToQQPlugin() {
@@ -52,8 +53,70 @@ bool TGToQQPlugin::initialize() {
     if (config_.enable_retry_queue) {
       // Create a dedicated io_context for retry queue (non-static)
       retry_io_context_ = std::make_unique<boost::asio::io_context>();
+
+      // Create work guard to keep io_context running
+      retry_work_guard_ = std::make_unique<boost::asio::executor_work_guard<
+          boost::asio::io_context::executor_type>>(
+          retry_io_context_->get_executor());
+
+      // Create retry manager
       retry_manager_ =
           std::make_shared<bridge::RetryQueueManager>(*retry_io_context_);
+
+      // Start io_context in a dedicated thread
+      retry_io_thread_ = std::make_unique<std::thread>([this]() {
+        PLUGIN_INFO(get_name(), "Retry queue io_context thread started");
+        retry_io_context_->run();
+        PLUGIN_INFO(get_name(), "Retry queue io_context thread stopped");
+      });
+
+      // Register callback for sending messages to QQ
+      retry_manager_->register_message_send_callback(
+          "qq",
+          [this](const bridge::MessageRetryEntry &retry_info,
+                 const obcx::common::Message &message)
+              -> boost::asio::awaitable<std::optional<std::string>> {
+            // Find QQ bot
+            obcx::core::QQBot *qq_bot = nullptr;
+            {
+              auto [lock, bots] = get_bots();
+              for (auto &bot_ptr : bots) {
+                if (auto *qq =
+                        dynamic_cast<obcx::core::QQBot *>(bot_ptr.get())) {
+                  qq_bot = qq;
+                  break;
+                }
+              }
+            }
+
+            if (!qq_bot) {
+              PLUGIN_WARN(get_name(), "QQ bot not found for retry callback");
+              co_return std::nullopt;
+            }
+
+            try {
+              std::string response = co_await qq_bot->send_group_message(
+                  retry_info.group_id, message);
+
+              // Parse response to get message_id
+              auto json_response = nlohmann::json::parse(response);
+              if (json_response.contains("data") &&
+                  json_response["data"].contains("message_id")) {
+                auto msg_id =
+                    json_response["data"]["message_id"].get<int64_t>();
+                co_return std::to_string(msg_id);
+              }
+              co_return std::nullopt;
+            } catch (const std::exception &e) {
+              PLUGIN_ERROR(get_name(), "Retry send to QQ failed: {}", e.what());
+              co_return std::nullopt;
+            }
+          });
+      PLUGIN_INFO(get_name(), "Registered QQ message retry callback");
+
+      // Start the retry manager processing loop
+      retry_manager_->start();
+      PLUGIN_INFO(get_name(), "Retry queue manager started");
     }
 
     // Create TelegramHandler instance
@@ -121,7 +184,17 @@ void TGToQQPlugin::shutdown() {
       retry_manager_.reset();
     }
 
-    // Reset io_context
+    // Release work guard to allow io_context to stop
+    retry_work_guard_.reset();
+
+    // Stop io_context and join the thread
+    if (retry_io_context_) {
+      retry_io_context_->stop();
+    }
+    if (retry_io_thread_ && retry_io_thread_->joinable()) {
+      retry_io_thread_->join();
+    }
+    retry_io_thread_.reset();
     retry_io_context_.reset();
 
     // Release Telegram handler

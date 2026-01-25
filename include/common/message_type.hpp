@@ -364,6 +364,8 @@ struct ConnectionConfig {
   std::string access_token;
   std::string secret;
   std::chrono::milliseconds timeout{30000};
+  std::chrono::milliseconds poll_timeout{
+      25000}; // Long-poll timeout, must be < timeout
   std::chrono::milliseconds heartbeat_interval{5000};
   bool use_ssl = false;
 

@@ -135,6 +135,13 @@ public:
    */
   virtual void close();
 
+protected:
+  /**
+   * @brief 获取配置的超时时间
+   * @return 超时时间
+   */
+  [[nodiscard]] auto get_timeout() const -> std::chrono::milliseconds;
+
 private:
   struct Impl;
   std::unique_ptr<Impl> pimpl_;
@@ -157,22 +164,6 @@ private:
   template <typename RequestType>
   void prepare_request(RequestType &request,
                        const std::map<std::string, std::string> &headers);
-};
-
-/**
- * @brief HTTP客户端工厂
- */
-class HttpClientFactory {
-public:
-  /**
-   * @brief 创建HTTP客户端实例
-   * @param ioc IO上下文
-   * @param config 连接配置
-   * @return HTTP客户端实例
-   */
-  static auto create(asio::io_context &ioc,
-                     const common::ConnectionConfig &config)
-      -> std::unique_ptr<HttpClient>;
 };
 
 } // namespace obcx::network

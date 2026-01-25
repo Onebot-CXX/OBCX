@@ -564,6 +564,8 @@ void I18nLogMessages::setup_message_keys() {
       "Config field missing or invalid: {}";
   message_keys_[LogMessageKey::CONFIG_INVALID_VALUE] =
       "Config value is invalid: {}";
+  message_keys_[LogMessageKey::CONFIG_POLL_TIMEOUT_INVALID] =
+      "poll_timeout ({} ms) must be less than timeout ({} ms)";
 
   // Plugin Manager
   message_keys_[LogMessageKey::PLUGIN_DIR_ADDED] = "Added plugin directory: {}";
@@ -711,6 +713,8 @@ void I18nLogMessages::setup_message_keys() {
       "Serialized action request: {}";
   message_keys_[LogMessageKey::ONEBOT11_SERIALIZED_GET_FORWARD_MSG] =
       "Serialized get_forward_msg request: {}";
+  message_keys_[LogMessageKey::ONEBOT11_UNSUPPORTED_MESSAGE_TYPE] =
+      "Unsupported message type: {}";
 
   // OneBot11 Event Converter
   message_keys_[LogMessageKey::ONEBOT11_EVENT_PARSE_JSON_FAILED] =

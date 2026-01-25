@@ -20,9 +20,13 @@ namespace asio = boost::asio;
  */
 class IConnectionManager {
 public:
-  // 事件回调函数类型
   using EventCallback = std::function<void(const common::Event &)>;
 
+  IConnectionManager() = default;
+  IConnectionManager(const IConnectionManager &) = delete;
+  auto operator=(const IConnectionManager &) -> IConnectionManager & = delete;
+  IConnectionManager(IConnectionManager &&) = delete;
+  auto operator=(IConnectionManager &&) -> IConnectionManager & = delete;
   virtual ~IConnectionManager() = default;
 
   /**
@@ -89,8 +93,8 @@ public:
    * @param adapter 协议适配器
    * @return 连接管理器实例
    */
-  static std::unique_ptr<IConnectionManager> create(
-      ConnectionType type, asio::io_context &ioc,
-      adapter::BaseProtocolAdapter &adapter);
+  static auto create(ConnectionType type, asio::io_context &ioc,
+                     adapter::BaseProtocolAdapter &adapter)
+      -> std::unique_ptr<IConnectionManager>;
 };
 } // namespace obcx::network

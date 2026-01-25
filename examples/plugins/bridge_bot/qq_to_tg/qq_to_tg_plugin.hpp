@@ -1,9 +1,11 @@
 #pragma once
 
+#include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 #include <core/tg_bot.hpp>
 #include <interfaces/plugin.hpp>
 #include <memory>
+#include <thread>
 
 // Forward declarations
 namespace bridge {
@@ -76,5 +78,9 @@ private:
 
   // Retry queue io_context (non-static to avoid reload issues)
   std::unique_ptr<boost::asio::io_context> retry_io_context_;
+  std::unique_ptr<
+      boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>
+      retry_work_guard_;
+  std::unique_ptr<std::thread> retry_io_thread_;
 };
 } // namespace plugins

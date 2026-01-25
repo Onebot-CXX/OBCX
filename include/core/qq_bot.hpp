@@ -32,21 +32,6 @@ public:
                const common::ConnectionConfig &config) override;
 
   /**
-   * @brief 通过正向 WebSocket 连接到 OneBot v11 实现（兼容方法）
-   */
-  void connect_ws(std::string_view host, uint16_t port,
-                  std::string_view access_token = "") override;
-
-  /**
-   * @brief 通过 HTTP 连接到 OneBot v11 实现
-   * @param host 主机地址
-   * @param port 端口
-   * @param access_token 访问令牌
-   */
-  void connect_http(std::string_view host, uint16_t port,
-                    std::string_view access_token = "") override;
-
-  /**
    * @brief 启动 Bot 并运行事件循环 (此函数会阻塞)
    */
   void run() override;

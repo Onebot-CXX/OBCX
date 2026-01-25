@@ -272,3 +272,12 @@ msgstr "WebSocket connection closed."
 
 msgid "Message sent successfully: {}"
 msgstr "Message sent successfully: {}"
+
+msgid "Serialized action request: {}"
+msgstr "Serialized action request: {}"
+
+msgid "Serialized get_forward_msg request: {}"
+msgstr "Serialized get_forward_msg request: {}"
+
+msgid "Unsupported message type: {}"
+msgstr "Unsupported message type: {}"

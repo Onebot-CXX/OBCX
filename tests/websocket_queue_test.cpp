@@ -33,7 +33,13 @@ constexpr size_t CONNECTION_ESTABLISH_DELAY = 500;
 constexpr size_t CONCURRENT_WRITE_COUNT = 10;
 constexpr size_t WEAK_NETWORK_WRITE_COUNT = 20;
 constexpr size_t WEAK_NETWORK_DELAY_MS = 100;
-constexpr uint16_t TEST_PORT = 18080;
+
+inline uint16_t get_random_port() {
+  static std::mt19937 gen(static_cast<unsigned>(
+      std::chrono::steady_clock::now().time_since_epoch().count()));
+  static std::uniform_int_distribution<uint16_t> dist(40000, 65535);
+  return dist(gen);
+}
 
 /**
  * 模拟弱网环境的WebSocket服务器
@@ -192,7 +198,8 @@ protected:
   void SetUp() override {
     common::Logger::initialize(spdlog::level::trace);
 
-    server_ = std::make_unique<MockWebSocketServer>("127.0.0.1", TEST_PORT);
+    test_port_ = get_random_port();
+    server_ = std::make_unique<MockWebSocketServer>("127.0.0.1", test_port_);
     server_->start();
 
     std::this_thread::sleep_for(
@@ -259,6 +266,7 @@ protected:
   std::thread client_thread_;
   std::optional<asio::executor_work_guard<asio::io_context::executor_type>>
       work_guard_;
+  uint16_t test_port_{0};
 };
 
 /**

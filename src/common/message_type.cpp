@@ -1,4 +1,5 @@
 #include "common/message_type.hpp"
+#include "common/i18n_log_messages.hpp"
 
 namespace obcx::common {
 
@@ -235,6 +236,7 @@ void ConnectionConfig::to_json(json &j) const {
   j["access_token"] = access_token;
   j["secret"] = secret;
   j["timeout"] = timeout.count();
+  j["poll_timeout"] = poll_timeout.count();
   j["heartbeat_interval"] = heartbeat_interval.count();
   j["use_ssl"] = use_ssl;
 
@@ -258,6 +260,16 @@ void ConnectionConfig::from_json(const json &j) {
   secret = JsonUtils::get_value(j, "secret", std::string(""));
   timeout = std::chrono::milliseconds(
       JsonUtils::get_value(j, "timeout", int64_t(30000)));
+  poll_timeout = std::chrono::milliseconds(
+      JsonUtils::get_value(j, "poll_timeout", int64_t(25000)));
+
+  // Validate poll_timeout < timeout
+  if (poll_timeout >= timeout) {
+    throw std::invalid_argument(I18nLogMessages::format_message(
+        LogMessageKey::CONFIG_POLL_TIMEOUT_INVALID, poll_timeout.count(),
+        timeout.count()));
+  }
+
   heartbeat_interval = std::chrono::milliseconds(
       JsonUtils::get_value(j, "heartbeat_interval", int64_t(5000)));
   use_ssl = JsonUtils::get_value(j, "use_ssl", false);

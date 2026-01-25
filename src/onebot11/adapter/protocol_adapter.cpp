@@ -22,21 +22,14 @@ auto ProtocolAdapter::serialize_send_message_request(
     std::string_view target_id, const common::Message &message,
     const std::optional<uint64_t> &echo,
     const std::optional<uint8_t> &message_type) -> std::string {
-  // If message_type is explicitly specified, use it
-  if (message_type) {
-    if (*message_type == static_cast<uint8_t>(MessageType::Group)) {
-      return serialize_send_group_message_request(target_id, message, echo);
-    } else {
-      return serialize_send_private_message_request(target_id, message, echo);
-    }
-  }
-
-  // Fallback: use heuristic method to determine message type
-  // This is a simplified implementation - group IDs are typically longer
-  if (target_id.length() > 10) {
+  if (*message_type == static_cast<uint8_t>(MessageType::Group)) {
     return serialize_send_group_message_request(target_id, message, echo);
-  } else {
+  } else if (*message_type == static_cast<uint8_t>(MessageType::Private)) {
     return serialize_send_private_message_request(target_id, message, echo);
+  } else {
+    OBCX_I18N_TRACE(common::LogMessageKey::ONEBOT11_UNSUPPORTED_MESSAGE_TYPE,
+                    static_cast<int>(*message_type));
+    return "";
   }
 }
 

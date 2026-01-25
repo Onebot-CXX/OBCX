@@ -16,12 +16,13 @@ RetryQueueManager::RetryQueueManager(boost::asio::io_context &io_context)
 RetryQueueManager::~RetryQueueManager() { stop(); }
 
 void RetryQueueManager::start() {
-  if (running_) {
+
+  bool expect_running_ = false;
+  if (!running_.compare_exchange_strong(expect_running_, true)) {
     PLUGIN_WARN("bridge", "RetryQueueManager already running");
     return;
   }
 
-  running_ = true;
   PLUGIN_INFO("bridge", "Starting RetryQueueManager");
 
   // Start retry queue processing coroutine
@@ -136,7 +137,7 @@ void RetryQueueManager::register_media_download_callback(
                platform);
 }
 
-boost::asio::awaitable<void> RetryQueueManager::process_retry_queues() {
+auto RetryQueueManager::process_retry_queues() -> boost::asio::awaitable<void> {
   while (running_) {
     try {
       // Process message retries
@@ -175,7 +176,8 @@ boost::asio::awaitable<void> RetryQueueManager::process_retry_queues() {
   PLUGIN_INFO("bridge", "Retry queue processing stopped");
 }
 
-boost::asio::awaitable<void> RetryQueueManager::process_message_retries() {
+auto RetryQueueManager::process_message_retries()
+    -> boost::asio::awaitable<void> {
   auto now = std::chrono::system_clock::now();
 
   // Get entries ready for retry

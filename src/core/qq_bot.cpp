@@ -33,28 +33,6 @@ void QQBot::connect(network::ConnectionManagerFactory::ConnectionType type,
                  config.port, connection_manager_->get_connection_type());
 }
 
-void QQBot::connect_ws(std::string_view host, uint16_t port,
-                       std::string_view access_token) {
-  common::ConnectionConfig config;
-  config.host = host;
-  config.port = port;
-  config.access_token = access_token;
-
-  connect(network::ConnectionManagerFactory::ConnectionType::Onebot11WebSocket,
-          config);
-}
-
-void QQBot::connect_http(std::string_view host, uint16_t port,
-                         std::string_view access_token) {
-  common::ConnectionConfig config;
-  config.host = host;
-  config.port = port;
-  config.access_token = access_token;
-
-  connect(network::ConnectionManagerFactory::ConnectionType::Onebot11HTTP,
-          config);
-}
-
 void QQBot::run() {
   if (io_context_->stopped()) {
     io_context_->restart();

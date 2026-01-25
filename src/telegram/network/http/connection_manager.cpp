@@ -1,5 +1,6 @@
 #include "telegram/network/connection_manager.hpp"
 #include "common/logger.hpp"
+#include "network/proxy_http_client.hpp"
 #include "telegram/adapter/protocol_adapter.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -263,15 +264,20 @@ auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
 
       // 设置请求头
       std::map<std::string, std::string> headers;
-      headers["User-Agent"] = "OBCX/1.0";
+      headers["User-Agent"] = "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) "
+                              "Gecko/20100101 Firefox/147.0";
 
       if (!config_.access_token.empty()) {
         headers["Authorization"] = "Bearer " + config_.access_token;
       }
 
       // 构建getUpdates请求参数
-      json params = {
-          {"offset", update_offset_}, {"limit", 100}, {"timeout", 30}};
+      auto poll_timeout_sec =
+          std::chrono::duration_cast<std::chrono::seconds>(config_.poll_timeout)
+              .count();
+      json params = {{"offset", update_offset_},
+                     {"limit", 100},
+                     {"timeout", poll_timeout_sec}};
 
       // 轮询更新端点
       std::string updates_path = "/bot" + config_.access_token + "/getUpdates";

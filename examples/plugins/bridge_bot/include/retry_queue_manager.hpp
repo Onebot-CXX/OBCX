@@ -126,22 +126,22 @@ public:
   /**
    * @brief 获取重试统计信息
    */
-  std::string get_retry_statistics() const;
+  auto get_retry_statistics() const -> std::string;
 
   /**
    * @brief 获取待处理消息重试数量
    */
-  size_t get_pending_message_retry_count() const;
+  auto get_pending_message_retry_count() const -> size_t;
 
   /**
    * @brief 获取待处理媒体下载重试数量
    */
-  size_t get_pending_media_retry_count() const;
+  auto get_pending_media_retry_count() const -> size_t;
 
 private:
   boost::asio::io_context &io_context_;
   std::unique_ptr<boost::asio::steady_timer> retry_timer_;
-  bool running_;
+  std::atomic_bool running_;
 
   // In-memory retry queues (thread-safe)
   mutable std::mutex message_retry_mutex_;
@@ -163,23 +163,24 @@ private:
   /**
    * @brief 定期检查重试队列
    */
-  boost::asio::awaitable<void> process_retry_queues();
+  auto process_retry_queues() -> boost::asio::awaitable<void>;
 
   /**
    * @brief 处理消息发送重试
    */
-  boost::asio::awaitable<void> process_message_retries();
+  auto process_message_retries() -> boost::asio::awaitable<void>;
 
   /**
    * @brief 处理媒体下载重试
    */
-  boost::asio::awaitable<void> process_media_download_retries();
+  auto process_media_download_retries() -> boost::asio::awaitable<void>;
 
   /**
    * @brief 计算下次重试时间（指数退避）
    */
-  std::chrono::system_clock::time_point calculate_next_retry_time(
-      int retry_count, int base_interval_seconds) const;
+  auto calculate_next_retry_time(int retry_count,
+                                 int base_interval_seconds) const
+      -> std::chrono::system_clock::time_point;
 };
 
 } // namespace bridge

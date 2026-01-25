@@ -12,6 +12,36 @@
 
 namespace obcx::network {
 
+namespace {
+// Base64 encoding helper for HTTP proxy authentication
+auto base64_encode(const std::string &input) -> std::string {
+  static constexpr char table[] =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+  std::string output;
+  output.reserve(((input.size() + 2) / 3) * 4);
+
+  size_t i = 0;
+  const auto *data = reinterpret_cast<const unsigned char *>(input.data());
+  size_t len = input.size();
+
+  while (i < len) {
+    uint32_t octet_a = i < len ? data[i++] : 0;
+    uint32_t octet_b = i < len ? data[i++] : 0;
+    uint32_t octet_c = i < len ? data[i++] : 0;
+
+    uint32_t triple = (octet_a << 16) | (octet_b << 8) | octet_c;
+
+    output += table[(triple >> 18) & 0x3F];
+    output += table[(triple >> 12) & 0x3F];
+    output += (i > len + 1) ? '=' : table[(triple >> 6) & 0x3F];
+    output += (i > len) ? '=' : table[triple & 0x3F];
+  }
+
+  return output;
+}
+} // namespace
+
 namespace beast = boost::beast;
 namespace http = beast::http;
 namespace asio = asio;
@@ -148,8 +178,8 @@ tcp::socket ProxyHttpClient::establish_http_tunnel(
   if (proxy_config_.username && proxy_config_.password) {
     std::string credentials =
         *proxy_config_.username + ":" + *proxy_config_.password;
-    // TODO: 实现正确的Base64编码
-    connect_request << "Proxy-Authorization: Basic " << credentials << "\r\n";
+    connect_request << "Proxy-Authorization: Basic "
+                    << base64_encode(credentials) << "\r\n";
   }
 
   connect_request << "\r\n"; // 结束头部
@@ -164,7 +194,7 @@ tcp::socket ProxyHttpClient::establish_http_tunnel(
   }
 
   std::string response_line;
-  char ch;
+  char ch = 0;
   while (asio::read(proxy_socket, asio::buffer(&ch, 1), ec) && !ec) {
     if (ch == '\n') {
       if (!response_line.empty() && response_line.back() == '\r') {
@@ -245,8 +275,12 @@ auto ProxyHttpClient::send_http_request(
                           ssl::context::no_sslv2 | ssl::context::no_sslv3 |
                           ssl::context::single_dh_use);
 
-      // 设置超时选项以避免连接挂起
-      SSL_CTX_set_timeout(ssl_ctx.native_handle(), 30);
+      // 设置超时选项以避免连接挂起（使用配置的超时时间）
+      auto timeout_sec =
+          std::chrono::duration_cast<std::chrono::seconds>(get_timeout())
+              .count();
+      SSL_CTX_set_timeout(ssl_ctx.native_handle(),
+                          static_cast<long>(timeout_sec));
 
       ssl::stream<tcp::socket> ssl_stream{std::move(tunnel_socket), ssl_ctx};
 
@@ -264,7 +298,7 @@ auto ProxyHttpClient::send_http_request(
       boost::system::error_code ec;
       int max_retries = 3;
       for (int retry = 0; retry < max_retries; ++retry) {
-        ssl_stream.handshake(ssl::stream_base::client, ec);
+        auto _ = ssl_stream.handshake(ssl::stream_base::client, ec);
         if (!ec) {
           OBCX_I18N_DEBUG_TRACE(
               common::LogMessageKey::PROXY_SSL_HANDSHAKE_SUCCESS, retry);
@@ -359,8 +393,8 @@ auto ProxyHttpClient::establish_https_tunnel(
   if (proxy_config_.username && proxy_config_.password) {
     std::string credentials =
         *proxy_config_.username + ":" + *proxy_config_.password;
-    // TODO: 实现正确的Base64编码
-    connect_req.set(http::field::proxy_authorization, "Basic " + credentials);
+    connect_req.set(http::field::proxy_authorization,
+                    "Basic " + base64_encode(credentials));
   }
 
   OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROXY_HTTPS_CONNECT_SEND,

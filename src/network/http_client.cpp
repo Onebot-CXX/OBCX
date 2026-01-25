@@ -1,13 +1,14 @@
 #include "network/http_client.hpp"
 #include "common/logger.hpp"
 
+#include <atomic>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/version.hpp>
-#include <cstdlib>
 #include <memory>
 #include <string>
 #include <thread>
@@ -23,8 +24,8 @@ using tcp = asio::ip::tcp;
 struct HttpClient::Impl {
   asio::io_context &ioc;
   common::ConnectionConfig config;
-  std::chrono::milliseconds timeout{30000};
   std::optional<ssl::context> ssl_ctx;
+  std::atomic<bool> connected{false};
 
   Impl(asio::io_context &io, common::ConnectionConfig cfg)
       : ioc(io), config(std::move(cfg)) {
@@ -136,7 +137,8 @@ auto HttpClient::post_async(std::string_view path, std::string_view body,
   auto future = promise->get_future();
 
   // 在单独的线程中执行同步请求
-  std::thread([this, promise, path, body, headers]() {
+  std::thread([this, promise, path = std::string(path),
+               body = std::string(body), headers]() {
     try {
       auto response = post_sync(path, body, headers);
       promise->set_value(response);
@@ -155,7 +157,7 @@ auto HttpClient::get_async(std::string_view path,
   auto future = promise->get_future();
 
   // 在单独的线程中执行同步请求
-  std::thread([this, promise, path, headers]() {
+  std::thread([this, promise, path = std::string(path), headers]() {
     try {
       auto response = get_sync(path, headers);
       promise->set_value(response);
@@ -174,7 +176,7 @@ auto HttpClient::head_async(std::string_view path,
   auto future = promise->get_future();
 
   // 在单独的线程中执行同步请求
-  std::thread([this, promise, path, headers]() {
+  std::thread([this, promise, path = std::string(path), headers]() {
     try {
       auto response = head_sync(path, headers);
       promise->set_value(response);
@@ -191,6 +193,9 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
     -> HttpResponse {
   OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_POST_DEBUG, path, body);
 
+  // Use a dedicated io_context for this sync operation with timeout
+  asio::io_context local_ioc;
+
   try {
     // 创建请求
     http::request<http::string_body> req{http::verb::post, path, 11};
@@ -203,6 +208,8 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
     prepare_request(req, headers);
 
     HttpResponse response;
+    boost::system::error_code final_ec;
+    bool operation_completed = false;
 
     // 判断是否需要使用HTTPS
     if (pimpl_->config.port == 443 || pimpl_->config.use_ssl) {
@@ -211,54 +218,134 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
         throw HttpClientError("SSL context not initialized for HTTPS request");
       }
 
-      // 创建SSL流
-      tcp::resolver resolver(pimpl_->ioc);
-      ssl::stream<tcp::socket> stream(pimpl_->ioc, *pimpl_->ssl_ctx);
+      // 使用beast::tcp_stream以支持expires_after超时
+      tcp::resolver resolver(local_ioc);
+      beast::ssl_stream<beast::tcp_stream> stream(local_ioc, *pimpl_->ssl_ctx);
 
       // 解析主机名
       auto const results = resolver.resolve(
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
-      // 连接并握手
-      asio::connect(stream.next_layer(), results.begin(), results.end());
-      stream.handshake(ssl::stream_base::client);
+      // 设置超时并异步连接
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).async_connect(
+          results, [&](boost::system::error_code ec,
+                       tcp::resolver::results_type::endpoint_type) {
+            if (ec) {
+              final_ec = ec;
+              operation_completed = true;
+              return;
+            }
+            pimpl_->connected = true;
 
-      // 发送请求
-      http::write(stream, req);
+            // SSL握手
+            beast::get_lowest_layer(stream).expires_after(
+                pimpl_->config.timeout);
+            stream.async_handshake(
+                ssl::stream_base::client, [&](boost::system::error_code ec) {
+                  if (ec) {
+                    final_ec = ec;
+                    operation_completed = true;
+                    return;
+                  }
 
-      // 接收响应
-      beast::flat_buffer buffer;
-      http::response<http::string_body> res;
-      http::read(stream, buffer, res);
+                  // 发送请求
+                  beast::get_lowest_layer(stream).expires_after(
+                      pimpl_->config.timeout);
+                  http::async_write(
+                      stream, req,
+                      [&](boost::system::error_code ec, std::size_t) {
+                        if (ec) {
+                          final_ec = ec;
+                          operation_completed = true;
+                          return;
+                        }
 
-      // 设置响应
-      response.status_code = res.result_int();
-      response.body = res.body();
-      response.raw_response = std::move(res);
+                        // 接收响应
+                        auto buffer = std::make_shared<beast::flat_buffer>();
+                        auto res = std::make_shared<
+                            http::response<http::string_body>>();
+                        beast::get_lowest_layer(stream).expires_after(
+                            pimpl_->config.timeout);
+                        http::async_read(
+                            stream, *buffer, *res,
+                            [&, buffer, res](boost::system::error_code ec,
+                                             std::size_t) {
+                              if (ec) {
+                                final_ec = ec;
+                              } else {
+                                response.status_code = res->result_int();
+                                response.body = res->body();
+                                response.raw_response = std::move(*res);
+                              }
+                              operation_completed = true;
+                            });
+                      });
+                });
+          });
+
+      // Run io_context until operation completes
+      local_ioc.run();
+
     } else {
       // HTTP请求
-      tcp::resolver resolver(pimpl_->ioc);
-      tcp::socket socket(pimpl_->ioc);
+      tcp::resolver resolver(local_ioc);
+      beast::tcp_stream stream(local_ioc);
 
       // 解析主机名
       auto const results = resolver.resolve(
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
-      // 连接
-      asio::connect(socket, results.begin(), results.end());
+      // 设置超时并异步连接
+      stream.expires_after(pimpl_->config.timeout);
+      stream.async_connect(
+          results, [&](boost::system::error_code ec,
+                       tcp::resolver::results_type::endpoint_type) {
+            if (ec) {
+              final_ec = ec;
+              operation_completed = true;
+              return;
+            }
+            pimpl_->connected = true;
 
-      // 发送请求
-      http::write(socket, req);
+            // 发送请求
+            stream.expires_after(pimpl_->config.timeout);
+            http::async_write(
+                stream, req, [&](boost::system::error_code ec, std::size_t) {
+                  if (ec) {
+                    final_ec = ec;
+                    operation_completed = true;
+                    return;
+                  }
 
-      // 接收响应
-      beast::flat_buffer buffer;
-      http::response<http::string_body> res;
-      http::read(socket, buffer, res);
+                  // 接收响应
+                  auto buffer = std::make_shared<beast::flat_buffer>();
+                  auto res =
+                      std::make_shared<http::response<http::string_body>>();
+                  stream.expires_after(pimpl_->config.timeout);
+                  http::async_read(
+                      stream, *buffer, *res,
+                      [&, buffer, res](boost::system::error_code ec,
+                                       std::size_t) {
+                        if (ec) {
+                          final_ec = ec;
+                        } else {
+                          response.status_code = res->result_int();
+                          response.body = res->body();
+                          response.raw_response = std::move(*res);
+                        }
+                        operation_completed = true;
+                      });
+                });
+          });
 
-      // 设置响应
-      response.status_code = res.result_int();
-      response.body = res.body();
-      response.raw_response = std::move(res);
+      // Run io_context until operation completes
+      local_ioc.run();
+    }
+
+    if (final_ec) {
+      pimpl_->connected = false;
+      throw boost::system::system_error(final_ec);
     }
 
     OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_RESPONSE_STATUS,
@@ -268,6 +355,7 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
 
     return response;
   } catch (const std::exception &e) {
+    pimpl_->connected = false;
     OBCX_I18N_ERROR(common::LogMessageKey::HTTP_POST_FAILED, e.what());
     throw HttpClientError(std::string("HTTP POST request failed: ") + e.what());
   }
@@ -278,6 +366,9 @@ auto HttpClient::get_sync(std::string_view path,
     -> HttpResponse {
   OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_GET_DEBUG, path);
 
+  // Use a dedicated io_context for this sync operation with timeout
+  asio::io_context local_ioc;
+
   try {
     // 创建请求
     http::request<http::string_body> req{http::verb::get, path, 11};
@@ -287,6 +378,8 @@ auto HttpClient::get_sync(std::string_view path,
     prepare_request(req, headers);
 
     HttpResponse response;
+    boost::system::error_code final_ec;
+    bool operation_completed = false;
 
     // 判断是否需要使用HTTPS
     if (pimpl_->config.port == 443 || pimpl_->config.use_ssl) {
@@ -295,54 +388,134 @@ auto HttpClient::get_sync(std::string_view path,
         throw HttpClientError("SSL context not initialized for HTTPS request");
       }
 
-      // 创建SSL流
-      tcp::resolver resolver(pimpl_->ioc);
-      ssl::stream<tcp::socket> stream(pimpl_->ioc, *pimpl_->ssl_ctx);
+      // 使用beast::tcp_stream以支持expires_after超时
+      tcp::resolver resolver(local_ioc);
+      beast::ssl_stream<beast::tcp_stream> stream(local_ioc, *pimpl_->ssl_ctx);
 
       // 解析主机名
       auto const results = resolver.resolve(
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
-      // 连接并握手
-      asio::connect(stream.next_layer(), results.begin(), results.end());
-      stream.handshake(ssl::stream_base::client);
+      // 设置超时并异步连接
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).async_connect(
+          results, [&](boost::system::error_code ec,
+                       tcp::resolver::results_type::endpoint_type) {
+            if (ec) {
+              final_ec = ec;
+              operation_completed = true;
+              return;
+            }
+            pimpl_->connected = true;
 
-      // 发送请求
-      http::write(stream, req);
+            // SSL握手
+            beast::get_lowest_layer(stream).expires_after(
+                pimpl_->config.timeout);
+            stream.async_handshake(
+                ssl::stream_base::client, [&](boost::system::error_code ec) {
+                  if (ec) {
+                    final_ec = ec;
+                    operation_completed = true;
+                    return;
+                  }
 
-      // 接收响应
-      beast::flat_buffer buffer;
-      http::response<http::string_body> res;
-      http::read(stream, buffer, res);
+                  // 发送请求
+                  beast::get_lowest_layer(stream).expires_after(
+                      pimpl_->config.timeout);
+                  http::async_write(
+                      stream, req,
+                      [&](boost::system::error_code ec, std::size_t) {
+                        if (ec) {
+                          final_ec = ec;
+                          operation_completed = true;
+                          return;
+                        }
 
-      // 设置响应
-      response.status_code = res.result_int();
-      response.body = res.body();
-      response.raw_response = std::move(res);
+                        // 接收响应
+                        auto buffer = std::make_shared<beast::flat_buffer>();
+                        auto res = std::make_shared<
+                            http::response<http::string_body>>();
+                        beast::get_lowest_layer(stream).expires_after(
+                            pimpl_->config.timeout);
+                        http::async_read(
+                            stream, *buffer, *res,
+                            [&, buffer, res](boost::system::error_code ec,
+                                             std::size_t) {
+                              if (ec) {
+                                final_ec = ec;
+                              } else {
+                                response.status_code = res->result_int();
+                                response.body = res->body();
+                                response.raw_response = std::move(*res);
+                              }
+                              operation_completed = true;
+                            });
+                      });
+                });
+          });
+
+      // Run io_context until operation completes
+      local_ioc.run();
+
     } else {
       // HTTP请求
-      tcp::resolver resolver(pimpl_->ioc);
-      tcp::socket socket(pimpl_->ioc);
+      tcp::resolver resolver(local_ioc);
+      beast::tcp_stream stream(local_ioc);
 
       // 解析主机名
       auto const results = resolver.resolve(
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
-      // 连接
-      asio::connect(socket, results.begin(), results.end());
+      // 设置超时并异步连接
+      stream.expires_after(pimpl_->config.timeout);
+      stream.async_connect(
+          results, [&](boost::system::error_code ec,
+                       tcp::resolver::results_type::endpoint_type) {
+            if (ec) {
+              final_ec = ec;
+              operation_completed = true;
+              return;
+            }
+            pimpl_->connected = true;
 
-      // 发送请求
-      http::write(socket, req);
+            // 发送请求
+            stream.expires_after(pimpl_->config.timeout);
+            http::async_write(
+                stream, req, [&](boost::system::error_code ec, std::size_t) {
+                  if (ec) {
+                    final_ec = ec;
+                    operation_completed = true;
+                    return;
+                  }
 
-      // 接收响应
-      beast::flat_buffer buffer;
-      http::response<http::string_body> res;
-      http::read(socket, buffer, res);
+                  // 接收响应
+                  auto buffer = std::make_shared<beast::flat_buffer>();
+                  auto res =
+                      std::make_shared<http::response<http::string_body>>();
+                  stream.expires_after(pimpl_->config.timeout);
+                  http::async_read(
+                      stream, *buffer, *res,
+                      [&, buffer, res](boost::system::error_code ec,
+                                       std::size_t) {
+                        if (ec) {
+                          final_ec = ec;
+                        } else {
+                          response.status_code = res->result_int();
+                          response.body = res->body();
+                          response.raw_response = std::move(*res);
+                        }
+                        operation_completed = true;
+                      });
+                });
+          });
 
-      // 设置响应
-      response.status_code = res.result_int();
-      response.body = res.body();
-      response.raw_response = std::move(res);
+      // Run io_context until operation completes
+      local_ioc.run();
+    }
+
+    if (final_ec) {
+      pimpl_->connected = false;
+      throw boost::system::system_error(final_ec);
     }
 
     OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_RESPONSE_STATUS,
@@ -352,6 +525,7 @@ auto HttpClient::get_sync(std::string_view path,
 
     return response;
   } catch (const std::exception &e) {
+    pimpl_->connected = false;
     OBCX_I18N_ERROR(common::LogMessageKey::HTTP_GET_FAILED, e.what());
     throw HttpClientError(std::string("HTTP GET request failed: ") + e.what());
   }
@@ -360,6 +534,9 @@ auto HttpClient::get_sync(std::string_view path,
 auto HttpClient::head_sync(std::string_view path,
                            const std::map<std::string, std::string> &headers)
     -> HttpResponse {
+  // Use a dedicated io_context for this sync operation with timeout
+  asio::io_context local_ioc;
+
   try {
     // 创建请求
     http::request<http::string_body> req{http::verb::head, path, 11};
@@ -369,6 +546,8 @@ auto HttpClient::head_sync(std::string_view path,
     prepare_request(req, headers);
 
     HttpResponse response;
+    boost::system::error_code final_ec;
+    bool operation_completed = false;
 
     // 判断是否需要使用HTTPS
     if (pimpl_->config.port == 443 || pimpl_->config.use_ssl) {
@@ -377,96 +556,163 @@ auto HttpClient::head_sync(std::string_view path,
         throw HttpClientError("SSL context not initialized for HTTPS request");
       }
 
-      // 创建SSL流
-      tcp::resolver resolver(pimpl_->ioc);
-      ssl::stream<tcp::socket> stream(pimpl_->ioc, *pimpl_->ssl_ctx);
+      // 使用beast::tcp_stream以支持expires_after超时
+      tcp::resolver resolver(local_ioc);
+      beast::ssl_stream<beast::tcp_stream> stream(local_ioc, *pimpl_->ssl_ctx);
 
       // 解析主机名
       auto const results = resolver.resolve(
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
-      // 连接并握手
-      asio::connect(stream.next_layer(), results.begin(), results.end());
-      stream.handshake(ssl::stream_base::client);
+      // 设置超时并异步连接
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).async_connect(
+          results, [&](boost::system::error_code ec,
+                       tcp::resolver::results_type::endpoint_type) {
+            if (ec) {
+              final_ec = ec;
+              operation_completed = true;
+              return;
+            }
+            pimpl_->connected = true;
 
-      // 发送请求
-      http::write(stream, req);
+            // SSL握手
+            beast::get_lowest_layer(stream).expires_after(
+                pimpl_->config.timeout);
+            stream.async_handshake(
+                ssl::stream_base::client, [&](boost::system::error_code ec) {
+                  if (ec) {
+                    final_ec = ec;
+                    operation_completed = true;
+                    return;
+                  }
 
-      // 接收响应 - HEAD请求特殊处理
-      beast::flat_buffer buffer;
-      http::response<http::string_body> res;
+                  // 发送请求
+                  beast::get_lowest_layer(stream).expires_after(
+                      pimpl_->config.timeout);
+                  http::async_write(
+                      stream, req,
+                      [&](boost::system::error_code ec, std::size_t) {
+                        if (ec) {
+                          final_ec = ec;
+                          operation_completed = true;
+                          return;
+                        }
 
-      // HEAD响应可能没有body或连接提前关闭，需要处理partial message错误
-      boost::system::error_code ec;
-      http::read(stream, buffer, res, ec);
+                        // 接收响应
+                        auto buffer = std::make_shared<beast::flat_buffer>();
+                        auto res = std::make_shared<
+                            http::response<http::string_body>>();
+                        beast::get_lowest_layer(stream).expires_after(
+                            pimpl_->config.timeout);
+                        http::async_read(
+                            stream, *buffer, *res,
+                            [&, buffer, res](boost::system::error_code ec,
+                                             std::size_t) {
+                              // HEAD响应可能没有body，忽略某些错误
+                              if (ec && ec != http::error::end_of_stream &&
+                                  ec != http::error::partial_message) {
+                                final_ec = ec;
+                              } else {
+                                response.status_code = res->result_int();
+                                response.body = res->body();
+                                response.raw_response = std::move(*res);
+                              }
+                              operation_completed = true;
+                            });
+                      });
+                });
+          });
 
-      if (ec && ec != http::error::end_of_stream &&
-          ec != beast::http::error::partial_message) {
-        throw beast::system_error{ec};
-      }
+      // Run io_context until operation completes
+      local_ioc.run();
 
-      // 设置响应
-      response.status_code = res.result_int();
-      response.body = res.body();
-      response.raw_response = std::move(res);
     } else {
       // HTTP请求
-      tcp::resolver resolver(pimpl_->ioc);
-      tcp::socket socket(pimpl_->ioc);
+      tcp::resolver resolver(local_ioc);
+      beast::tcp_stream stream(local_ioc);
 
       // 解析主机名
       auto const results = resolver.resolve(
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
-      // 连接
-      asio::connect(socket, results.begin(), results.end());
+      // 设置超时并异步连接
+      stream.expires_after(pimpl_->config.timeout);
+      stream.async_connect(
+          results, [&](boost::system::error_code ec,
+                       tcp::resolver::results_type::endpoint_type) {
+            if (ec) {
+              final_ec = ec;
+              operation_completed = true;
+              return;
+            }
+            pimpl_->connected = true;
 
-      // 发送请求
-      http::write(socket, req);
+            // 发送请求
+            stream.expires_after(pimpl_->config.timeout);
+            http::async_write(
+                stream, req, [&](boost::system::error_code ec, std::size_t) {
+                  if (ec) {
+                    final_ec = ec;
+                    operation_completed = true;
+                    return;
+                  }
 
-      // 接收响应 - HEAD请求特殊处理
-      beast::flat_buffer buffer;
-      http::response<http::string_body> res;
+                  // 接收响应
+                  auto buffer = std::make_shared<beast::flat_buffer>();
+                  auto res =
+                      std::make_shared<http::response<http::string_body>>();
+                  stream.expires_after(pimpl_->config.timeout);
+                  http::async_read(
+                      stream, *buffer, *res,
+                      [&, buffer, res](boost::system::error_code ec,
+                                       std::size_t) {
+                        // HEAD响应可能没有body，忽略某些错误
+                        if (ec && ec != http::error::end_of_stream &&
+                            ec != http::error::partial_message) {
+                          final_ec = ec;
+                        } else {
+                          response.status_code = res->result_int();
+                          response.body = res->body();
+                          response.raw_response = std::move(*res);
+                        }
+                        operation_completed = true;
+                      });
+                });
+          });
 
-      // HEAD响应可能没有body或连接提前关闭，需要处理partial message错误
-      boost::system::error_code ec;
-      http::read(socket, buffer, res, ec);
+      // Run io_context until operation completes
+      local_ioc.run();
+    }
 
-      if (ec && ec != http::error::end_of_stream &&
-          ec != beast::http::error::partial_message) {
-        throw beast::system_error{ec};
-      }
-
-      // 设置响应
-      response.status_code = res.result_int();
-      response.body = res.body();
-      response.raw_response = std::move(res);
+    if (final_ec) {
+      pimpl_->connected = false;
+      throw boost::system::system_error(final_ec);
     }
 
     return response;
   } catch (const std::exception &e) {
+    pimpl_->connected = false;
     OBCX_I18N_ERROR(common::LogMessageKey::HTTP_HEAD_FAILED, e.what());
     throw HttpClientError(std::string("HTTP HEAD request failed: ") + e.what());
   }
 }
 
 void HttpClient::set_timeout(std::chrono::milliseconds timeout) {
-  pimpl_->timeout = timeout;
+  pimpl_->config.timeout = timeout;
 }
 
 auto HttpClient::is_connected() const -> bool {
-  // 简单实现，总是返回true
-  return true;
+  return pimpl_->connected.load();
+}
+
+auto HttpClient::get_timeout() const -> std::chrono::milliseconds {
+  return pimpl_->config.timeout;
 }
 
 void HttpClient::close() {
+  pimpl_->connected = false;
   OBCX_I18N_INFO(common::LogMessageKey::HTTP_CLIENT_CLOSED);
-}
-
-auto HttpClientFactory::create(asio::io_context &ioc,
-                               const common::ConnectionConfig &config)
-    -> std::unique_ptr<HttpClient> {
-  return std::make_unique<HttpClient>(ioc, config);
 }
 
 } // namespace obcx::network
