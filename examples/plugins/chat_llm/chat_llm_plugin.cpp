@@ -307,6 +307,17 @@ auto ChatLLMPlugin::parse_url(const std::string &url) -> bool {
   }
 }
 
+auto ChatLLMPlugin::filter_llm_response(const std::string &response)
+    -> std::string {
+  try {
+    std::regex pattern(R"(^\s*\d+:\s*)", std::regex::optimize);
+    return std::regex_replace(response, pattern, "");
+  } catch (const std::exception &e) {
+    PLUGIN_WARN(get_name(), "Failed to filter LLM response: {}", e.what());
+    return response;
+  }
+}
+
 auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
                                     const obcx::common::MessageEvent &event)
     -> boost::asio::awaitable<void> {
@@ -490,6 +501,9 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
         }
         return response.content;
       });
+
+  // Filter LLM response to remove user_id prefix (e.g., "6545430341: content")
+  response_text = filter_llm_response(response_text);
 
   // Check response length
   if (prompt_builder_->is_response_too_long(response_text)) {

@@ -66,6 +66,7 @@ private:
   auto parse_url(const std::string &url) -> bool;
   auto send_response(obcx::core::IBot &bot, const chat_llm::ParsedCommand &cmd,
                      const std::string &text) -> boost::asio::awaitable<void>;
+  auto filter_llm_response(const std::string &response) -> std::string;
 
   auto ensure_runtime(obcx::core::IBot &bot)
       -> std::shared_ptr<chat_llm::Runtime>;
