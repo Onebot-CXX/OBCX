@@ -319,6 +319,9 @@ auto ChatLLMPlugin::filter_llm_response(const std::string &response)
       prev = result;
       result = std::regex_replace(result, pattern, "");
     } while (result != prev);
+
+    std::regex cleanup_pattern(R"(」[^」]*」)", std::regex::optimize);
+    result = std::regex_replace(result, cleanup_pattern, "");
     return result;
   } catch (const std::exception &e) {
     PLUGIN_WARN(get_name(), "Failed to filter LLM response: {}", e.what());
