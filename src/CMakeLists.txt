@@ -2,6 +2,7 @@ add_library(
   obcx_core SHARED
   common/logger.cpp
   common/cli_handler.cpp
+  common/component_manager.cpp
   common/i18n_log_messages.cpp
   common/embedded_locales.cpp
   common/json_utils.cpp
