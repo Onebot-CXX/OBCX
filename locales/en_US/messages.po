@@ -281,3 +281,737 @@ msgstr "Serialized get_forward_msg request: {}"
 
 msgid "Unsupported message type: {}"
 msgstr "Unsupported message type: {}"
+
+# Missing translations
+
+msgid "API request successful (coroutine) for echo: {}"
+msgstr "API request successful (coroutine) for echo: {}"
+
+msgid "API request successful (polling) for echo: {}"
+msgstr "API request successful (polling) for echo: {}"
+
+msgid "API request timed out (coroutine) for echo: {}"
+msgstr "API request timed out (coroutine) for echo: {}"
+
+msgid "API request timed out (polling) for echo: {}"
+msgstr "API request timed out (polling) for echo: {}"
+
+msgid "API request timeout"
+msgstr "API request timeout"
+
+msgid "API request timeout exception for echo: {}"
+msgstr "API request timeout exception for echo: {}"
+
+msgid "API request timeout for echo: {}"
+msgstr "API request timeout for echo: {}"
+
+msgid "API response handled for echo: {}"
+msgstr "API response handled for echo: {}"
+
+msgid "Added pending request (coroutine) with echo: {}"
+msgstr "Added pending request (coroutine) with echo: {}"
+
+msgid "Added pending request (polling) with echo: {}"
+msgstr "Added pending request (polling) with echo: {}"
+
+msgid "Added plugin directory: {}"
+msgstr "Added plugin directory: {}"
+
+msgid "All components started successfully. OBCX Framework running..."
+msgstr "All components started successfully. OBCX Framework running..."
+
+msgid "All plugins unloaded"
+msgstr "All plugins unloaded"
+
+msgid "Bot component runtime error: {}"
+msgstr "Bot component runtime error: {}"
+
+msgid "Bot component setup completed successfully"
+msgstr "Bot component setup completed successfully"
+
+msgid "Bot not connected, please call connect* methods first"
+msgstr "Bot not connected, please call connect* methods first"
+
+msgid "Bot thread {} did not finish within timeout, detaching"
+msgstr "Bot thread {} did not finish within timeout, detaching"
+
+msgid "Bot vector not initialized. Call set_bots() first."
+msgstr "Bot vector not initialized. Call set_bots() first."
+
+msgid "Calling completion handler for echo: {}"
+msgstr "Calling completion handler for echo: {}"
+
+msgid "Calling promise resolver for echo: {}"
+msgstr "Calling promise resolver for echo: {}"
+
+msgid "Check file validity exception: {} - {}"
+msgstr "Check file validity exception: {} - {}"
+
+msgid "Circular dependency detected among plugins: {}"
+msgstr "Circular dependency detected among plugins: {}"
+
+msgid "Cleaning up pending request (coroutine) for echo: {}"
+msgstr "Cleaning up pending request (coroutine) for echo: {}"
+
+msgid "Cleaning up pending request (polling) for echo: {}"
+msgstr "Cleaning up pending request (polling) for echo: {}"
+
+msgid "Cleaning up temp file: {}"
+msgstr "Cleaning up temp file: {}"
+
+msgid "Cleared all pending requests, total: 0"
+msgstr "Cleared all pending requests, total: 0"
+
+msgid "Command executed successfully"
+msgstr "Command executed successfully"
+
+msgid "Command failed with return code: {}"
+msgstr "Command failed with return code: {}"
+
+msgid "Completion handler is null for echo: {}"
+msgstr "Completion handler is null for echo: {}"
+
+msgid "Compressed WebM to GIF conversion success (320px)"
+msgstr "Compressed WebM to GIF conversion success (320px)"
+
+msgid "Config field missing or invalid: {}"
+msgstr "Config field missing or invalid: {}"
+
+msgid "Config loaded successfully from: {}"
+msgstr "Config loaded successfully from: {}"
+
+msgid "Config value is invalid: {}"
+msgstr "Config value is invalid: {}"
+
+msgid "Configuration loaded from: {}"
+msgstr "Configuration loaded from: {}"
+
+msgid "Connection disconnected"
+msgstr "Connection disconnected"
+
+msgid "Connection disconnected, error: {}"
+msgstr "Connection disconnected, error: {}"
+
+msgid "ConnectionManager already has a running connection."
+msgstr "ConnectionManager already has a running connection."
+
+msgid "ConnectionManager is not TelegramConnectionManager type"
+msgstr "ConnectionManager is not TelegramConnectionManager type"
+
+msgid "Created shared TaskScheduler with {} threads"
+msgstr "Created shared TaskScheduler with {} threads"
+
+msgid "Current pending requests: {}"
+msgstr "Current pending requests: {}"
+
+msgid "Error extracting media files: {}"
+msgstr "Error extracting media files: {}"
+
+msgid "Error polling updates: {}"
+msgstr "Error polling updates: {}"
+
+msgid "Error while waiting for write completion: {}"
+msgstr "Error while waiting for write completion: {}"
+
+msgid "Error writing message: {}"
+msgstr "Error writing message: {}"
+
+msgid "Establishing SOCKS5 tunnel: {} -> {}:{}"
+msgstr "Establishing SOCKS5 tunnel: {} -> {}:{}"
+
+msgid "Event dispatcher not initialized, cannot dispatch error event"
+msgstr "Event dispatcher not initialized, cannot dispatch error event"
+
+msgid "Event polling failed: {}"
+msgstr "Event polling failed: {}"
+
+msgid "EventConverter: Failed to parse JSON: {}"
+msgstr "EventConverter: Failed to parse JSON: {}"
+
+msgid "EventConverter: JSON exception creating event object: {}. JSON: {}"
+msgstr "EventConverter: JSON exception creating event object: {}. JSON: {}"
+
+msgid "EventConverter: Received heartbeat, interval: {}ms"
+msgstr "EventConverter: Received heartbeat, interval: {}ms"
+
+msgid "EventConverter: Unknown post_type '{}'"
+msgstr "EventConverter: Unknown post_type '{}'"
+
+msgid "Exception during plugin creation from {}: {}"
+msgstr "Exception during plugin creation from {}: {}"
+
+msgid "Exception during plugin {} initialization: {}"
+msgstr "Exception during plugin {} initialization: {}"
+
+msgid "Exception during plugin {} shutdown: {}"
+msgstr "Exception during plugin {} shutdown: {}"
+
+msgid "Executing FFmpeg command: {}"
+msgstr "Executing FFmpeg command: {}"
+
+msgid "Executing TGS conversion command: {}"
+msgstr "Executing TGS conversion command: {}"
+
+msgid "Executing system command: {}"
+msgstr "Executing system command: {}"
+
+msgid "Extracted file_unique_id: '{}' (empty: {})"
+msgstr "Extracted file_unique_id: '{}' (empty: {})"
+
+msgid "Failed to cleanup temp file: {} - {}"
+msgstr "Failed to cleanup temp file: {} - {}"
+
+msgid "Failed to create bot component of type: {}"
+msgstr "Failed to create bot component of type: {}"
+
+msgid "Failed to generate temp path: {}"
+msgstr "Failed to generate temp path: {}"
+
+msgid "Failed to get media download url (file_id: {}, type: {}): {}"
+msgstr "Failed to get media download url (file_id: {}, type: {}): {}"
+
+msgid "Failed to initialize plugin: {}"
+msgstr "Failed to initialize plugin: {}"
+
+msgid "Failed to load config file {}: {}"
+msgstr "Failed to load config file {}: {}"
+
+msgid "Failed to load obcx_create_plugin symbol from {}: {}"
+msgstr "Failed to load obcx_create_plugin symbol from {}: {}"
+
+msgid "Failed to load obcx_destroy_plugin symbol from {}: {}"
+msgstr "Failed to load obcx_destroy_plugin symbol from {}: {}"
+
+msgid "Failed to load plugin library {}: {}"
+msgstr "Failed to load plugin library {}: {}"
+
+msgid "Failed to load plugin: {}"
+msgstr "Failed to load plugin: {}"
+
+msgid "Failed to parse JSON: {}"
+msgstr "Failed to parse JSON: {}"
+
+msgid "Failed to parse WebSocket message JSON: {}"
+msgstr "Failed to parse WebSocket message JSON: {}"
+
+msgid "Failed to parse config file {}: {}"
+msgstr "Failed to parse config file {}: {}"
+
+msgid "Failed to parse event JSON: {}"
+msgstr "Failed to parse event JSON: {}"
+
+msgid "Failed to parse update JSON: {}"
+msgstr "Failed to parse update JSON: {}"
+
+msgid "Failed to pretty print JSON: {}"
+msgstr "Failed to pretty print JSON: {}"
+
+msgid "Failed to read CONNECT response: {}"
+msgstr "Failed to read CONNECT response: {}"
+
+msgid "Failed to read HTTPS CONNECT response: {}"
+msgstr "Failed to read HTTPS CONNECT response: {}"
+
+msgid "Failed to read SOCKS5 address data: {}"
+msgstr "Failed to read SOCKS5 address data: {}"
+
+msgid "Failed to read SOCKS5 authentication response: {}"
+msgstr "Failed to read SOCKS5 authentication response: {}"
+
+msgid "Failed to read SOCKS5 connect response: {}"
+msgstr "Failed to read SOCKS5 connect response: {}"
+
+msgid "Failed to read SOCKS5 response: {}"
+msgstr "Failed to read SOCKS5 response: {}"
+
+msgid "Failed to send CONNECT request: {}"
+msgstr "Failed to send CONNECT request: {}"
+
+msgid "Failed to send HTTP request: {}"
+msgstr "Failed to send HTTP request: {}"
+
+msgid "Failed to send HTTPS CONNECT request: {}"
+msgstr "Failed to send HTTPS CONNECT request: {}"
+
+msgid "Failed to set SNI for HTTPS proxy: {}"
+msgstr "Failed to set SNI for HTTPS proxy: {}"
+
+msgid "Failed to set SNI for target: {}"
+msgstr "Failed to set SNI for target: {}"
+
+msgid "Failed to setup bot component of type: {}"
+msgstr "Failed to setup bot component of type: {}"
+
+msgid "Failed to setup bot component: {}"
+msgstr "Failed to setup bot component: {}"
+
+msgid "File does not exist: {}"
+msgstr "File does not exist: {}"
+
+msgid "File download failed, status code: {}"
+msgstr "File download failed, status code: {}"
+
+msgid "File is empty: {}"
+msgstr "File is empty: {}"
+
+msgid "File is valid: {} ({}bytes)"
+msgstr "File is valid: {} ({}bytes)"
+
+msgid "GET {}"
+msgstr "GET {}"
+
+msgid "Generated Docker shared path: {}"
+msgstr "Generated Docker shared path: {}"
+
+msgid "Generated temp path: {}"
+msgstr "Generated temp path: {}"
+
+msgid "HTTP API request failed: {}"
+msgstr "HTTP API request failed: {}"
+
+msgid "HTTP Client closed"
+msgstr "HTTP Client closed"
+
+msgid "HTTP Client initialized for {}:{}"
+msgstr "HTTP Client initialized for {}:{}"
+
+msgid "HTTP GET request failed: {}"
+msgstr "HTTP GET request failed: {}"
+
+msgid "HTTP HEAD request failed: {}"
+msgstr "HTTP HEAD request failed: {}"
+
+msgid "HTTP POST request failed: {}"
+msgstr "HTTP POST request failed: {}"
+
+msgid "HTTP client not initialized"
+msgstr "HTTP client not initialized"
+
+msgid "HTTP connection disconnected"
+msgstr "HTTP connection disconnected"
+
+msgid "HTTP event polling coroutine exited"
+msgstr "HTTP event polling coroutine exited"
+
+msgid "HTTP request failed: {}"
+msgstr "HTTP request failed: {}"
+
+msgid "HTTPS proxy CONNECT request failed: {}"
+msgstr "HTTPS proxy CONNECT request failed: {}"
+
+msgid "HTTPS proxy CONNECT response: {}, status: {}, content: {}"
+msgstr "HTTPS proxy CONNECT response: {}, status: {}, content: {}"
+
+msgid "HTTPS proxy SSL connection established"
+msgstr "HTTPS proxy SSL connection established"
+
+msgid "HTTPS proxy SSL handshake failed: {}"
+msgstr "HTTPS proxy SSL handshake failed: {}"
+
+msgid "HTTPS proxy tunnel established: {}:{} -> {}:{}"
+msgstr "HTTPS proxy tunnel established: {}:{} -> {}:{}"
+
+msgid "HttpConnectionManager initialized"
+msgstr "HttpConnectionManager initialized"
+
+msgid "Invalid download URL format"
+msgstr "Invalid download URL format"
+
+msgid "Log locale set to: {}"
+msgstr "Log locale set to: {}"
+
+msgid "Looking for pending request with echo: {}"
+msgstr "Looking for pending request with echo: {}"
+
+msgid "Lossless WebM to GIF conversion success"
+msgstr "Lossless WebM to GIF conversion success"
+
+msgid "Lossless conversion failed, trying compressed conversion..."
+msgstr "Lossless conversion failed, trying compressed conversion..."
+
+msgid "No available WebSocket client"
+msgstr "No available WebSocket client"
+
+msgid "No bot components started successfully"
+msgstr "No bot components started successfully"
+
+msgid "No bot configurations found"
+msgstr "No bot configurations found"
+
+msgid "No file_path field in getFile response"
+msgstr "No file_path field in getFile response"
+
+msgid "No path found in download URL"
+msgstr "No path found in download URL"
+
+msgid "OBCX Framework shutdown complete"
+msgstr "OBCX Framework shutdown complete"
+
+msgid "OBCX Robot Framework starting..."
+msgstr "OBCX Robot Framework starting..."
+
+msgid "POST {} with body:\n{}"
+msgstr "POST {} with body:\n{}"
+
+msgid "Photo object content: {}"
+msgstr "Photo object content: {}"
+
+msgid "Plugin '{}' priority out of range [0-255], using default 0"
+msgstr "Plugin '{}' priority out of range [0-255], using default 0"
+
+msgid "Plugin '{}' requires '{}' which is not in the plugin list"
+msgstr "Plugin '{}' requires '{}' which is not in the plugin list"
+
+msgid "Plugin directory does not exist: {}"
+msgstr "Plugin directory does not exist: {}"
+
+msgid "Plugin initialization order: {}"
+msgstr "Plugin initialization order: {}"
+
+msgid "Plugin reload completed"
+msgstr "Plugin reload completed"
+
+msgid "Plugin {} deinitialized successfully"
+msgstr "Plugin {} deinitialized successfully"
+
+msgid "Plugin {} failed to deinitialize: {}"
+msgstr "Plugin {} failed to deinitialize: {}"
+
+msgid "Plugin {} failed to initialize"
+msgstr "Plugin {} failed to initialize"
+
+msgid "Plugin {} initialized successfully"
+msgstr "Plugin {} initialized successfully"
+
+msgid "Plugin {} is already loaded"
+msgstr "Plugin {} is already loaded"
+
+msgid "Plugin {} loaded successfully from {}"
+msgstr "Plugin {} loaded successfully from {}"
+
+msgid "Plugin {} not found"
+msgstr "Plugin {} not found"
+
+msgid "Plugin {} not found in plugin directories"
+msgstr "Plugin {} not found in plugin directories"
+
+msgid "Plugin {} shutdown successfully"
+msgstr "Plugin {} shutdown successfully"
+
+msgid "Plugin {} unloaded"
+msgstr "Plugin {} unloaded"
+
+msgid "Polling future resolver set for echo: {}"
+msgstr "Polling future resolver set for echo: {}"
+
+msgid "Promise resolver called for echo: {}"
+msgstr "Promise resolver called for echo: {}"
+
+msgid "Promise resolver is null for echo: {}"
+msgstr "Promise resolver is null for echo: {}"
+
+msgid "Proxy CONNECT request failed: {}"
+msgstr "Proxy CONNECT request failed: {}"
+
+msgid "Proxy authentication required but not provided"
+msgstr "Proxy authentication required but not provided"
+
+msgid "Proxy config - Host: '{}', Port: {}, Type: '{}'"
+msgstr "Proxy config - Host: '{}', Port: {}, Type: '{}'"
+
+msgid "ProxyHttpClient GET request failed: {}"
+msgstr "ProxyHttpClient GET request failed: {}"
+
+msgid "ProxyHttpClient POST request failed: {}"
+msgstr "ProxyHttpClient POST request failed: {}"
+
+msgid "ProxyHttpClient created, proxy: {}:{} -> target: {}:{}"
+msgstr "ProxyHttpClient created, proxy: {}:{} -> target: {}:{}"
+
+msgid "QQBot instance destroyed."
+msgstr "QQBot instance destroyed."
+
+msgid "Receive ws server message: {}"
+msgstr "Receive ws server message: {}"
+
+msgid "Received API response with unknown echo: {}"
+msgstr "Received API response with unknown echo: {}"
+
+msgid "Received invalid event JSON"
+msgstr "Received invalid event JSON"
+
+msgid "Received response with status code: {}"
+msgstr "Received response with status code: {}"
+
+msgid "Received signal {}, shutting down gracefully..."
+msgstr "Received signal {}, shutting down gracefully..."
+
+msgid "Received {} updates from Telegram"
+msgstr "Received {} updates from Telegram"
+
+msgid "Reconnect timer error: {}"
+msgstr "Reconnect timer error: {}"
+
+msgid "Reconnection scheduled in {}ms"
+msgstr "Reconnection scheduled in {}ms"
+
+msgid "Response body:\n{}"
+msgstr "Response body:\n{}"
+
+msgid "Response header:\n{}"
+msgstr "Response header:\n{}"
+
+msgid "Response received, canceling timeout timer for echo: {}"
+msgstr "Response received, canceling timeout timer for echo: {}"
+
+msgid "Response value set for echo: {}"
+msgstr "Response value set for echo: {}"
+
+msgid "SOCKS5 authentication failed"
+msgstr "SOCKS5 authentication failed"
+
+msgid "SOCKS5 authentication request failed: {}"
+msgstr "SOCKS5 authentication request failed: {}"
+
+msgid "SOCKS5 connect failed, error code: {}"
+msgstr "SOCKS5 connect failed, error code: {}"
+
+msgid "SOCKS5 connect request failed: {}"
+msgstr "SOCKS5 connect request failed: {}"
+
+msgid "SOCKS5 handshake failed: {}"
+msgstr "SOCKS5 handshake failed: {}"
+
+msgid "SOCKS5 tunnel established: {}:{} -> {}:{}"
+msgstr "SOCKS5 tunnel established: {}:{} -> {}:{}"
+
+msgid "SOCKS5 unsupported authentication method"
+msgstr "SOCKS5 unsupported authentication method"
+
+msgid "SOCKS5 version mismatch"
+msgstr "SOCKS5 version mismatch"
+
+msgid "SSL failed to read HTTP response: {}"
+msgstr "SSL failed to read HTTP response: {}"
+
+msgid "SSL failed to send HTTP request: {}"
+msgstr "SSL failed to send HTTP request: {}"
+
+msgid "SSL handshake failed (retry {}/{}): {}"
+msgstr "SSL handshake failed (retry {}/{}): {}"
+
+msgid "SSL handshake success (retry {})"
+msgstr "SSL handshake success (retry {})"
+
+msgid "Sending CONNECT request via HTTPS proxy: {}"
+msgstr "Sending CONNECT request via HTTPS proxy: {}"
+
+msgid "Shutdown already in progress, ignoring signal {}"
+msgstr "Shutdown already in progress, ignoring signal {}"
+
+msgid "Shutting down OBCX Framework..."
+msgstr "Shutting down OBCX Framework..."
+
+msgid "Skipping disabled bot component of type: {}"
+msgstr "Skipping disabled bot component of type: {}"
+
+msgid "Start HTTP event polling, interval: {}ms"
+msgstr "Start HTTP event polling, interval: {}ms"
+
+msgid "Start WebM to GIF conversion with fallback: {} -> {}"
+msgstr "Start WebM to GIF conversion with fallback: {} -> {}"
+
+msgid "Start converting TGS to GIF: {} -> {}"
+msgstr "Start converting TGS to GIF: {} -> {}"
+
+msgid "Start converting WebM to GIF: {} -> {}"
+msgstr "Start converting WebM to GIF: {} -> {}"
+
+msgid "Starting bot component of type: {}"
+msgstr "Starting bot component of type: {}"
+
+msgid "Starting plugin reload..."
+msgstr "Starting plugin reload..."
+
+msgid "Starting polling wait for echo: {}"
+msgstr "Starting polling wait for echo: {}"
+
+msgid "Stop HTTP event polling"
+msgstr "Stop HTTP event polling"
+
+msgid "Stream truncated error detected, might need to rebuild tunnel"
+msgstr "Stream truncated error detected, might need to rebuild tunnel"
+
+msgid "System command execution exception: {}"
+msgstr "System command execution exception: {}"
+
+msgid "TGS to GIF conversion exception: {}"
+msgstr "TGS to GIF conversion exception: {}"
+
+msgid "TGS to GIF conversion failed, lottie-convert might be missing"
+msgstr "TGS to GIF conversion failed, lottie-convert might be missing"
+
+msgid "TGS to GIF conversion success, output size: {} bytes"
+msgstr "TGS to GIF conversion success, output size: {} bytes"
+
+msgid "TaskScheduler destroyed"
+msgstr "TaskScheduler destroyed"
+
+msgid "TaskScheduler: Batch task execution completed"
+msgstr "TaskScheduler: Batch task execution completed"
+
+msgid "TaskScheduler: Exception occurred during heavy task execution"
+msgstr "TaskScheduler: Exception occurred during heavy task execution"
+
+msgid "TaskScheduler: Executing heavy task with timeout (timeout: {}ms)"
+msgstr "TaskScheduler: Executing heavy task with timeout (timeout: {}ms)"
+
+msgid "TaskScheduler: Heavy task completed (no return value)"
+msgstr "TaskScheduler: Heavy task completed (no return value)"
+
+msgid "TaskScheduler: Heavy task completed, returning result"
+msgstr "TaskScheduler: Heavy task completed, returning result"
+
+msgid "TaskScheduler: Starting batch execution of {} heavy tasks"
+msgstr "TaskScheduler: Starting batch execution of {} heavy tasks"
+
+msgid "TaskScheduler: Starting heavy task execution (worker thread ID: {})"
+msgstr "TaskScheduler: Starting heavy task execution (worker thread ID: {})"
+
+msgid "TaskScheduler: Submitting heavy task to thread pool (thread ID: {})"
+msgstr "TaskScheduler: Submitting heavy task to thread pool (thread ID: {})"
+
+msgid "TaskScheduler: Timeout task execution failed: {}"
+msgstr "TaskScheduler: Timeout task execution failed: {}"
+
+msgid "Telegram Bot only support TelegramHTTP"
+msgstr "Telegram Bot only support TelegramHTTP"
+
+msgid "TelegramBot instance destroyed."
+msgstr "TelegramBot instance destroyed."
+
+msgid "TelegramBot::{} not implemented yet"
+msgstr "TelegramBot::{} not implemented yet"
+
+msgid "TelegramConnectionManager initialized"
+msgstr "TelegramConnectionManager initialized"
+
+msgid "Timeout detected for echo: {}"
+msgstr "Timeout detected for echo: {}"
+
+msgid "Trying lossless conversion..."
+msgstr "Trying lossless conversion..."
+
+msgid "Unknown bot type: {}"
+msgstr "Unknown bot type: {}"
+
+msgid "Unknown connection type: {} for bot type: {}"
+msgstr "Unknown connection type: {} for bot type: {}"
+
+msgid "Unknown error: no result and no error"
+msgstr "Unknown error: no result and no error"
+
+msgid "Unsupported proxy type"
+msgstr "Unsupported proxy type"
+
+msgid "Using coroutine mode for API request"
+msgstr "Using coroutine mode for API request"
+
+msgid "Using polling mode for API request"
+msgstr "Using polling mode for API request"
+
+msgid "Waiting for bot thread {} to finish..."
+msgstr "Waiting for bot thread {} to finish..."
+
+msgid "Waiting {}ms before retry"
+msgstr "Waiting {}ms before retry"
+
+msgid "WebM to GIF conversion completely failed, need fallback to text/emoji"
+msgstr "WebM to GIF conversion completely failed, need fallback to text/emoji"
+
+msgid "WebM to GIF conversion exception: {}"
+msgstr "WebM to GIF conversion exception: {}"
+
+msgid "WebM to GIF conversion failed or invalid output file"
+msgstr "WebM to GIF conversion failed or invalid output file"
+
+msgid "WebM to GIF conversion success, output size: {} bytes"
+msgstr "WebM to GIF conversion success, output size: {} bytes"
+
+msgid "WebM to GIF conversion with fallback exception: {}"
+msgstr "WebM to GIF conversion with fallback exception: {}"
+
+msgid "WebSocket caught unhandled exception during close: {}"
+msgstr "WebSocket caught unhandled exception during close: {}"
+
+msgid "WebSocket caught unhandled exception: {}"
+msgstr "WebSocket caught unhandled exception: {}"
+
+msgid "WebSocket close error: {}"
+msgstr "WebSocket close error: {}"
+
+msgid "WebSocket message sent (coroutine): {}"
+msgstr "WebSocket message sent (coroutine): {}"
+
+msgid "WebSocket message sent (polling): {}"
+msgstr "WebSocket message sent (polling): {}"
+
+msgid "WebSocket not connected, cannot send message."
+msgstr "WebSocket not connected, cannot send message."
+
+msgid "WebSocket received raw message: {}"
+msgstr "WebSocket received raw message: {}"
+
+msgid "WebSocket run error: {}"
+msgstr "WebSocket run error: {}"
+
+msgid "[Animation]"
+msgstr "[Animation]"
+
+msgid "[Audio: {}]"
+msgstr "[Audio: {}]"
+
+msgid "[Audio]"
+msgstr "[Audio]"
+
+msgid "[Document: {}]"
+msgstr "[Document: {}]"
+
+msgid "[Document]"
+msgstr "[Document]"
+
+msgid "[Photo]"
+msgstr "[Photo]"
+
+msgid "[Sticker]"
+msgstr "[Sticker]"
+
+msgid "[Video Note]"
+msgstr "[Video Note]"
+
+msgid "[Video]"
+msgstr "[Video]"
+
+msgid "[Voice]"
+msgstr "[Voice]"
+
+msgid "[{} Sticker]"
+msgstr "[{} Sticker]"
+
+msgid "getFile request failed: {}"
+msgstr "getFile request failed: {}"
+
+msgid "obcx_create_plugin returned nullptr for {}"
+msgstr "obcx_create_plugin returned nullptr for {}"
+
+msgid "poll_timeout ({} ms) must be less than timeout ({} ms)"
+msgstr "poll_timeout ({} ms) must be less than timeout ({} ms)"
+
+msgid "{} extracted file_unique_id: '{}' (empty: {})"
+msgstr "{} extracted file_unique_id: '{}' (empty: {})"
+
+msgid "{} object content: {}"
+msgstr "{} object content: {}"
+
+msgid "Warning: poll_force_close ({}ms) may trigger before server closes connection. This could cause issues. Consider increasing poll_force_close value."
+msgstr "Warning: poll_force_close ({}ms) may trigger before server closes connection. This could cause issues. Consider increasing poll_force_close value."

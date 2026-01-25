@@ -25,7 +25,7 @@ void TelegramConnectionManager::connect(
   config_ = config;
 
   // 从配置加载轮询间隔
-  poll_interval_ = config_.poll_interval;
+  poll_retry_interval_ = config_.poll_retry_interval;
 
   // 检查是否需要使用代理
   if (!config_.proxy_host.empty() && config_.proxy_port > 0) {
@@ -248,7 +248,7 @@ void TelegramConnectionManager::start_polling() {
     // 启动轮询协程
     asio::co_spawn(ioc_, poll_updates(), asio::detached);
     OBCX_I18N_INFO(common::LogMessageKey::START_POLLING,
-                   poll_interval_.count());
+                   poll_retry_interval_.count());
   }
 }
 
@@ -310,13 +310,12 @@ auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
 
     } catch (const std::exception &e) {
       OBCX_I18N_WARN(common::LogMessageKey::POLLING_FAILED, e.what());
-      // 出错时等待一段时间再重试，避免频繁请求
       should_delay = true;
     }
 
     // 仅在出错时等待，正常情况下立即开始下一次轮询
     if (should_delay) {
-      poll_timer_.expires_after(poll_interval_);
+      poll_timer_.expires_after(poll_retry_interval_);
       try {
         co_await poll_timer_.async_wait(asio::use_awaitable);
       } catch (const boost::system::system_error &e) {

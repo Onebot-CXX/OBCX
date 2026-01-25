@@ -366,9 +366,8 @@ struct ConnectionConfig {
   std::chrono::milliseconds timeout{30000};
   std::chrono::milliseconds poll_timeout{
       25000}; // Long-poll timeout sent to server (e.g., Telegram getUpdates)
-  std::chrono::milliseconds poll_force_close{
-      30000}; // Client-side safety timeout to force close abnormal connections
-  std::chrono::milliseconds poll_interval{1000}; // Interval between poll requests (for error retry)
+  std::chrono::milliseconds poll_force_close{30000};
+  std::chrono::milliseconds poll_retry_interval{3000};
   std::chrono::milliseconds heartbeat_interval{5000};
   bool use_ssl = false;
 
@@ -378,45 +377,5 @@ struct ConnectionConfig {
   std::string proxy_type = "http"; // "http", "https", "socks5"
   std::string proxy_username;
   std::string proxy_password;
-
-  /*
-   * \if CHINESE
-   * 序列化支持
-   * \endif
-   * \if ENGLISH
-   * Serialization support
-   * \endif
-   */
-  void to_json(json &j) const;
-  void from_json(const json &j);
 };
-
-/**
- * \if CHINESE
- * @brief 适配器配置
- * \endif
- * \if ENGLISH
- * @brief Adapter configuration
- * \endif
- */
-struct AdapterConfig {
-  ConnectionConfig v11_config;
-  std::string v12_impl_name = "obcx";
-  std::string v12_platform = "qq";
-  std::string v12_version = "1.0.0";
-  bool enable_heartbeat = true;
-  std::chrono::milliseconds event_timeout{5000};
-
-  /*
-   * \if CHINESE
-   * 序列化支持
-   * \endif
-   * \if ENGLISH
-   * Serialization support
-   * \endif
-   */
-  void to_json(json &j) const;
-  void from_json(const json &j);
-};
-
 } // namespace obcx::common

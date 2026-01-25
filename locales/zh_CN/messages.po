@@ -281,3 +281,737 @@ msgstr "序列化获取转发消息请求: {}"
 
 msgid "Unsupported message type: {}"
 msgstr "不支持的消息类型: {}"
+
+# Missing translations
+
+msgid "API request successful (coroutine) for echo: {}"
+msgstr "API 请求成功 (协程) echo: {}"
+
+msgid "API request successful (polling) for echo: {}"
+msgstr "API 请求成功 (轮询) echo: {}"
+
+msgid "API request timed out (coroutine) for echo: {}"
+msgstr "API 请求超时 (协程) echo: {}"
+
+msgid "API request timed out (polling) for echo: {}"
+msgstr "API 请求超时 (轮询) echo: {}"
+
+msgid "API request timeout"
+msgstr "API 请求超时"
+
+msgid "API request timeout exception for echo: {}"
+msgstr "API 请求超时异常 echo: {}"
+
+msgid "API request timeout for echo: {}"
+msgstr "API 请求超时 echo: {}"
+
+msgid "API response handled for echo: {}"
+msgstr "API 响应已处理 echo: {}"
+
+msgid "Added pending request (coroutine) with echo: {}"
+msgstr "添加待处理请求 (协程) echo: {}"
+
+msgid "Added pending request (polling) with echo: {}"
+msgstr "添加待处理请求 (轮询) echo: {}"
+
+msgid "Added plugin directory: {}"
+msgstr "添加插件目录: {}"
+
+msgid "All components started successfully. OBCX Framework running..."
+msgstr "所有组件已成功启动。OBCX 框架正在运行..."
+
+msgid "All plugins unloaded"
+msgstr "所有插件已卸载"
+
+msgid "Bot component runtime error: {}"
+msgstr "Bot 组件运行时错误: {}"
+
+msgid "Bot component setup completed successfully"
+msgstr "Bot 组件设置成功完成"
+
+msgid "Bot not connected, please call connect* methods first"
+msgstr "Bot 未连接，请先调用 connect* 方法"
+
+msgid "Bot thread {} did not finish within timeout, detaching"
+msgstr "Bot 线程 {} 在超时时间内未完成，正在分离"
+
+msgid "Bot vector not initialized. Call set_bots() first."
+msgstr "Bot 向量未初始化。请先调用 set_bots()。"
+
+msgid "Calling completion handler for echo: {}"
+msgstr "调用完成处理程序 echo: {}"
+
+msgid "Calling promise resolver for echo: {}"
+msgstr "调用 promise 解析器 echo: {}"
+
+msgid "Check file validity exception: {} - {}"
+msgstr "检查文件有效性异常: {} - {}"
+
+msgid "Circular dependency detected among plugins: {}"
+msgstr "检测到插件间存在循环依赖: {}"
+
+msgid "Cleaning up pending request (coroutine) for echo: {}"
+msgstr "清理待处理请求 (协程) echo: {}"
+
+msgid "Cleaning up pending request (polling) for echo: {}"
+msgstr "清理待处理请求 (轮询) echo: {}"
+
+msgid "Cleaning up temp file: {}"
+msgstr "清理临时文件: {}"
+
+msgid "Cleared all pending requests, total: 0"
+msgstr "已清除所有待处理请求，总计: 0"
+
+msgid "Command executed successfully"
+msgstr "命令执行成功"
+
+msgid "Command failed with return code: {}"
+msgstr "命令执行失败，返回码: {}"
+
+msgid "Completion handler is null for echo: {}"
+msgstr "完成处理程序为空 echo: {}"
+
+msgid "Compressed WebM to GIF conversion success (320px)"
+msgstr "WebM 到 GIF 压缩转换成功 (320px)"
+
+msgid "Config field missing or invalid: {}"
+msgstr "配置字段缺失或无效: {}"
+
+msgid "Config loaded successfully from: {}"
+msgstr "从配置成功加载: {}"
+
+msgid "Config value is invalid: {}"
+msgstr "配置值无效: {}"
+
+msgid "Configuration loaded from: {}"
+msgstr "从加载配置: {}"
+
+msgid "Connection disconnected"
+msgstr "连接已断开"
+
+msgid "Connection disconnected, error: {}"
+msgstr "连接已断开，错误: {}"
+
+msgid "ConnectionManager already has a running connection."
+msgstr "ConnectionManager 已有一个正在运行的连接。"
+
+msgid "ConnectionManager is not TelegramConnectionManager type"
+msgstr "ConnectionManager 不是 TelegramConnectionManager 类型"
+
+msgid "Created shared TaskScheduler with {} threads"
+msgstr "创建共享 TaskScheduler，线程数: {}"
+
+msgid "Current pending requests: {}"
+msgstr "当前待处理请求: {}"
+
+msgid "Error extracting media files: {}"
+msgstr "提取媒体文件错误: {}"
+
+msgid "Error polling updates: {}"
+msgstr "轮询更新错误: {}"
+
+msgid "Error while waiting for write completion: {}"
+msgstr "等待写入完成时出错: {}"
+
+msgid "Error writing message: {}"
+msgstr "写入消息错误: {}"
+
+msgid "Establishing SOCKS5 tunnel: {} -> {}:{}"
+msgstr "建立 SOCKS5 隧道: {} -> {}:{}"
+
+msgid "Event dispatcher not initialized, cannot dispatch error event"
+msgstr "事件分发器未初始化，无法分发错误事件"
+
+msgid "Event polling failed: {}"
+msgstr "事件轮询失败: {}"
+
+msgid "EventConverter: Failed to parse JSON: {}"
+msgstr "EventConverter: 解析 JSON 失败: {}"
+
+msgid "EventConverter: JSON exception creating event object: {}. JSON: {}"
+msgstr "EventConverter: 创建事件对象 JSON 异常: {}。JSON: {}"
+
+msgid "EventConverter: Received heartbeat, interval: {}ms"
+msgstr "EventConverter: 收到心跳，间隔: {}ms"
+
+msgid "EventConverter: Unknown post_type '{}'"
+msgstr "EventConverter: 未知的 post_type '{}'"
+
+msgid "Exception during plugin creation from {}: {}"
+msgstr "从 {} 创建插件时的异常: {}"
+
+msgid "Exception during plugin {} initialization: {}"
+msgstr "插件 {} 初始化时的异常: {}"
+
+msgid "Exception during plugin {} shutdown: {}"
+msgstr "插件 {} 关闭时的异常: {}"
+
+msgid "Executing FFmpeg command: {}"
+msgstr "执行 FFmpeg 命令: {}"
+
+msgid "Executing TGS conversion command: {}"
+msgstr "执行 TGS 转换命令: {}"
+
+msgid "Executing system command: {}"
+msgstr "执行系统命令: {}"
+
+msgid "Extracted file_unique_id: '{}' (empty: {})"
+msgstr "提取 file_unique_id: '{}' (空: {})"
+
+msgid "Failed to cleanup temp file: {} - {}"
+msgstr "清理临时文件失败: {} - {}"
+
+msgid "Failed to create bot component of type: {}"
+msgstr "创建 bot 组件失败，类型: {}"
+
+msgid "Failed to generate temp path: {}"
+msgstr "生成临时路径失败: {}"
+
+msgid "Failed to get media download url (file_id: {}, type: {}): {}"
+msgstr "获取媒体下载 URL 失败 (file_id: {}, type: {}): {}"
+
+msgid "Failed to initialize plugin: {}"
+msgstr "初始化插件失败: {}"
+
+msgid "Failed to load config file {}: {}"
+msgstr "加载配置文件失败 {}: {}"
+
+msgid "Failed to load obcx_create_plugin symbol from {}: {}"
+msgstr "从 {} 加载 obcx_create_plugin 符号失败: {}"
+
+msgid "Failed to load obcx_destroy_plugin symbol from {}: {}"
+msgstr "从 {} 加载 obcx_destroy_plugin 符号失败: {}"
+
+msgid "Failed to load plugin library {}: {}"
+msgstr "加载插件库失败 {}: {}"
+
+msgid "Failed to load plugin: {}"
+msgstr "加载插件失败: {}"
+
+msgid "Failed to parse JSON: {}"
+msgstr "解析 JSON 失败: {}"
+
+msgid "Failed to parse WebSocket message JSON: {}"
+msgstr "解析 WebSocket 消息 JSON 失败: {}"
+
+msgid "Failed to parse config file {}: {}"
+msgstr "解析配置文件失败 {}: {}"
+
+msgid "Failed to parse event JSON: {}"
+msgstr "解析事件 JSON 失败: {}"
+
+msgid "Failed to parse update JSON: {}"
+msgstr "解析更新 JSON 失败: {}"
+
+msgid "Failed to pretty print JSON: {}"
+msgstr "JSON 美化输出失败: {}"
+
+msgid "Failed to read CONNECT response: {}"
+msgstr "读取 CONNECT 响应失败: {}"
+
+msgid "Failed to read HTTPS CONNECT response: {}"
+msgstr "读取 HTTPS CONNECT 响应失败: {}"
+
+msgid "Failed to read SOCKS5 address data: {}"
+msgstr "读取 SOCKS5 地址数据失败: {}"
+
+msgid "Failed to read SOCKS5 authentication response: {}"
+msgstr "读取 SOCKS5 认证响应失败: {}"
+
+msgid "Failed to read SOCKS5 connect response: {}"
+msgstr "读取 SOCKS5 连接响应失败: {}"
+
+msgid "Failed to read SOCKS5 response: {}"
+msgstr "读取 SOCKS5 响应失败: {}"
+
+msgid "Failed to send CONNECT request: {}"
+msgstr "发送 CONNECT 请求失败: {}"
+
+msgid "Failed to send HTTP request: {}"
+msgstr "发送 HTTP 请求失败: {}"
+
+msgid "Failed to send HTTPS CONNECT request: {}"
+msgstr "发送 HTTPS CONNECT 请求失败: {}"
+
+msgid "Failed to set SNI for HTTPS proxy: {}"
+msgstr "为 HTTPS 代理设置 SNI 失败: {}"
+
+msgid "Failed to set SNI for target: {}"
+msgstr "为目标设置 SNI 失败: {}"
+
+msgid "Failed to setup bot component of type: {}"
+msgstr "设置 bot 组件失败，类型: {}"
+
+msgid "Failed to setup bot component: {}"
+msgstr "设置 bot 组件失败: {}"
+
+msgid "File does not exist: {}"
+msgstr "文件不存在: {}"
+
+msgid "File download failed, status code: {}"
+msgstr "文件下载失败，状态码: {}"
+
+msgid "File is empty: {}"
+msgstr "文件为空: {}"
+
+msgid "File is valid: {} ({}bytes)"
+msgstr "文件有效: {} ({}字节)"
+
+msgid "GET {}"
+msgstr "GET {}"
+
+msgid "Generated Docker shared path: {}"
+msgstr "生成的 Docker 共享路径: {}"
+
+msgid "Generated temp path: {}"
+msgstr "生成的临时路径: {}"
+
+msgid "HTTP API request failed: {}"
+msgstr "HTTP API 请求失败: {}"
+
+msgid "HTTP Client closed"
+msgstr "HTTP 客户端已关闭"
+
+msgid "HTTP Client initialized for {}:{}"
+msgstr "HTTP 客户端已初始化 {}:{}"
+
+msgid "HTTP GET request failed: {}"
+msgstr "HTTP GET 请求失败: {}"
+
+msgid "HTTP HEAD request failed: {}"
+msgstr "HTTP HEAD 请求失败: {}"
+
+msgid "HTTP POST request failed: {}"
+msgstr "HTTP POST 请求失败: {}"
+
+msgid "HTTP client not initialized"
+msgstr "HTTP 客户端未初始化"
+
+msgid "HTTP connection disconnected"
+msgstr "HTTP 连接已断开"
+
+msgid "HTTP event polling coroutine exited"
+msgstr "HTTP 事件轮询协程已退出"
+
+msgid "HTTP request failed: {}"
+msgstr "HTTP 请求失败: {}"
+
+msgid "HTTPS proxy CONNECT request failed: {}"
+msgstr "HTTPS 代理 CONNECT 请求失败: {}"
+
+msgid "HTTPS proxy CONNECT response: {}, status: {}, content: {}"
+msgstr "HTTPS 代理 CONNECT 响应: {}, 状态: {}, 内容: {}"
+
+msgid "HTTPS proxy SSL connection established"
+msgstr "HTTPS 代理 SSL 连接已建立"
+
+msgid "HTTPS proxy SSL handshake failed: {}"
+msgstr "HTTPS 代理 SSL 握手失败: {}"
+
+msgid "HTTPS proxy tunnel established: {}:{} -> {}:{}"
+msgstr "HTTPS 代理隧道已建立: {}:{} -> {}:{}"
+
+msgid "HttpConnectionManager initialized"
+msgstr "HttpConnectionManager 已初始化"
+
+msgid "Invalid download URL format"
+msgstr "无效的下载 URL 格式"
+
+msgid "Log locale set to: {}"
+msgstr "日志语言环境设置为: {}"
+
+msgid "Looking for pending request with echo: {}"
+msgstr "查找待处理请求 echo: {}"
+
+msgid "Lossless WebM to GIF conversion success"
+msgstr "WebM 到 GIF 无损转换成功"
+
+msgid "Lossless conversion failed, trying compressed conversion..."
+msgstr "无损转换失败，尝试压缩转换..."
+
+msgid "No available WebSocket client"
+msgstr "没有可用的 WebSocket 客户端"
+
+msgid "No bot components started successfully"
+msgstr "没有 bot 组件成功启动"
+
+msgid "No bot configurations found"
+msgstr "未找到 bot 配置"
+
+msgid "No file_path field in getFile response"
+msgstr "getFile 响应中没有 file_path 字段"
+
+msgid "No path found in download URL"
+msgstr "下载 URL 中未找到路径"
+
+msgid "OBCX Framework shutdown complete"
+msgstr "OBCX 框架关闭完成"
+
+msgid "OBCX Robot Framework starting..."
+msgstr "OBCX 机器人框架正在启动..."
+
+msgid "POST {} with body:\n{}"
+msgstr "POST {} 主体:\n{}"
+
+msgid "Photo object content: {}"
+msgstr "Photo 对象内容: {}"
+
+msgid "Plugin '{}' priority out of range [0-255], using default 0"
+msgstr "插件 '{}' 优先级超出范围 [0-255]，使用默认值 0"
+
+msgid "Plugin '{}' requires '{}' which is not in the plugin list"
+msgstr "插件 '{}' 需要 '{}'，但不在插件列表中"
+
+msgid "Plugin directory does not exist: {}"
+msgstr "插件目录不存在: {}"
+
+msgid "Plugin initialization order: {}"
+msgstr "插件初始化顺序: {}"
+
+msgid "Plugin reload completed"
+msgstr "插件重新加载完成"
+
+msgid "Plugin {} deinitialized successfully"
+msgstr "插件 {} 已成功取消初始化"
+
+msgid "Plugin {} failed to deinitialize: {}"
+msgstr "插件 {} 取消初始化失败: {}"
+
+msgid "Plugin {} failed to initialize"
+msgstr "插件 {} 初始化失败"
+
+msgid "Plugin {} initialized successfully"
+msgstr "插件 {} 初始化成功"
+
+msgid "Plugin {} is already loaded"
+msgstr "插件 {} 已加载"
+
+msgid "Plugin {} loaded successfully from {}"
+msgstr "插件 {} 已成功从 {} 加载"
+
+msgid "Plugin {} not found"
+msgstr "插件 {} 未找到"
+
+msgid "Plugin {} not found in plugin directories"
+msgstr "在插件目录中未找到插件 {}"
+
+msgid "Plugin {} shutdown successfully"
+msgstr "插件 {} 关闭成功"
+
+msgid "Plugin {} unloaded"
+msgstr "插件 {} 已卸载"
+
+msgid "Polling future resolver set for echo: {}"
+msgstr "轮询 future 解析器已设置 echo: {}"
+
+msgid "Promise resolver called for echo: {}"
+msgstr "Promise 解析器已调用 echo: {}"
+
+msgid "Promise resolver is null for echo: {}"
+msgstr "Promise 解析器为空 echo: {}"
+
+msgid "Proxy CONNECT request failed: {}"
+msgstr "代理 CONNECT 请求失败: {}"
+
+msgid "Proxy authentication required but not provided"
+msgstr "需要代理认证但未提供"
+
+msgid "Proxy config - Host: '{}', Port: {}, Type: '{}'"
+msgstr "代理配置 - 主机: '{}', 端口: {}, 类型: '{}'"
+
+msgid "ProxyHttpClient GET request failed: {}"
+msgstr "ProxyHttpClient GET 请求失败: {}"
+
+msgid "ProxyHttpClient POST request failed: {}"
+msgstr "ProxyHttpClient POST 请求失败: {}"
+
+msgid "ProxyHttpClient created, proxy: {}:{} -> target: {}:{}"
+msgstr "ProxyHttpClient 已创建，代理: {}:{} -> 目标: {}:{}"
+
+msgid "QQBot instance destroyed."
+msgstr "QQBot 实例已销毁。"
+
+msgid "Receive ws server message: {}"
+msgstr "收到 ws 服务器消息: {}"
+
+msgid "Received API response with unknown echo: {}"
+msgstr "收到 API 响应，但 echo 未知: {}"
+
+msgid "Received invalid event JSON"
+msgstr "收到无效的事件 JSON"
+
+msgid "Received response with status code: {}"
+msgstr "收到响应，状态码: {}"
+
+msgid "Received signal {}, shutting down gracefully..."
+msgstr "收到信号 {}，正在优雅关闭..."
+
+msgid "Received {} updates from Telegram"
+msgstr "从 Telegram 收到 {} 个更新"
+
+msgid "Reconnect timer error: {}"
+msgstr "重连计时器错误: {}"
+
+msgid "Reconnection scheduled in {}ms"
+msgstr "计划在 {}ms 后重新连接"
+
+msgid "Response body:\n{}"
+msgstr "响应主体:\n{}"
+
+msgid "Response header:\n{}"
+msgstr "响应头:\n{}"
+
+msgid "Response received, canceling timeout timer for echo: {}"
+msgstr "收到响应，取消 echo 的超时计时器: {}"
+
+msgid "Response value set for echo: {}"
+msgstr "响应值已设置 echo: {}"
+
+msgid "SOCKS5 authentication failed"
+msgstr "SOCKS5 认证失败"
+
+msgid "SOCKS5 authentication request failed: {}"
+msgstr "SOCKS5 认证请求失败: {}"
+
+msgid "SOCKS5 connect failed, error code: {}"
+msgstr "SOCKS5 连接失败，错误码: {}"
+
+msgid "SOCKS5 connect request failed: {}"
+msgstr "SOCKS5 连接请求失败: {}"
+
+msgid "SOCKS5 handshake failed: {}"
+msgstr "SOCKS5 握手失败: {}"
+
+msgid "SOCKS5 tunnel established: {}:{} -> {}:{}"
+msgstr "SOCKS5 隧道已建立: {}:{} -> {}:{}"
+
+msgid "SOCKS5 unsupported authentication method"
+msgstr "SOCKS5 不支持的认证方法"
+
+msgid "SOCKS5 version mismatch"
+msgstr "SOCKS5 版本不匹配"
+
+msgid "SSL failed to read HTTP response: {}"
+msgstr "SSL 读取 HTTP 响应失败: {}"
+
+msgid "SSL failed to send HTTP request: {}"
+msgstr "SSL 发送 HTTP 请求失败: {}"
+
+msgid "SSL handshake failed (retry {}/{}): {}"
+msgstr "SSL 握手失败 (重试 {}/{}): {}"
+
+msgid "SSL handshake success (retry {})"
+msgstr "SSL 握手成功 (重试 {})"
+
+msgid "Sending CONNECT request via HTTPS proxy: {}"
+msgstr "通过 HTTPS 代理发送 CONNECT 请求: {}"
+
+msgid "Shutdown already in progress, ignoring signal {}"
+msgstr "关闭已在进行中，忽略信号 {}"
+
+msgid "Shutting down OBCX Framework..."
+msgstr "正在关闭 OBCX 框架..."
+
+msgid "Skipping disabled bot component of type: {}"
+msgstr "跳过已禁用的 bot 组件，类型: {}"
+
+msgid "Start HTTP event polling, interval: {}ms"
+msgstr "开始 HTTP 事件轮询，间隔: {}ms"
+
+msgid "Start WebM to GIF conversion with fallback: {} -> {}"
+msgstr "开始 WebM 到 GIF 转换（带回退）: {} -> {}"
+
+msgid "Start converting TGS to GIF: {} -> {}"
+msgstr "开始转换 TGS 到 GIF: {} -> {}"
+
+msgid "Start converting WebM to GIF: {} -> {}"
+msgstr "开始转换 WebM 到 GIF: {} -> {}"
+
+msgid "Starting bot component of type: {}"
+msgstr "正在启动 bot 组件，类型: {}"
+
+msgid "Starting plugin reload..."
+msgstr "正在开始插件重新加载..."
+
+msgid "Starting polling wait for echo: {}"
+msgstr "开始轮询等待 echo: {}"
+
+msgid "Stop HTTP event polling"
+msgstr "停止 HTTP 事件轮询"
+
+msgid "Stream truncated error detected, might need to rebuild tunnel"
+msgstr "检测到流截断错误，可能需要重建隧道"
+
+msgid "System command execution exception: {}"
+msgstr "系统命令执行异常: {}"
+
+msgid "TGS to GIF conversion exception: {}"
+msgstr "TGS 到 GIF 转换异常: {}"
+
+msgid "TGS to GIF conversion failed, lottie-convert might be missing"
+msgstr "TGS 到 GIF 转换失败，可能缺少 lottie-convert"
+
+msgid "TGS to GIF conversion success, output size: {} bytes"
+msgstr "TGS 到 GIF 转换成功，输出大小: {} 字节"
+
+msgid "TaskScheduler destroyed"
+msgstr "TaskScheduler 已销毁"
+
+msgid "TaskScheduler: Batch task execution completed"
+msgstr "TaskScheduler: 批量任务执行完成"
+
+msgid "TaskScheduler: Exception occurred during heavy task execution"
+msgstr "TaskScheduler: 重负载任务执行期间发生异常"
+
+msgid "TaskScheduler: Executing heavy task with timeout (timeout: {}ms)"
+msgstr "TaskScheduler: 执行重负载任务（超时: {}ms）"
+
+msgid "TaskScheduler: Heavy task completed (no return value)"
+msgstr "TaskScheduler: 重负载任务完成（无返回值）"
+
+msgid "TaskScheduler: Heavy task completed, returning result"
+msgstr "TaskScheduler: 重负载任务完成，返回结果"
+
+msgid "TaskScheduler: Starting batch execution of {} heavy tasks"
+msgstr "TaskScheduler: 开始批量执行 {} 个重负载任务"
+
+msgid "TaskScheduler: Starting heavy task execution (worker thread ID: {})"
+msgstr "TaskScheduler: 开始执行重负载任务（工作线程 ID: {}）"
+
+msgid "TaskScheduler: Submitting heavy task to thread pool (thread ID: {})"
+msgstr "TaskScheduler: 提交重负载任务到线程池（线程 ID: {}）"
+
+msgid "TaskScheduler: Timeout task execution failed: {}"
+msgstr "TaskScheduler: 超时任务执行失败: {}"
+
+msgid "Telegram Bot only support TelegramHTTP"
+msgstr "Telegram Bot 仅支持 TelegramHTTP"
+
+msgid "TelegramBot instance destroyed."
+msgstr "TelegramBot 实例已销毁。"
+
+msgid "TelegramBot::{} not implemented yet"
+msgstr "TelegramBot::{} 尚未实现"
+
+msgid "TelegramConnectionManager initialized"
+msgstr "TelegramConnectionManager 已初始化"
+
+msgid "Timeout detected for echo: {}"
+msgstr "检测到 echo 超时: {}"
+
+msgid "Trying lossless conversion..."
+msgstr "尝试无损转换..."
+
+msgid "Unknown bot type: {}"
+msgstr "未知的 bot 类型: {}"
+
+msgid "Unknown connection type: {} for bot type: {}"
+msgstr "未知的连接类型: {}，bot 类型: {}"
+
+msgid "Unknown error: no result and no error"
+msgstr "未知错误: 无结果且无错误"
+
+msgid "Unsupported proxy type"
+msgstr "不支持的代理类型"
+
+msgid "Using coroutine mode for API request"
+msgstr "使用协程模式进行 API 请求"
+
+msgid "Using polling mode for API request"
+msgstr "使用轮询模式进行 API 请求"
+
+msgid "Waiting for bot thread {} to finish..."
+msgstr "等待 bot 线程 {} 完成..."
+
+msgid "Waiting {}ms before retry"
+msgstr "等待 {}ms 后重试"
+
+msgid "WebM to GIF conversion completely failed, need fallback to text/emoji"
+msgstr "WebM 到 GIF 转换完全失败，需要回退到文本/表情符号"
+
+msgid "WebM to GIF conversion exception: {}"
+msgstr "WebM 到 GIF 转换异常: {}"
+
+msgid "WebM to GIF conversion failed or invalid output file"
+msgstr "WebM 到 GIF 转换失败或输出文件无效"
+
+msgid "WebM to GIF conversion success, output size: {} bytes"
+msgstr "WebM 到 GIF 转换成功，输出大小: {} 字节"
+
+msgid "WebM to GIF conversion with fallback exception: {}"
+msgstr "WebM 到 GIF 转换（带回退）异常: {}"
+
+msgid "WebSocket caught unhandled exception during close: {}"
+msgstr "WebSocket 在关闭时捕获未处理异常: {}"
+
+msgid "WebSocket caught unhandled exception: {}"
+msgstr "WebSocket 捕获未处理异常: {}"
+
+msgid "WebSocket close error: {}"
+msgstr "WebSocket 关闭错误: {}"
+
+msgid "WebSocket message sent (coroutine): {}"
+msgstr "WebSocket 消息已发送（协程）: {}"
+
+msgid "WebSocket message sent (polling): {}"
+msgstr "WebSocket 消息已发送（轮询）: {}"
+
+msgid "WebSocket not connected, cannot send message."
+msgstr "WebSocket 未连接，无法发送消息。"
+
+msgid "WebSocket received raw message: {}"
+msgstr "WebSocket 收到原始消息: {}"
+
+msgid "WebSocket run error: {}"
+msgstr "WebSocket 运行错误: {}"
+
+msgid "[Animation]"
+msgstr "[动画]"
+
+msgid "[Audio: {}]"
+msgstr "[音频: {}]"
+
+msgid "[Audio]"
+msgstr "[音频]"
+
+msgid "[Document: {}]"
+msgstr "[文档: {}]"
+
+msgid "[Document]"
+msgstr "[文档]"
+
+msgid "[Photo]"
+msgstr "[图片]"
+
+msgid "[Sticker]"
+msgstr "[贴纸]"
+
+msgid "[Video Note]"
+msgstr "[视频笔记]"
+
+msgid "[Video]"
+msgstr "[视频]"
+
+msgid "[Voice]"
+msgstr "[语音]"
+
+msgid "[{} Sticker]"
+msgstr "[{} 贴纸]"
+
+msgid "getFile request failed: {}"
+msgstr "getFile 请求失败: {}"
+
+msgid "obcx_create_plugin returned nullptr for {}"
+msgstr "obcx_create_plugin 为 {} 返回 nullptr"
+
+msgid "poll_timeout ({} ms) must be less than timeout ({} ms)"
+msgstr "poll_timeout ({} 毫秒) 必须小于 timeout ({} 毫秒)"
+
+msgid "{} extracted file_unique_id: '{}' (empty: {})"
+msgstr "{} 提取 file_unique_id: '{}' (空: {})"
+
+msgid "{} object content: {}"
+msgstr "{} 对象内容: {}"
+
+msgid "Warning: poll_force_close ({}ms) may trigger before server closes connection. This could cause issues. Consider increasing poll_force_close value."
+msgstr "警告: poll_force_close ({}ms) 可能在服务器关闭连接之前触发。这可能会导致问题。建议增加 poll_force_close 的值。"

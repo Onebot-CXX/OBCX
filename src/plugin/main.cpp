@@ -159,9 +159,18 @@ public:
       }
     }
 
-    if (const auto *poll_interval = conn_table.get("poll_interval")) {
-      if (auto poll_interval_ms = poll_interval->value<int64_t>()) {
-        config.poll_interval = std::chrono::milliseconds(*poll_interval_ms);
+    if (const auto *poll_force_close = conn_table.get("poll_force_close")) {
+      if (auto poll_force_close_ms = poll_force_close->value<int64_t>()) {
+        config.poll_force_close =
+            std::chrono::milliseconds(*poll_force_close_ms);
+      }
+    }
+
+    if (const auto *poll_retry_interval =
+            conn_table.get("poll_retry_interval")) {
+      if (auto poll_retry_interval_ms = poll_retry_interval->value<int64_t>()) {
+        config.poll_retry_interval =
+            std::chrono::milliseconds(*poll_retry_interval_ms);
       }
     }
 

@@ -566,6 +566,10 @@ void I18nLogMessages::setup_message_keys() {
       "Config value is invalid: {}";
   message_keys_[LogMessageKey::CONFIG_POLL_TIMEOUT_INVALID] =
       "poll_timeout ({} ms) must be less than timeout ({} ms)";
+  message_keys_[LogMessageKey::POLL_FORCE_CLOSE_WARNING] =
+      "Warning: poll_force_close ({}ms) may trigger before the server closes "
+      "the connection. This could cause issues. Consider increasing "
+      "poll_force_close value.";
 
   // Plugin Manager
   message_keys_[LogMessageKey::PLUGIN_DIR_ADDED] = "Added plugin directory: {}";
