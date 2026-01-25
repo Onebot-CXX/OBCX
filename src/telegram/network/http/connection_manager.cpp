@@ -24,6 +24,9 @@ void TelegramConnectionManager::connect(
     const common::ConnectionConfig &config) {
   config_ = config;
 
+  // 从配置加载轮询间隔
+  poll_interval_ = config_.poll_interval;
+
   // 检查是否需要使用代理
   if (!config_.proxy_host.empty() && config_.proxy_port > 0) {
     // 使用代理HTTP客户端
@@ -91,8 +94,7 @@ auto TelegramConnectionManager::send_action_and_wait_async(
   try {
     // 解析action_payload以获取方法名和参数
     auto payload_json = json::parse(action_payload);
-    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::SENDING_ACTION,
-                          action_payload);
+    OBCX_I18N_TRACE(common::LogMessageKey::SENDING_ACTION, action_payload);
     std::string method = payload_json.value("method", "");
 
     // 设置请求头
@@ -112,8 +114,9 @@ auto TelegramConnectionManager::send_action_and_wait_async(
     payload_json.erase("echo"); // Telegram API不支持echo字段
     std::string body = payload_json.dump();
 
-    // 发送POST请求到Telegram API
-    HttpResponse response = http_client_->post_sync(api_path, body, headers);
+    // 发送POST请求到Telegram API (使用协程)
+    HttpResponse response =
+        co_await http_client_->post(api_path, body, headers);
 
     if (!response.is_success()) {
       throw std::runtime_error(common::I18nLogMessages::format_message(
@@ -163,9 +166,9 @@ auto TelegramConnectionManager::download_file(std::string file_id)
     // 设置Content-Type头
     headers["Content-Type"] = "application/json";
 
-    // 发送getFile请求
+    // 发送getFile请求 (使用协程)
     HttpResponse response =
-        http_client_->post_sync(get_file_path, body, headers);
+        co_await http_client_->post(get_file_path, body, headers);
 
     if (response.is_success() && !response.body.empty()) {
       // 解析响应以获取文件路径
@@ -222,8 +225,8 @@ auto TelegramConnectionManager::download_file_content(
     // 使用空的头部映射，让HttpClient的prepare_request设置完整的浏览器头部
     std::map<std::string, std::string> headers;
 
-    // 直接使用GET请求下载文件内容
-    HttpResponse response = http_client_->get_sync(path, headers);
+    // 直接使用GET请求下载文件内容 (使用协程)
+    HttpResponse response = co_await http_client_->get(path, headers);
 
     if (response.is_success()) {
       co_return response.body;
@@ -257,6 +260,8 @@ void TelegramConnectionManager::stop_polling() {
 
 auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
   while (is_polling_) {
+    bool should_delay = false;
+
     try {
       if (!http_client_) {
         break;
@@ -272,6 +277,8 @@ auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
       }
 
       // 构建getUpdates请求参数
+      // poll_timeout: Telegram服务端长轮询超时时间，无消息时服务器会等待这么久
+      // poll_force_close: 客户端HTTP安全超时，必须大于poll_timeout
       auto poll_timeout_sec =
           std::chrono::duration_cast<std::chrono::seconds>(config_.poll_timeout)
               .count();
@@ -286,42 +293,53 @@ auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
       // 设置Content-Type头
       headers["Content-Type"] = "application/json";
 
+      // 设置HTTP客户端超时为poll_force_close（客户端安全超时）
+      // 这确保如果连接意外挂起，客户端会在poll_force_close后强制关闭并重试
+      http_client_->set_timeout(config_.poll_force_close);
+
       HttpResponse response =
-          http_client_->post_sync(updates_path, body, headers);
+          co_await http_client_->post(updates_path, body, headers);
 
       if (response.is_success() && !response.body.empty()) {
         process_updates(response.body);
       }
 
+      // Long polling: 响应后立即开始下一次轮询，无需额外等待
+      // Telegram的timeout参数已经处理了"等待新消息"的逻辑
+      // 如果有新消息，Telegram立即返回；如果没有，等待poll_timeout后返回空
+
     } catch (const std::exception &e) {
       OBCX_I18N_WARN(common::LogMessageKey::POLLING_FAILED, e.what());
+      // 出错时等待一段时间再重试，避免频繁请求
+      should_delay = true;
     }
 
-    // 等待下次轮询
-    poll_timer_.expires_after(poll_interval_);
-    try {
-      co_await poll_timer_.async_wait(asio::use_awaitable);
-    } catch (const boost::system::system_error &e) {
-      if (e.code() == asio::error::operation_aborted) {
-        break; // 轮询被取消
+    // 仅在出错时等待，正常情况下立即开始下一次轮询
+    if (should_delay) {
+      poll_timer_.expires_after(poll_interval_);
+      try {
+        co_await poll_timer_.async_wait(asio::use_awaitable);
+      } catch (const boost::system::system_error &e) {
+        if (e.code() == asio::error::operation_aborted) {
+          break; // 轮询被取消
+        }
       }
     }
   }
 
-  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::POLLING_COROUTINE_EXIT);
+  OBCX_I18N_DEBUG(common::LogMessageKey::POLLING_COROUTINE_EXIT);
 }
 
 void TelegramConnectionManager::process_updates(std::string_view updates_json) {
   try {
     auto json_data = json::parse(updates_json);
-    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::RECEIVED_UPDATES,
-                          updates_json);
+    OBCX_I18N_DEBUG(common::LogMessageKey::RECEIVED_UPDATES, updates_json);
 
     // 检查是否有result字段
     if (json_data.contains("result") && json_data["result"].is_array()) {
       auto result_array = json_data["result"];
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROCESSING_UPDATES,
-                            result_array.size());
+      OBCX_I18N_DEBUG(common::LogMessageKey::PROCESSING_UPDATES,
+                      result_array.size());
 
       // 更新offset为最新的update_id + 1
       if (!result_array.empty()) {
@@ -334,16 +352,16 @@ void TelegramConnectionManager::process_updates(std::string_view updates_json) {
       // 处理每个更新
       for (const auto &update_json : result_array) {
         std::string single_update = update_json.dump();
-        OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PROCESSING_UPDATE,
-                              single_update);
+        OBCX_I18N_DEBUG(common::LogMessageKey::PROCESSING_UPDATE,
+                        single_update);
         auto event_opt = adapter_.parse_event(single_update);
         if (event_opt && event_callback_) {
-          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::DISPATCHING_EVENT);
+          OBCX_I18N_DEBUG(common::LogMessageKey::DISPATCHING_EVENT);
           event_callback_(event_opt.value());
         } else if (!event_opt) {
-          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::FAILED_PARSE_EVENT);
+          OBCX_I18N_DEBUG(common::LogMessageKey::FAILED_PARSE_EVENT);
         } else {
-          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EVENT_CALLBACK_NOT_SET);
+          OBCX_I18N_DEBUG(common::LogMessageKey::EVENT_CALLBACK_NOT_SET);
         }
       }
     }

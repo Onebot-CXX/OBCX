@@ -237,6 +237,8 @@ void ConnectionConfig::to_json(json &j) const {
   j["secret"] = secret;
   j["timeout"] = timeout.count();
   j["poll_timeout"] = poll_timeout.count();
+  j["poll_force_close"] = poll_force_close.count();
+  j["poll_interval"] = poll_interval.count();
   j["heartbeat_interval"] = heartbeat_interval.count();
   j["use_ssl"] = use_ssl;
 
@@ -244,6 +246,7 @@ void ConnectionConfig::to_json(json &j) const {
   if (!proxy_host.empty()) {
     j["proxy_host"] = proxy_host;
     j["proxy_port"] = proxy_port;
+    j["proxy_type"] = proxy_type;
     if (!proxy_username.empty()) {
       j["proxy_username"] = proxy_username;
     }
@@ -262,14 +265,18 @@ void ConnectionConfig::from_json(const json &j) {
       JsonUtils::get_value(j, "timeout", int64_t(30000)));
   poll_timeout = std::chrono::milliseconds(
       JsonUtils::get_value(j, "poll_timeout", int64_t(25000)));
+  poll_force_close = std::chrono::milliseconds(
+      JsonUtils::get_value(j, "poll_force_close", int64_t(30000)));
 
-  // Validate poll_timeout < timeout
-  if (poll_timeout >= timeout) {
+  // Validate poll_force_close > poll_timeout (safety timeout must be longer)
+  if (poll_force_close <= poll_timeout) {
     throw std::invalid_argument(I18nLogMessages::format_message(
-        LogMessageKey::CONFIG_POLL_TIMEOUT_INVALID, poll_timeout.count(),
-        timeout.count()));
+        LogMessageKey::CONFIG_POLL_TIMEOUT_INVALID, poll_force_close.count(),
+        poll_timeout.count()));
   }
 
+  poll_interval = std::chrono::milliseconds(
+      JsonUtils::get_value(j, "poll_interval", int64_t(1000)));
   heartbeat_interval = std::chrono::milliseconds(
       JsonUtils::get_value(j, "heartbeat_interval", int64_t(5000)));
   use_ssl = JsonUtils::get_value(j, "use_ssl", false);
@@ -277,6 +284,7 @@ void ConnectionConfig::from_json(const json &j) {
   // Proxy settings
   proxy_host = JsonUtils::get_value(j, "proxy_host", std::string(""));
   proxy_port = JsonUtils::get_value(j, "proxy_port", uint16_t(0));
+  proxy_type = JsonUtils::get_value(j, "proxy_type", std::string("http"));
   proxy_username = JsonUtils::get_value(j, "proxy_username", std::string(""));
   proxy_password = JsonUtils::get_value(j, "proxy_password", std::string(""));
 }

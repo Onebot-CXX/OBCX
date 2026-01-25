@@ -588,7 +588,7 @@ auto QQMediaProcessor::detect_gif_format(const std::string &url)
 
     // 发送GET请求获取文件前32个字节
     obcx::network::HttpResponse response =
-        qq_http_client->get_sync(path, headers);
+        co_await qq_http_client->get(path, headers);
 
     if (response.is_success()) {
       // 获取文件的前几个字节内容

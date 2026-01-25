@@ -10,7 +10,7 @@ auto ProtocolAdapter::parse_event(std::string_view json_str)
     -> std::optional<common::Event> {
   try {
     auto json = nlohmann::json::parse(json_str);
-    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PARSING_EVENT, json_str);
+    OBCX_I18N_DEBUG(common::LogMessageKey::PARSING_EVENT, json_str);
 
     // Check if this is an update
     if (json.contains("update_id")) {
@@ -35,10 +35,10 @@ auto ProtocolAdapter::parse_event(std::string_view json_str)
         // Callback query update
         return parse_callback_query_event(json);
       }
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::UNHANDLED_UPDATE_TYPE);
+      OBCX_I18N_DEBUG(common::LogMessageKey::UNHANDLED_UPDATE_TYPE);
       return std::nullopt;
     }
-    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::NO_UPDATE_ID_FIELD);
+    OBCX_I18N_DEBUG(common::LogMessageKey::NO_UPDATE_ID_FIELD);
 
     return std::nullopt;
   } catch (const std::exception &e) {
@@ -71,8 +71,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
     // Extract message ID
     if (message.contains("message_id")) {
       event.message_id = std::to_string(message["message_id"].get<int64_t>());
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_MESSAGE_ID,
-                            event.message_id);
+      OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_MESSAGE_ID,
+                      event.message_id);
     }
 
     // Extract user information
@@ -80,8 +80,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       auto from = message["from"];
       if (from.contains("id")) {
         event.user_id = std::to_string(from["id"].get<int64_t>());
-        OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_USER_ID,
-                              event.user_id);
+        OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_USER_ID,
+                        event.user_id);
       }
     }
 
@@ -90,18 +90,17 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       auto chat = message["chat"];
       if (chat.contains("id")) {
         std::string chat_id = std::to_string(chat["id"].get<int64_t>());
-        OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_CHAT_ID,
-                              chat_id);
+        OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_CHAT_ID, chat_id);
 
         // Check chat type to determine if it's a group or private chat
         if (chat.contains("type")) {
           std::string chat_type = chat["type"];
-          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::CHAT_TYPE, chat_type);
+          OBCX_I18N_DEBUG(common::LogMessageKey::CHAT_TYPE, chat_type);
 
           if (chat_type == "supergroup" || chat_type == "group") {
             event.group_id = chat_id;
             event.message_type = "group";
-            OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::SET_GROUP_ID, chat_id);
+            OBCX_I18N_DEBUG(common::LogMessageKey::SET_GROUP_ID, chat_id);
           } else if (chat_type == "private") {
             event.message_type = "private";
           } else if (chat_type == "channel") {
@@ -114,8 +113,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
     // Extract message content
     if (message.contains("text")) {
       event.raw_message = message["text"];
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_MESSAGE_TEXT,
-                            event.raw_message);
+      OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_MESSAGE_TEXT,
+                      event.raw_message);
 
       // Create message segments
       common::MessageSegment segment;
@@ -132,8 +131,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
         event.raw_message = common::I18nLogMessages::get_message(
             common::LogMessageKey::TELEGRAM_MSG_PHOTO);
-        OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_PHOTO_FILE_ID,
-                              file_id);
+        OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_PHOTO_FILE_ID,
+                        file_id);
 
         // Create message segments
         common::MessageSegment segment;
@@ -153,8 +152,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
       event.raw_message = common::I18nLogMessages::get_message(
           common::LogMessageKey::TELEGRAM_MSG_STICKER);
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_STICKER_FILE_ID,
-                            file_id);
+      OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_STICKER_FILE_ID,
+                      file_id);
 
       common::MessageSegment segment;
 
@@ -180,8 +179,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
       event.raw_message = common::I18nLogMessages::get_message(
           common::LogMessageKey::TELEGRAM_MSG_VIDEO);
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_VIDEO_FILE_ID,
-                            file_id);
+      OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_VIDEO_FILE_ID, file_id);
 
       // Create message segments
       common::MessageSegment segment;
@@ -212,8 +210,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
       event.raw_message = common::I18nLogMessages::get_message(
           common::LogMessageKey::TELEGRAM_MSG_ANIMATION);
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_ANIMATION_FILE_ID,
-                            file_id);
+      OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_ANIMATION_FILE_ID,
+                      file_id);
 
       // Create message segments
       common::MessageSegment segment;
@@ -244,8 +242,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
       event.raw_message = common::I18nLogMessages::get_message(
           common::LogMessageKey::TELEGRAM_MSG_DOCUMENT);
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_DOCUMENT_FILE_ID,
-                            file_id);
+      OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_DOCUMENT_FILE_ID,
+                      file_id);
 
       // Create message segments
       common::MessageSegment segment;
@@ -276,8 +274,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
       event.raw_message = common::I18nLogMessages::get_message(
           common::LogMessageKey::TELEGRAM_MSG_AUDIO);
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_AUDIO_FILE_ID,
-                            file_id);
+      OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_AUDIO_FILE_ID, file_id);
 
       // Create message segments
       common::MessageSegment segment;
@@ -308,8 +305,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
       event.raw_message = common::I18nLogMessages::get_message(
           common::LogMessageKey::TELEGRAM_MSG_VOICE);
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_VOICE_FILE_ID,
-                            file_id);
+      OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_VOICE_FILE_ID, file_id);
 
       // Create message segments
       common::MessageSegment segment;
@@ -329,8 +325,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
       event.raw_message = common::I18nLogMessages::get_message(
           common::LogMessageKey::TELEGRAM_MSG_VIDEO_NOTE);
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EXTRACTED_VIDEO_NOTE_FILE_ID,
-                            file_id);
+      OBCX_I18N_DEBUG(common::LogMessageKey::EXTRACTED_VIDEO_NOTE_FILE_ID,
+                      file_id);
 
       // Create message segments
       common::MessageSegment segment;
@@ -350,7 +346,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
     event.font = 0; // Not applicable for Telegram
 
-    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::EVENT_PARSED_SUCCESS);
+    OBCX_I18N_DEBUG(common::LogMessageKey::EVENT_PARSED_SUCCESS);
     return event;
   } catch (const std::exception &e) {
     OBCX_I18N_ERROR(common::LogMessageKey::EVENT_PARSE_FAILED, e.what());
@@ -375,8 +371,8 @@ auto ProtocolAdapter::parse_edited_message_event(
         // Mark this as an edited message by adding edit flag to data
         msg_event->data["is_edited"] = true;
         msg_event->sub_type = "edited";
-        OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MARKED_EDIT_MESSAGE,
-                              msg_event->message_id);
+        OBCX_I18N_DEBUG(common::LogMessageKey::MARKED_EDIT_MESSAGE,
+                        msg_event->message_id);
         return event_opt;
       }
     }
@@ -442,7 +438,7 @@ auto ProtocolAdapter::parse_callback_query_event(
             callback_query["message"]["chat"]["id"].get<int64_t>());
       }
 
-      OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::PARSED_CALLBACK_QUERY);
+      OBCX_I18N_DEBUG(common::LogMessageKey::PARSED_CALLBACK_QUERY);
       return event;
     }
   } catch (const std::exception &e) {
@@ -560,8 +556,8 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
         // Add reply_to_message_id if present
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::SEND_STICKER_REPLY_ID,
-                                reply_to_message_id.value());
+          OBCX_I18N_DEBUG(common::LogMessageKey::SEND_STICKER_REPLY_ID,
+                          reply_to_message_id.value());
         }
 
         if (echo.has_value()) {
@@ -662,8 +658,8 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
         // Add reply_to_message_id if present
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::SEND_VIDEO_REPLY_ID,
-                                reply_to_message_id.value());
+          OBCX_I18N_DEBUG(common::LogMessageKey::SEND_VIDEO_REPLY_ID,
+                          reply_to_message_id.value());
         }
 
         if (echo.has_value()) {
@@ -710,8 +706,8 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
         // Add reply_to_message_id if present
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::SEND_VIDEO_NOTE_REPLY_ID,
-                                reply_to_message_id.value());
+          OBCX_I18N_DEBUG(common::LogMessageKey::SEND_VIDEO_NOTE_REPLY_ID,
+                          reply_to_message_id.value());
         }
 
         if (echo.has_value()) {
@@ -824,8 +820,8 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
         // Add reply_to_message_id if present
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::SEND_AUDIO_REPLY_ID,
-                                reply_to_message_id.value());
+          OBCX_I18N_DEBUG(common::LogMessageKey::SEND_AUDIO_REPLY_ID,
+                          reply_to_message_id.value());
         }
 
         if (echo.has_value()) {
@@ -881,8 +877,8 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
         // Add reply_to_message_id if present
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::SEND_VOICE_REPLY_ID,
-                                reply_to_message_id.value());
+          OBCX_I18N_DEBUG(common::LogMessageKey::SEND_VOICE_REPLY_ID,
+                          reply_to_message_id.value());
         }
 
         if (echo.has_value()) {
@@ -933,8 +929,8 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
         // Add reply_to_message_id if present
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::SEND_DOCUMENT_REPLY_ID,
-                                reply_to_message_id.value());
+          OBCX_I18N_DEBUG(common::LogMessageKey::SEND_DOCUMENT_REPLY_ID,
+                          reply_to_message_id.value());
         }
 
         if (echo.has_value()) {
@@ -969,8 +965,8 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
   // Add reply_to_message_id if present
   if (reply_to_message_id.has_value()) {
     json["reply_to_message_id"] = reply_to_message_id.value();
-    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::SEND_MESSAGE_REPLY_ID,
-                          reply_to_message_id.value());
+    OBCX_I18N_DEBUG(common::LogMessageKey::SEND_MESSAGE_REPLY_ID,
+                    reply_to_message_id.value());
   }
 
   if (echo.has_value()) {

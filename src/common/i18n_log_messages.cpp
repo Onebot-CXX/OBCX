@@ -672,7 +672,7 @@ void I18nLogMessages::setup_message_keys() {
       "Failed to set SNI for HTTPS proxy: {}";
   message_keys_[LogMessageKey::PROXY_HTTPS_SSL_SUCCESS] =
       "HTTPS proxy SSL connection established";
-  message_keys_[LogMessageKey::PROXY_RESPONSE_HEADER] = "Response header: {}";
+  message_keys_[LogMessageKey::PROXY_RESPONSE_HEADER] = "Response header:\n{}";
   message_keys_[LogMessageKey::PROXY_TARGET_SNI_FAILED] =
       "Failed to set SNI for target: {}";
   message_keys_[LogMessageKey::PROXY_SSL_HANDSHAKE_SUCCESS] =
@@ -697,10 +697,10 @@ void I18nLogMessages::setup_message_keys() {
   message_keys_[LogMessageKey::HTTP_CLIENT_INIT] =
       "HTTP Client initialized for {}:{}";
   message_keys_[LogMessageKey::HTTP_CLIENT_CLOSED] = "HTTP Client closed";
-  message_keys_[LogMessageKey::HTTP_POST_DEBUG] = "POST {} with body: {}";
+  message_keys_[LogMessageKey::HTTP_POST_DEBUG] = "POST {} with body:\n{}";
   message_keys_[LogMessageKey::HTTP_RESPONSE_STATUS] =
       "Received response with status code: {}";
-  message_keys_[LogMessageKey::HTTP_RESPONSE_BODY] = "Response body: {}";
+  message_keys_[LogMessageKey::HTTP_RESPONSE_BODY] = "Response body:\n{}";
   message_keys_[LogMessageKey::HTTP_POST_FAILED] =
       "HTTP POST request failed: {}";
   message_keys_[LogMessageKey::HTTP_GET_DEBUG] = "GET {}";

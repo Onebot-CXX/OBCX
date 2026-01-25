@@ -153,6 +153,18 @@ public:
       }
     }
 
+    if (const auto *poll_timeout = conn_table.get("poll_timeout")) {
+      if (auto poll_timeout_ms = poll_timeout->value<int64_t>()) {
+        config.poll_timeout = std::chrono::milliseconds(*poll_timeout_ms);
+      }
+    }
+
+    if (const auto *poll_interval = conn_table.get("poll_interval")) {
+      if (auto poll_interval_ms = poll_interval->value<int64_t>()) {
+        config.poll_interval = std::chrono::milliseconds(*poll_interval_ms);
+      }
+    }
+
     if (const auto *heartbeat_interval = conn_table.get("heartbeat_interval")) {
       if (auto interval_ms = heartbeat_interval->value<int64_t>()) {
         config.heartbeat_interval = std::chrono::milliseconds(*interval_ms);

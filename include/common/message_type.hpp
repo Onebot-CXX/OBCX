@@ -365,7 +365,10 @@ struct ConnectionConfig {
   std::string secret;
   std::chrono::milliseconds timeout{30000};
   std::chrono::milliseconds poll_timeout{
-      25000}; // Long-poll timeout, must be < timeout
+      25000}; // Long-poll timeout sent to server (e.g., Telegram getUpdates)
+  std::chrono::milliseconds poll_force_close{
+      30000}; // Client-side safety timeout to force close abnormal connections
+  std::chrono::milliseconds poll_interval{1000}; // Interval between poll requests (for error retry)
   std::chrono::milliseconds heartbeat_interval{5000};
   bool use_ssl = false;
 

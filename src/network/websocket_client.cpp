@@ -244,8 +244,8 @@ auto WebsocketClient::writer_coro() -> asio::awaitable<void> {
         // 通知写入完成
         request->promise.set_value();
 
-        OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::MESSAGE_SENT_SUCCESSFULLY,
-                              request->message);
+        OBCX_I18N_DEBUG(common::LogMessageKey::MESSAGE_SENT_SUCCESSFULLY,
+                        request->message);
       } catch (const std::exception &e) {
         OBCX_I18N_ERROR(common::LogMessageKey::WEBSOCKET_WRITE_ERROR, e.what());
 

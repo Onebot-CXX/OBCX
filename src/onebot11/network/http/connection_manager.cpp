@@ -67,11 +67,10 @@ auto HttpConnectionManager::send_action_and_wait_async(
       headers["Authorization"] = "Bearer " + config_.access_token;
     }
 
-    // 发送POST请求到API端点
-    // TODO: 重要问题 - 这里使用同步方法会阻塞整个io_context线程！
-    // 应该实现真正的异步HTTP客户端，或者将阻塞操作移到线程池中执行
+    // 发送POST请求到API端点 (使用协程，不会阻塞io_context)
     std::string api_path = "/api"; // OneBot11标准端点
-    auto response = http_client_->post_sync(api_path, action_payload, headers);
+    auto response =
+        co_await http_client_->post(api_path, action_payload, headers);
 
     if (!response.is_success()) {
       throw std::runtime_error(common::I18nLogMessages::format_message(
@@ -125,9 +124,9 @@ auto HttpConnectionManager::poll_events() -> asio::awaitable<void> {
         headers["Authorization"] = "Bearer " + config_.access_token;
       }
 
-      // 轮询事件端点
+      // 轮询事件端点 (使用协程)
       std::string events_path = "/get_latest_events"; // OneBot11事件端点
-      auto response = http_client_->get_sync(events_path, headers);
+      auto response = co_await http_client_->get(events_path, headers);
 
       if (response.is_success() && !response.body.empty()) {
         process_events(response.body);
@@ -149,7 +148,7 @@ auto HttpConnectionManager::poll_events() -> asio::awaitable<void> {
     }
   }
 
-  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_HTTP_POLLING_EXIT);
+  OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_HTTP_POLLING_EXIT);
 }
 
 void HttpConnectionManager::process_events(std::string_view events_json) {

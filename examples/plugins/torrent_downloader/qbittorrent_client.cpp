@@ -79,8 +79,8 @@ boost::asio::awaitable<std::string> QBittorrentClient::http_post(
 
     PLUGIN_DEBUG("torrent_downloader", "POST {}", path);
 
-    // Use HttpClient's sync API
-    auto response = http_client_->post_sync(path, body, headers);
+    // Use HttpClient's async API
+    auto response = co_await http_client_->post(path, body, headers);
 
     PLUGIN_DEBUG("torrent_downloader", "POST {} returned status {}", path,
                  response.status_code);
@@ -128,8 +128,8 @@ boost::asio::awaitable<std::string> QBittorrentClient::http_get(
 
     PLUGIN_DEBUG("torrent_downloader", "GET {}", path);
 
-    // Use HttpClient's sync API
-    auto response = http_client_->get_sync(path, headers);
+    // Use HttpClient's async API
+    auto response = co_await http_client_->get(path, headers);
 
     PLUGIN_DEBUG("torrent_downloader", "GET {} returned status {}", path,
                  response.status_code);

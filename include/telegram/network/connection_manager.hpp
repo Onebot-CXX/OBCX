@@ -90,7 +90,7 @@ private:
   asio::steady_timer poll_timer_;
 
   // 轮询间隔（毫秒）
-  std::chrono::milliseconds poll_interval_{1000};
+  std::chrono::milliseconds poll_interval_{30000};
 
   // 更新偏移量
   int update_offset_{0};

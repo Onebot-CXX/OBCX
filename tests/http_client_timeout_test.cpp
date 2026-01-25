@@ -25,6 +25,37 @@ constexpr std::chrono::milliseconds SHORT_TIMEOUT{2000}; // 2 seconds
 constexpr std::chrono::milliseconds EXTENDED_WAIT{5000}; // 5 seconds
 constexpr std::chrono::milliseconds NORMAL_RESPONSE_DELAY{100};
 
+/**
+ * Helper to run an awaitable synchronously in tests
+ * Runs the io_context until the coroutine completes and returns/throws
+ */
+template <typename T>
+auto run_awaitable(asio::io_context &ioc, asio::awaitable<T> awaitable) -> T {
+  std::optional<T> result;
+  std::exception_ptr exception;
+
+  asio::co_spawn(
+      ioc,
+      [&]() -> asio::awaitable<T> {
+        try {
+          result = co_await std::move(awaitable);
+          co_return *result;
+        } catch (...) {
+          exception = std::current_exception();
+          throw;
+        }
+      },
+      asio::detached);
+
+  ioc.run();
+  ioc.restart();
+
+  if (exception) {
+    std::rethrow_exception(exception);
+  }
+  return std::move(*result);
+}
+
 // Generate random port in high range (40000-65535)
 inline uint16_t get_random_port() {
   static std::mt19937 gen(static_cast<unsigned>(
@@ -226,7 +257,7 @@ TEST_F(HttpClientTimeoutTest, NormalResponseWithinTimeout) {
   auto start_time = std::chrono::steady_clock::now();
   network::HttpResponse response;
 
-  ASSERT_NO_THROW(response = client->get_sync("/test"));
+  ASSERT_NO_THROW(response = run_awaitable(ioc_, client->get("/test")));
 
   auto end_time = std::chrono::steady_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -251,7 +282,8 @@ TEST_F(HttpClientTimeoutTest, TimeoutWhenServerDoesNotRespond) {
   EXPECT_THROW(
       {
         try {
-          [[maybe_unused]] auto response = client->get_sync("/test");
+          [[maybe_unused]] auto response =
+              run_awaitable(ioc_, client->get("/test"));
         } catch (const network::HttpClientError &e) {
           std::string error_msg = e.what();
           OBCX_DEBUG("Caught expected timeout error: {}", error_msg);
@@ -287,7 +319,10 @@ TEST_F(HttpClientTimeoutTest, PostTimeoutWhenServerDoesNotRespond) {
   auto start_time = std::chrono::steady_clock::now();
 
   EXPECT_THROW(
-      { [[maybe_unused]] auto response = client->post_sync("/test", "{}"); },
+      {
+        [[maybe_unused]] auto response =
+            run_awaitable(ioc_, client->post("/test", "{}"));
+      },
       network::HttpClientError);
 
   auto end_time = std::chrono::steady_clock::now();
@@ -301,36 +336,9 @@ TEST_F(HttpClientTimeoutTest, PostTimeoutWhenServerDoesNotRespond) {
       << "POST timeout should not take much longer than configured";
 }
 
-/**
- * Test: Async request timeout via future
- */
-TEST_F(HttpClientTimeoutTest, AsyncTimeoutViaFuture) {
-  server_->set_should_respond(false);
-
-  auto client = create_client(SHORT_TIMEOUT);
-
-  auto start_time = std::chrono::steady_clock::now();
-  auto future = client->get_async("/test");
-
-  // Wait for the future with extended timeout
-  auto status = future.wait_for(EXTENDED_WAIT);
-
-  auto end_time = std::chrono::steady_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-      end_time - start_time);
-
-  ASSERT_EQ(status, std::future_status::ready)
-      << "Future should complete (with exception) before extended wait";
-
-  // Verify it throws
-  EXPECT_THROW(future.get(), network::HttpClientError);
-
-  // Verify timeout occurred within expected range
-  EXPECT_GE(duration.count(), SHORT_TIMEOUT.count() - 500)
-      << "Async timeout should occur around the configured timeout";
-  EXPECT_LE(duration.count(), SHORT_TIMEOUT.count() + 1000)
-      << "Async timeout should not take much longer than configured";
-}
+// Note: AsyncTimeoutViaFuture test removed because get_async() was replaced
+// with coroutine-based get() awaitable API. The new API uses asio::awaitable
+// for proper async support without std::future/std::thread.
 
 /**
  * Test: set_timeout updates the timeout value
@@ -346,7 +354,10 @@ TEST_F(HttpClientTimeoutTest, SetTimeoutUpdatesValue) {
   auto start_time = std::chrono::steady_clock::now();
 
   EXPECT_THROW(
-      { [[maybe_unused]] auto response = client->get_sync("/test"); },
+      {
+        [[maybe_unused]] auto response =
+            run_awaitable(ioc_, client->get("/test"));
+      },
       network::HttpClientError);
 
   auto end_time = std::chrono::steady_clock::now();
@@ -374,7 +385,7 @@ TEST_F(HttpClientTimeoutTest, IsConnectedReturnsCorrectState) {
       << "Should not be connected before first request";
 
   // After successful request, connected should be true
-  auto response = client->get_sync("/test");
+  auto response = run_awaitable(ioc_, client->get("/test"));
   EXPECT_EQ(response.status_code, 200);
   EXPECT_TRUE(client->is_connected())
       << "Should be connected after successful request";
@@ -394,7 +405,7 @@ TEST_F(HttpClientTimeoutTest, DelayedResponseBeforeTimeout) {
   auto start_time = std::chrono::steady_clock::now();
   network::HttpResponse response;
 
-  ASSERT_NO_THROW(response = client->get_sync("/test"));
+  ASSERT_NO_THROW(response = run_awaitable(ioc_, client->get("/test")));
 
   auto end_time = std::chrono::steady_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(

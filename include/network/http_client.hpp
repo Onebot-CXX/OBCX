@@ -3,9 +3,9 @@
 #include "common/message_type.hpp"
 
 #include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/ssl.hpp>
-#include <future>
 #include <memory>
 
 namespace obcx::network {
@@ -19,7 +19,7 @@ namespace ssl = asio::ssl;
  * @brief HTTP响应结果
  */
 struct HttpResponse {
-  unsigned int status_code;
+  unsigned int status_code{0};
   std::string body;
   http::response<http::string_body> raw_response;
 
@@ -40,6 +40,7 @@ public:
 /**
  * @brief 异步HTTP客户端
  * 基于Boost.Beast，支持HTTP和HTTPS
+ * 使用C++20协程实现真正的异步操作
  */
 class HttpClient {
 public:
@@ -56,64 +57,68 @@ public:
    */
   virtual ~HttpClient();
 
+  // ============================================================
+  // 新的协程异步API（推荐使用）
+  // ============================================================
+
   /**
-   * @brief 异步发送POST请求
+   * @brief 异步发送POST请求（协程版本）
    * @param path 请求路径
    * @param body 请求体
    * @param headers 额外的请求头
-   * @return 响应的future
+   * @return 响应的awaitable
    */
-  auto post_async(std::string_view path, std::string_view body,
-                  const std::map<std::string, std::string> &headers = {})
-      -> std::future<HttpResponse>;
+  virtual auto post(std::string_view path, std::string_view body,
+                    const std::map<std::string, std::string> &headers = {})
+      -> asio::awaitable<HttpResponse>;
 
   /**
-   * @brief 异步发送GET请求
+   * @brief 异步发送GET请求（协程版本）
    * @param path 请求路径
    * @param headers 额外的请求头
-   * @return 响应的future
+   * @return 响应的awaitable
    */
-  auto get_async(std::string_view path,
-                 const std::map<std::string, std::string> &headers = {})
-      -> std::future<HttpResponse>;
+  virtual auto get(std::string_view path,
+                   const std::map<std::string, std::string> &headers = {})
+      -> asio::awaitable<HttpResponse>;
 
   /**
-   * @brief 异步发送HEAD请求
+   * @brief 异步发送HEAD请求（协程版本）
    * @param path 请求路径
    * @param headers 额外的请求头
-   * @return 响应的future
+   * @return 响应的awaitable
    */
-  std::future<HttpResponse> head_async(
-      std::string_view path,
-      const std::map<std::string, std::string> &headers = {});
+  virtual auto head(std::string_view path,
+                    const std::map<std::string, std::string> &headers = {})
+      -> asio::awaitable<HttpResponse>;
+
+  // ============================================================
+  // 已弃用的同步API（保留以便向后兼容）
+  // ============================================================
 
   /**
    * @brief 同步发送POST请求
-   * @param path 请求路径
-   * @param body 请求体
-   * @param headers 额外的请求头
-   * @return HTTP响应
+   * @deprecated 使用 post() awaitable 版本代替
    */
+  [[deprecated("Use post() awaitable instead")]]
   virtual auto post_sync(std::string_view path, std::string_view body,
                          const std::map<std::string, std::string> &headers = {})
       -> HttpResponse;
 
   /**
    * @brief 同步发送GET请求
-   * @param path 请求路径
-   * @param headers 额外的请求头
-   * @return HTTP响应
+   * @deprecated 使用 get() awaitable 版本代替
    */
-  virtual HttpResponse get_sync(
-      std::string_view path,
-      const std::map<std::string, std::string> &headers = {});
+  [[deprecated("Use get() awaitable instead")]]
+  virtual auto get_sync(std::string_view path,
+                        const std::map<std::string, std::string> &headers = {})
+      -> HttpResponse;
 
   /**
    * @brief 同步发送HEAD请求
-   * @param path 请求路径
-   * @param headers 额外的请求头
-   * @return HTTP响应
+   * @deprecated 使用 head() awaitable 版本代替
    */
+  [[deprecated("Use head() awaitable instead")]]
   virtual auto head_sync(std::string_view path,
                          const std::map<std::string, std::string> &headers = {})
       -> HttpResponse;
@@ -142,21 +147,29 @@ protected:
    */
   [[nodiscard]] auto get_timeout() const -> std::chrono::milliseconds;
 
-private:
-  struct Impl;
-  std::unique_ptr<Impl> pimpl_;
+  /**
+   * @brief 获取目标主机名
+   * @return 主机名
+   */
+  [[nodiscard]] auto get_host() const -> const std::string &;
 
   /**
-   * @brief 执行HTTP请求的内部实现
+   * @brief 获取目标端口
+   * @return 端口号
    */
-  template <typename RequestType>
-  auto execute_async(RequestType &&request) -> std::future<HttpResponse>;
+  [[nodiscard]] auto get_port() const -> uint16_t;
 
   /**
-   * @brief 同步执行HTTP请求的内部实现
+   * @brief 检查是否使用SSL
+   * @return 是否使用SSL
    */
-  template <typename RequestType>
-  auto execute_sync(RequestType &&request) -> HttpResponse;
+  [[nodiscard]] auto use_ssl() const -> bool;
+
+  /**
+   * @brief 获取SSL上下文
+   * @return SSL上下文的可选引用
+   */
+  [[nodiscard]] auto get_ssl_context() const -> ssl::context *;
 
   /**
    * @brief 准备请求头
@@ -164,6 +177,10 @@ private:
   template <typename RequestType>
   void prepare_request(RequestType &request,
                        const std::map<std::string, std::string> &headers);
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> pimpl_;
 };
 
 } // namespace obcx::network

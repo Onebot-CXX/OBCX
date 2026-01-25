@@ -5,13 +5,13 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/version.hpp>
 #include <memory>
 #include <string>
-#include <thread>
 #include <utility>
 
 namespace obcx::network {
@@ -130,75 +130,361 @@ void HttpClient::prepare_request(
   }
 }
 
-auto HttpClient::post_async(std::string_view path, std::string_view body,
-                            const std::map<std::string, std::string> &headers)
-    -> std::future<HttpResponse> {
-  auto promise = std::make_shared<std::promise<HttpResponse>>();
-  auto future = promise->get_future();
+// ============================================================
+// 新的协程异步API实现
+// ============================================================
 
-  // 在单独的线程中执行同步请求
-  std::thread([this, promise, path = std::string(path),
-               body = std::string(body), headers]() {
-    try {
-      auto response = post_sync(path, body, headers);
-      promise->set_value(response);
-    } catch (const std::exception &e) {
-      promise->set_exception(std::current_exception());
+auto HttpClient::post(std::string_view path, std::string_view body,
+                      const std::map<std::string, std::string> &headers)
+    -> asio::awaitable<HttpResponse> {
+  OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_POST_DEBUG, path, body);
+
+  // 从当前协程上下文获取executor
+  auto executor = co_await asio::this_coro::executor;
+
+  try {
+    // 创建请求
+    http::request<http::string_body> req{http::verb::post, std::string(path),
+                                         11};
+    req.set(http::field::host, pimpl_->config.host);
+    req.set(http::field::content_type, "application/json");
+    req.body() = body;
+    req.prepare_payload();
+
+    // 添加头部
+    prepare_request(req, headers);
+
+    HttpResponse response;
+
+    // 判断是否需要使用HTTPS
+    if (pimpl_->config.port == 443 || pimpl_->config.use_ssl) {
+      // HTTPS请求
+      if (!pimpl_->ssl_ctx) {
+        throw HttpClientError("SSL context not initialized for HTTPS request");
+      }
+
+      tcp::resolver resolver(executor);
+      beast::ssl_stream<beast::tcp_stream> stream(executor, *pimpl_->ssl_ctx);
+
+      // 异步解析主机名
+      auto results = co_await resolver.async_resolve(
+          pimpl_->config.host, std::to_string(pimpl_->config.port),
+          asio::use_awaitable);
+
+      // 设置超时并异步连接
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      co_await beast::get_lowest_layer(stream).async_connect(
+          results, asio::use_awaitable);
+
+      pimpl_->connected = true;
+
+      // SSL握手
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      co_await stream.async_handshake(ssl::stream_base::client,
+                                      asio::use_awaitable);
+
+      // 发送请求
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      co_await http::async_write(stream, req, asio::use_awaitable);
+
+      // 接收响应
+      beast::flat_buffer buffer;
+      http::response<http::string_body> res;
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      co_await http::async_read(stream, buffer, res, asio::use_awaitable);
+
+      response.status_code = res.result_int();
+      response.body = res.body();
+      response.raw_response = std::move(res);
+
+    } else {
+      // HTTP请求
+      tcp::resolver resolver(executor);
+      beast::tcp_stream stream(executor);
+
+      // 异步解析主机名
+      auto results = co_await resolver.async_resolve(
+          pimpl_->config.host, std::to_string(pimpl_->config.port),
+          asio::use_awaitable);
+
+      // 设置超时并异步连接
+      stream.expires_after(pimpl_->config.timeout);
+      co_await stream.async_connect(results, asio::use_awaitable);
+
+      pimpl_->connected = true;
+
+      // 发送请求
+      stream.expires_after(pimpl_->config.timeout);
+      co_await http::async_write(stream, req, asio::use_awaitable);
+
+      // 接收响应
+      beast::flat_buffer buffer;
+      http::response<http::string_body> res;
+      stream.expires_after(pimpl_->config.timeout);
+      co_await http::async_read(stream, buffer, res, asio::use_awaitable);
+
+      response.status_code = res.result_int();
+      response.body = res.body();
+      response.raw_response = std::move(res);
     }
-  }).detach();
 
-  return future;
+    OBCX_I18N_TRACE(common::LogMessageKey::HTTP_RESPONSE_STATUS,
+                    response.status_code);
+    OBCX_I18N_TRACE(common::LogMessageKey::HTTP_RESPONSE_BODY, response.body);
+
+    co_return response;
+
+  } catch (const std::exception &e) {
+    pimpl_->connected = false;
+    OBCX_I18N_ERROR(common::LogMessageKey::HTTP_POST_FAILED, e.what());
+    throw HttpClientError(std::string("HTTP POST request failed: ") + e.what());
+  }
 }
 
-auto HttpClient::get_async(std::string_view path,
-                           const std::map<std::string, std::string> &headers)
-    -> std::future<HttpResponse> {
-  auto promise = std::make_shared<std::promise<HttpResponse>>();
-  auto future = promise->get_future();
+auto HttpClient::get(std::string_view path,
+                     const std::map<std::string, std::string> &headers)
+    -> asio::awaitable<HttpResponse> {
+  OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_GET_DEBUG, path);
 
-  // 在单独的线程中执行同步请求
-  std::thread([this, promise, path = std::string(path), headers]() {
-    try {
-      auto response = get_sync(path, headers);
-      promise->set_value(response);
-    } catch (const std::exception &e) {
-      promise->set_exception(std::current_exception());
+  // 从当前协程上下文获取executor
+  auto executor = co_await asio::this_coro::executor;
+
+  try {
+    // 创建请求
+    http::request<http::string_body> req{http::verb::get, std::string(path),
+                                         11};
+    req.set(http::field::host, pimpl_->config.host);
+
+    // 添加头部
+    prepare_request(req, headers);
+
+    HttpResponse response;
+
+    // 判断是否需要使用HTTPS
+    if (pimpl_->config.port == 443 || pimpl_->config.use_ssl) {
+      // HTTPS请求
+      if (!pimpl_->ssl_ctx) {
+        throw HttpClientError("SSL context not initialized for HTTPS request");
+      }
+
+      tcp::resolver resolver(executor);
+      beast::ssl_stream<beast::tcp_stream> stream(executor, *pimpl_->ssl_ctx);
+
+      // 异步解析主机名
+      auto results = co_await resolver.async_resolve(
+          pimpl_->config.host, std::to_string(pimpl_->config.port),
+          asio::use_awaitable);
+
+      // 设置超时并异步连接
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      co_await beast::get_lowest_layer(stream).async_connect(
+          results, asio::use_awaitable);
+
+      pimpl_->connected = true;
+
+      // SSL握手
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      co_await stream.async_handshake(ssl::stream_base::client,
+                                      asio::use_awaitable);
+
+      // 发送请求
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      co_await http::async_write(stream, req, asio::use_awaitable);
+
+      // 接收响应
+      beast::flat_buffer buffer;
+      http::response<http::string_body> res;
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      co_await http::async_read(stream, buffer, res, asio::use_awaitable);
+
+      response.status_code = res.result_int();
+      response.body = res.body();
+      response.raw_response = std::move(res);
+
+    } else {
+      // HTTP请求
+      tcp::resolver resolver(executor);
+      beast::tcp_stream stream(executor);
+
+      // 异步解析主机名
+      auto results = co_await resolver.async_resolve(
+          pimpl_->config.host, std::to_string(pimpl_->config.port),
+          asio::use_awaitable);
+
+      // 设置超时并异步连接
+      stream.expires_after(pimpl_->config.timeout);
+      co_await stream.async_connect(results, asio::use_awaitable);
+
+      pimpl_->connected = true;
+
+      // 发送请求
+      stream.expires_after(pimpl_->config.timeout);
+      co_await http::async_write(stream, req, asio::use_awaitable);
+
+      // 接收响应
+      beast::flat_buffer buffer;
+      http::response<http::string_body> res;
+      stream.expires_after(pimpl_->config.timeout);
+      co_await http::async_read(stream, buffer, res, asio::use_awaitable);
+
+      response.status_code = res.result_int();
+      response.body = res.body();
+      response.raw_response = std::move(res);
     }
-  }).detach();
 
-  return future;
+    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_STATUS,
+                    response.status_code);
+    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_BODY, response.body);
+
+    co_return response;
+
+  } catch (const std::exception &e) {
+    pimpl_->connected = false;
+    OBCX_I18N_ERROR(common::LogMessageKey::HTTP_GET_FAILED, e.what());
+    throw HttpClientError(std::string("HTTP GET request failed: ") + e.what());
+  }
 }
 
-auto HttpClient::head_async(std::string_view path,
-                            const std::map<std::string, std::string> &headers)
-    -> std::future<HttpResponse> {
-  auto promise = std::make_shared<std::promise<HttpResponse>>();
-  auto future = promise->get_future();
+auto HttpClient::head(std::string_view path,
+                      const std::map<std::string, std::string> &headers)
+    -> asio::awaitable<HttpResponse> {
+  // 从当前协程上下文获取executor
+  auto executor = co_await asio::this_coro::executor;
 
-  // 在单独的线程中执行同步请求
-  std::thread([this, promise, path = std::string(path), headers]() {
-    try {
-      auto response = head_sync(path, headers);
-      promise->set_value(response);
-    } catch (const std::exception &e) {
-      promise->set_exception(std::current_exception());
+  try {
+    // 创建请求
+    http::request<http::string_body> req{http::verb::head, std::string(path),
+                                         11};
+    req.set(http::field::host, pimpl_->config.host);
+
+    // 添加头部
+    prepare_request(req, headers);
+
+    HttpResponse response;
+
+    // 判断是否需要使用HTTPS
+    if (pimpl_->config.port == 443 || pimpl_->config.use_ssl) {
+      // HTTPS请求
+      if (!pimpl_->ssl_ctx) {
+        throw HttpClientError("SSL context not initialized for HTTPS request");
+      }
+
+      tcp::resolver resolver(executor);
+      beast::ssl_stream<beast::tcp_stream> stream(executor, *pimpl_->ssl_ctx);
+
+      // 异步解析主机名
+      auto results = co_await resolver.async_resolve(
+          pimpl_->config.host, std::to_string(pimpl_->config.port),
+          asio::use_awaitable);
+
+      // 设置超时并异步连接
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      co_await beast::get_lowest_layer(stream).async_connect(
+          results, asio::use_awaitable);
+
+      pimpl_->connected = true;
+
+      // SSL握手
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      co_await stream.async_handshake(ssl::stream_base::client,
+                                      asio::use_awaitable);
+
+      // 发送请求
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      co_await http::async_write(stream, req, asio::use_awaitable);
+
+      // 接收响应
+      beast::flat_buffer buffer;
+      http::response<http::string_body> res;
+      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+
+      boost::system::error_code ec;
+      co_await http::async_read(stream, buffer, res,
+                                asio::redirect_error(asio::use_awaitable, ec));
+
+      // HEAD响应可能没有body，忽略某些错误
+      if (ec && ec != http::error::end_of_stream &&
+          ec != http::error::partial_message) {
+        throw boost::system::system_error(ec);
+      }
+
+      response.status_code = res.result_int();
+      response.body = res.body();
+      response.raw_response = std::move(res);
+
+    } else {
+      // HTTP请求
+      tcp::resolver resolver(executor);
+      beast::tcp_stream stream(executor);
+
+      // 异步解析主机名
+      auto results = co_await resolver.async_resolve(
+          pimpl_->config.host, std::to_string(pimpl_->config.port),
+          asio::use_awaitable);
+
+      // 设置超时并异步连接
+      stream.expires_after(pimpl_->config.timeout);
+      co_await stream.async_connect(results, asio::use_awaitable);
+
+      pimpl_->connected = true;
+
+      // 发送请求
+      stream.expires_after(pimpl_->config.timeout);
+      co_await http::async_write(stream, req, asio::use_awaitable);
+
+      // 接收响应
+      beast::flat_buffer buffer;
+      http::response<http::string_body> res;
+      stream.expires_after(pimpl_->config.timeout);
+
+      boost::system::error_code ec;
+      co_await http::async_read(stream, buffer, res,
+                                asio::redirect_error(asio::use_awaitable, ec));
+
+      // HEAD响应可能没有body，忽略某些错误
+      if (ec && ec != http::error::end_of_stream &&
+          ec != http::error::partial_message) {
+        throw boost::system::system_error(ec);
+      }
+
+      response.status_code = res.result_int();
+      response.body = res.body();
+      response.raw_response = std::move(res);
     }
-  }).detach();
 
-  return future;
+    co_return response;
+
+  } catch (const std::exception &e) {
+    pimpl_->connected = false;
+    OBCX_I18N_ERROR(common::LogMessageKey::HTTP_HEAD_FAILED, e.what());
+    throw HttpClientError(std::string("HTTP HEAD request failed: ") + e.what());
+  }
 }
+
+// ============================================================
+// 已弃用的同步API实现（保留以便向后兼容）
+// ============================================================
+
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 
 auto HttpClient::post_sync(std::string_view path, std::string_view body,
                            const std::map<std::string, std::string> &headers)
     -> HttpResponse {
-  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_POST_DEBUG, path, body);
+  OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_POST_DEBUG, path, body);
 
   // Use a dedicated io_context for this sync operation with timeout
   asio::io_context local_ioc;
 
   try {
     // 创建请求
-    http::request<http::string_body> req{http::verb::post, path, 11};
+    http::request<http::string_body> req{http::verb::post, std::string(path),
+                                         11};
     req.set(http::field::host, pimpl_->config.host);
     req.set(http::field::content_type, "application/json");
     req.body() = body;
@@ -209,7 +495,6 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
 
     HttpResponse response;
     boost::system::error_code final_ec;
-    bool operation_completed = false;
 
     // 判断是否需要使用HTTPS
     if (pimpl_->config.port == 443 || pimpl_->config.use_ssl) {
@@ -233,7 +518,6 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
                        tcp::resolver::results_type::endpoint_type) {
             if (ec) {
               final_ec = ec;
-              operation_completed = true;
               return;
             }
             pimpl_->connected = true;
@@ -245,7 +529,6 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
                 ssl::stream_base::client, [&](boost::system::error_code ec) {
                   if (ec) {
                     final_ec = ec;
-                    operation_completed = true;
                     return;
                   }
 
@@ -257,7 +540,6 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
                       [&](boost::system::error_code ec, std::size_t) {
                         if (ec) {
                           final_ec = ec;
-                          operation_completed = true;
                           return;
                         }
 
@@ -278,7 +560,6 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
                                 response.body = res->body();
                                 response.raw_response = std::move(*res);
                               }
-                              operation_completed = true;
                             });
                       });
                 });
@@ -303,7 +584,6 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
                        tcp::resolver::results_type::endpoint_type) {
             if (ec) {
               final_ec = ec;
-              operation_completed = true;
               return;
             }
             pimpl_->connected = true;
@@ -314,7 +594,6 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
                 stream, req, [&](boost::system::error_code ec, std::size_t) {
                   if (ec) {
                     final_ec = ec;
-                    operation_completed = true;
                     return;
                   }
 
@@ -334,7 +613,6 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
                           response.body = res->body();
                           response.raw_response = std::move(*res);
                         }
-                        operation_completed = true;
                       });
                 });
           });
@@ -348,10 +626,9 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
       throw boost::system::system_error(final_ec);
     }
 
-    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_RESPONSE_STATUS,
-                          response.status_code);
-    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_RESPONSE_BODY,
-                          response.body);
+    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_STATUS,
+                    response.status_code);
+    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_BODY, response.body);
 
     return response;
   } catch (const std::exception &e) {
@@ -364,14 +641,15 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
 auto HttpClient::get_sync(std::string_view path,
                           const std::map<std::string, std::string> &headers)
     -> HttpResponse {
-  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_GET_DEBUG, path);
+  OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_GET_DEBUG, path);
 
   // Use a dedicated io_context for this sync operation with timeout
   asio::io_context local_ioc;
 
   try {
     // 创建请求
-    http::request<http::string_body> req{http::verb::get, path, 11};
+    http::request<http::string_body> req{http::verb::get, std::string(path),
+                                         11};
     req.set(http::field::host, pimpl_->config.host);
 
     // 添加头部
@@ -379,7 +657,6 @@ auto HttpClient::get_sync(std::string_view path,
 
     HttpResponse response;
     boost::system::error_code final_ec;
-    bool operation_completed = false;
 
     // 判断是否需要使用HTTPS
     if (pimpl_->config.port == 443 || pimpl_->config.use_ssl) {
@@ -403,7 +680,6 @@ auto HttpClient::get_sync(std::string_view path,
                        tcp::resolver::results_type::endpoint_type) {
             if (ec) {
               final_ec = ec;
-              operation_completed = true;
               return;
             }
             pimpl_->connected = true;
@@ -415,7 +691,6 @@ auto HttpClient::get_sync(std::string_view path,
                 ssl::stream_base::client, [&](boost::system::error_code ec) {
                   if (ec) {
                     final_ec = ec;
-                    operation_completed = true;
                     return;
                   }
 
@@ -427,7 +702,6 @@ auto HttpClient::get_sync(std::string_view path,
                       [&](boost::system::error_code ec, std::size_t) {
                         if (ec) {
                           final_ec = ec;
-                          operation_completed = true;
                           return;
                         }
 
@@ -448,7 +722,6 @@ auto HttpClient::get_sync(std::string_view path,
                                 response.body = res->body();
                                 response.raw_response = std::move(*res);
                               }
-                              operation_completed = true;
                             });
                       });
                 });
@@ -473,7 +746,6 @@ auto HttpClient::get_sync(std::string_view path,
                        tcp::resolver::results_type::endpoint_type) {
             if (ec) {
               final_ec = ec;
-              operation_completed = true;
               return;
             }
             pimpl_->connected = true;
@@ -484,7 +756,6 @@ auto HttpClient::get_sync(std::string_view path,
                 stream, req, [&](boost::system::error_code ec, std::size_t) {
                   if (ec) {
                     final_ec = ec;
-                    operation_completed = true;
                     return;
                   }
 
@@ -504,7 +775,6 @@ auto HttpClient::get_sync(std::string_view path,
                           response.body = res->body();
                           response.raw_response = std::move(*res);
                         }
-                        operation_completed = true;
                       });
                 });
           });
@@ -518,10 +788,9 @@ auto HttpClient::get_sync(std::string_view path,
       throw boost::system::system_error(final_ec);
     }
 
-    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_RESPONSE_STATUS,
-                          response.status_code);
-    OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::HTTP_RESPONSE_BODY,
-                          response.body);
+    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_STATUS,
+                    response.status_code);
+    OBCX_I18N_DEBUG(common::LogMessageKey::HTTP_RESPONSE_BODY, response.body);
 
     return response;
   } catch (const std::exception &e) {
@@ -539,7 +808,8 @@ auto HttpClient::head_sync(std::string_view path,
 
   try {
     // 创建请求
-    http::request<http::string_body> req{http::verb::head, path, 11};
+    http::request<http::string_body> req{http::verb::head, std::string(path),
+                                         11};
     req.set(http::field::host, pimpl_->config.host);
 
     // 添加头部
@@ -547,7 +817,6 @@ auto HttpClient::head_sync(std::string_view path,
 
     HttpResponse response;
     boost::system::error_code final_ec;
-    bool operation_completed = false;
 
     // 判断是否需要使用HTTPS
     if (pimpl_->config.port == 443 || pimpl_->config.use_ssl) {
@@ -571,7 +840,6 @@ auto HttpClient::head_sync(std::string_view path,
                        tcp::resolver::results_type::endpoint_type) {
             if (ec) {
               final_ec = ec;
-              operation_completed = true;
               return;
             }
             pimpl_->connected = true;
@@ -583,7 +851,6 @@ auto HttpClient::head_sync(std::string_view path,
                 ssl::stream_base::client, [&](boost::system::error_code ec) {
                   if (ec) {
                     final_ec = ec;
-                    operation_completed = true;
                     return;
                   }
 
@@ -595,7 +862,6 @@ auto HttpClient::head_sync(std::string_view path,
                       [&](boost::system::error_code ec, std::size_t) {
                         if (ec) {
                           final_ec = ec;
-                          operation_completed = true;
                           return;
                         }
 
@@ -618,7 +884,6 @@ auto HttpClient::head_sync(std::string_view path,
                                 response.body = res->body();
                                 response.raw_response = std::move(*res);
                               }
-                              operation_completed = true;
                             });
                       });
                 });
@@ -643,7 +908,6 @@ auto HttpClient::head_sync(std::string_view path,
                        tcp::resolver::results_type::endpoint_type) {
             if (ec) {
               final_ec = ec;
-              operation_completed = true;
               return;
             }
             pimpl_->connected = true;
@@ -654,7 +918,6 @@ auto HttpClient::head_sync(std::string_view path,
                 stream, req, [&](boost::system::error_code ec, std::size_t) {
                   if (ec) {
                     final_ec = ec;
-                    operation_completed = true;
                     return;
                   }
 
@@ -676,7 +939,6 @@ auto HttpClient::head_sync(std::string_view path,
                           response.body = res->body();
                           response.raw_response = std::move(*res);
                         }
-                        operation_completed = true;
                       });
                 });
           });
@@ -698,6 +960,16 @@ auto HttpClient::head_sync(std::string_view path,
   }
 }
 
+#ifdef __clang__
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+
+// ============================================================
+// 辅助方法实现
+// ============================================================
+
 void HttpClient::set_timeout(std::chrono::milliseconds timeout) {
   pimpl_->config.timeout = timeout;
 }
@@ -708,6 +980,23 @@ auto HttpClient::is_connected() const -> bool {
 
 auto HttpClient::get_timeout() const -> std::chrono::milliseconds {
   return pimpl_->config.timeout;
+}
+
+auto HttpClient::get_host() const -> const std::string & {
+  return pimpl_->config.host;
+}
+
+auto HttpClient::get_port() const -> uint16_t { return pimpl_->config.port; }
+
+auto HttpClient::use_ssl() const -> bool {
+  return pimpl_->config.port == 443 || pimpl_->config.use_ssl;
+}
+
+auto HttpClient::get_ssl_context() const -> ssl::context * {
+  if (pimpl_->ssl_ctx) {
+    return &(*pimpl_->ssl_ctx);
+  }
+  return nullptr;
 }
 
 void HttpClient::close() {

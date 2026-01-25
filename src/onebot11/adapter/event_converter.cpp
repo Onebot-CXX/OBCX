@@ -51,8 +51,8 @@ auto EventConverter::from_v11_json(std::string_view json_str)
       if (meta_event_type == "heartbeat") {
         common::HeartbeatEvent event;
         event.from_json(j);
-        OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_EVENT_HEARTBEAT,
-                              event.interval);
+        OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_EVENT_HEARTBEAT,
+                        event.interval);
         return event;
       } else {
         common::MetaEvent event;
@@ -66,8 +66,8 @@ auto EventConverter::from_v11_json(std::string_view json_str)
     return std::nullopt;
   }
 
-  OBCX_I18N_DEBUG_TRACE(common::LogMessageKey::ONEBOT11_EVENT_UNKNOWN_POST_TYPE,
-                        post_type);
+  OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_EVENT_UNKNOWN_POST_TYPE,
+                  post_type);
   return std::nullopt;
 }
 
