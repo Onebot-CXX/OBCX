@@ -70,6 +70,8 @@ auto ChatLLMPlugin::initialize() -> bool {
     cmd_parser_ = std::make_unique<chat_llm::CommandParser>();
     prompt_builder_ =
         std::make_unique<chat_llm::PromptBuilder>(system_prompt_, 500);
+    prompt_builder_->set_max_reply_chars(runtime_config_.max_reply_chars);
+    prompt_builder_->set_history_limit(runtime_config_.history_limit);
 
     // Initialize database
     std::filesystem::path db_path;
@@ -311,7 +313,13 @@ auto ChatLLMPlugin::filter_llm_response(const std::string &response)
     -> std::string {
   try {
     std::regex pattern(R"(^\s*\d+:\s*)", std::regex::optimize);
-    return std::regex_replace(response, pattern, "");
+    std::string result = response;
+    std::string prev;
+    do {
+      prev = result;
+      result = std::regex_replace(result, pattern, "");
+    } while (result != prev);
+    return result;
   } catch (const std::exception &e) {
     PLUGIN_WARN(get_name(), "Failed to filter LLM response: {}", e.what());
     return response;
