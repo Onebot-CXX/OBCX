@@ -320,7 +320,7 @@ auto ChatLLMPlugin::filter_llm_response(const std::string &response)
       result = std::regex_replace(result, pattern, "");
     } while (result != prev);
 
-    std::regex cleanup_pattern(R"(」[^」]*」)", std::regex::optimize);
+    std::regex cleanup_pattern(R"(</think>[^<]*</think>)", std::regex::optimize);
     result = std::regex_replace(result, cleanup_pattern, "");
     return result;
   } catch (const std::exception &e) {
