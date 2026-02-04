@@ -26,6 +26,16 @@ class CliHandler {
 public:
   /**
    * \if CHINESE
+   * @brief 输出回调函数类型，用于将命令输出重定向到TUI
+   * \endif
+   * \if ENGLISH
+   * @brief Output callback type for redirecting command output to TUI
+   * \endif
+   */
+  using OutputCallback = std::function<void(const std::string &)>;
+
+  /**
+   * \if CHINESE
    * @brief CLI上下文，包含命令处理所需的各种引用
    * \endif
    * \if ENGLISH
@@ -40,6 +50,8 @@ public:
     std::mutex &bots_mutex;
     std::atomic_bool &should_stop;
     std::condition_variable &stop_cv;
+    OutputCallback output_cb = nullptr;
+    std::function<void()> shutdown_cb = nullptr;
   };
 
   /**
@@ -98,6 +110,16 @@ private:
    * \endif
    */
   void register_default_handlers();
+
+  /**
+   * \if CHINESE
+   * @brief 向输出回调或stdout输出消息
+   * \endif
+   * \if ENGLISH
+   * @brief Output message to callback or stdout
+   * \endif
+   */
+  static void output(Context &ctx, const std::string &msg);
 
   /**
    * \if CHINESE

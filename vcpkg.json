@@ -5,6 +5,7 @@
   "dependencies": [
     "boost-beast",
     "boost-locale",
+    "boost-program-options",
     "boost-thread",
     "fmt",
     "gtest",
@@ -13,6 +14,6 @@
     "spdlog",
     "sqlite3",
     "tomlplusplus",
-    "boost-program-options"
+    "ftxui"
   ]
 }

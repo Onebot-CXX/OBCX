@@ -6,13 +6,12 @@
 #include "common/plugin_manager.hpp"
 #include "core/qq_bot.hpp"
 #include "core/tg_bot.hpp"
-#include "interfaces/connection_manager.hpp"
+#include "tui/tui_app.hpp"
 
 #include <atomic>
 #include <boost/date_time/posix_time/time_formatters.hpp>
 #include <boost/program_options.hpp>
 #include <csignal>
-#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -216,71 +215,67 @@ public:
 
     OBCX_I18N_INFO(common::LogMessageKey::ALL_COMPONENTS_STARTED);
 
-    // Start CLI input thread using CliHandler
-    std::thread cli_thread(
-        [&plugin_manager, &config_loader, &bot_configs, &bots, &bots_mutex]() {
-          common::CliHandler::Context ctx{
-              .plugin_manager = plugin_manager,
-              .config_loader = config_loader,
-              .bot_configs = bot_configs,
-              .bots = bots,
-              .bots_mutex = bots_mutex,
-              .should_stop = g_should_stop,
-              .stop_cv = g_stop_cv,
-          };
-          common::CliHandler handler(ctx);
-          handler.run();
-        });
-    cli_thread.detach();
-
-    // Wait for shutdown signal
+    // Run TUI on main thread (blocks until exit)
     {
-      std::unique_lock lock(g_stop_mtx);
-      g_stop_cv.wait(
-          lock, []() { return g_should_stop.load(std::memory_order_acquire); });
-    }
+      common::CliHandler::Context ctx{
+          .plugin_manager = plugin_manager,
+          .config_loader = config_loader,
+          .bot_configs = bot_configs,
+          .bots = bots,
+          .bots_mutex = bots_mutex,
+          .should_stop = g_should_stop,
+          .stop_cv = g_stop_cv,
+      };
 
-    OBCX_I18N_INFO(common::LogMessageKey::FRAMEWORK_SHUTDOWN);
+      // Shutdown callback: runs while TUI is still alive so logs are visible
+      ctx.shutdown_cb = [&]() {
+        OBCX_I18N_INFO(common::LogMessageKey::FRAMEWORK_SHUTDOWN);
 
-    // Stop all bot components
-    for (auto &bot : bots) {
-      bot->stop();
-    }
-
-    // Wait for bot threads to finish with timeout
-    for (size_t i = 0; i < bot_threads.size(); ++i) {
-      if (bot_threads[i].joinable()) {
-        OBCX_I18N_INFO(common::LogMessageKey::WAITING_BOT_THREAD, i);
-        // Use a detached thread to implement timeout
-        bool thread_finished = false;
-        std::thread timeout_thread([&]() {
-          std::this_thread::sleep_for(
-              std::chrono::seconds(BOT_SHUTDOWN_TIMEOUT_SECONDS));
-          if (!thread_finished) {
-            OBCX_I18N_WARN(common::LogMessageKey::BOT_THREAD_TIMEOUT, i);
-            bot_threads[i].detach();
-          }
-        });
-
-        bot_threads[i].join();
-        thread_finished = true;
-
-        if (timeout_thread.joinable()) {
-          timeout_thread.join();
+        // Stop all bot components
+        for (auto &bot : bots) {
+          bot->stop();
         }
-      }
+
+        // Wait for bot threads to finish with timeout
+        for (size_t i = 0; i < bot_threads.size(); ++i) {
+          if (bot_threads[i].joinable()) {
+            OBCX_I18N_INFO(common::LogMessageKey::WAITING_BOT_THREAD, i);
+            std::atomic_bool thread_finished{false};
+            std::thread timeout_thread([&thread_finished, &bot_threads, i]() {
+              std::this_thread::sleep_for(
+                  std::chrono::seconds(BOT_SHUTDOWN_TIMEOUT_SECONDS));
+              if (!thread_finished.load()) {
+                OBCX_I18N_WARN(common::LogMessageKey::BOT_THREAD_TIMEOUT, i);
+                bot_threads[i].detach();
+              }
+            });
+
+            bot_threads[i].join();
+            thread_finished.store(true);
+
+            if (timeout_thread.joinable()) {
+              timeout_thread.join();
+            }
+          }
+        }
+
+        // Stop shared TaskScheduler (bots are already stopped)
+        if (shared_task_scheduler) {
+          shared_task_scheduler->stop();
+          shared_task_scheduler.reset();
+        }
+
+        // Shutdown all plugins
+        plugin_manager.shutdown_all_plugins();
+
+        OBCX_I18N_INFO(common::LogMessageKey::FRAMEWORK_SHUTDOWN_COMPLETE);
+      };
+
+      auto tui_sink = common::Logger::get_tui_sink();
+      common::TuiApp tui_app(tui_sink, std::move(ctx));
+      tui_app.run();
     }
 
-    // Stop shared TaskScheduler (bots are already stopped)
-    if (shared_task_scheduler) {
-      shared_task_scheduler->stop();
-      shared_task_scheduler.reset();
-    }
-
-    // Shutdown all plugins
-    plugin_manager.shutdown_all_plugins();
-
-    OBCX_I18N_INFO(common::LogMessageKey::FRAMEWORK_SHUTDOWN_COMPLETE);
     return 0;
   }
 };

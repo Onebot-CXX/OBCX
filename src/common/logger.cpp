@@ -4,13 +4,13 @@
 #include <cstdlib>
 #include <spdlog/async.h>
 #include <spdlog/sinks/rotating_file_sink.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
 #include <unordered_map>
 #include <vector>
 
 namespace obcx::common {
 
 std::shared_ptr<spdlog::logger> Logger::default_logger_ = nullptr;
+std::shared_ptr<tui_sink_mt> Logger::tui_sink_ = nullptr;
 bool Logger::initialized_ = false;
 
 void Logger::initialize(spdlog::level::level_enum level,
@@ -27,16 +27,17 @@ void Logger::initialize(spdlog::level::level_enum level,
 
     /*
      * \if CHINESE
-     * 控制台输出
+     * TUI sink - 捕获日志到内存供TUI渲染（替代控制台输出）
      * \endif
      * \if ENGLISH
-     * Console output
+     * TUI sink - captures logs to memory for TUI rendering (replaces console
+     * output)
      * \endif
      */
-    auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-    console_sink->set_level(level);
-    console_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%^%l%$] %v");
-    sinks.push_back(console_sink);
+    tui_sink_ = std::make_shared<tui_sink_mt>();
+    tui_sink_->set_level(level);
+    tui_sink_->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v");
+    sinks.push_back(tui_sink_);
 
     /*
      * \if CHINESE
@@ -202,6 +203,10 @@ auto Logger::get_level_from_env(const std::string &env_var,
 
   // Invalid level string, return default
   return default_level;
+}
+
+auto Logger::get_tui_sink() -> std::shared_ptr<tui_sink_mt> {
+  return tui_sink_;
 }
 
 } // namespace obcx::common

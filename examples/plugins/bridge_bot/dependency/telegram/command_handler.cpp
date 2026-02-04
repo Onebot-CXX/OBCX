@@ -206,7 +206,7 @@ auto TelegramCommandHandler::handle_checkalive_command(
       response_text +=
           fmt::format("最后活动: {} ({} 秒前)\n", tg_timestamp, tg_duration);
 
-      if (tg_duration > 300) { // 5分钟无活动认为异常
+      if (tg_duration > 40) { // 5分钟无活动认为异常
         response_text += "⚠️ Telegram平台可能离线";
       } else {
         response_text += "✅ Telegram平台正常";

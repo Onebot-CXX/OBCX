@@ -196,7 +196,7 @@ private:
 /**
  * 超时机制测试类
  */
-class WsTimeoutMechanismTest : public testing::Test {
+class WsTimeoutTest : public testing::Test {
 
 protected:
   void SetUp() override {
@@ -257,7 +257,7 @@ protected:
 /**
  * 测试正常响应情况
  */
-TEST_F(WsTimeoutMechanismTest, NormalResponse) {
+TEST_F(WsTimeoutTest, NormalResponse) {
   start_client_ioc();
   connect_to_server();
 
@@ -314,7 +314,7 @@ TEST_F(WsTimeoutMechanismTest, NormalResponse) {
 /**
  * 测试超时情况
  */
-TEST_F(WsTimeoutMechanismTest, TimeoutScenario) {
+TEST_F(WsTimeoutTest, TimeoutScenario) {
   start_client_ioc();
   connect_to_server();
 
@@ -376,7 +376,7 @@ TEST_F(WsTimeoutMechanismTest, TimeoutScenario) {
 /**
  * 测试延迟响应（在客户端超时之前）
  */
-TEST_F(WsTimeoutMechanismTest, DelayedResponse) {
+TEST_F(WsTimeoutTest, DelayedResponse) {
   start_client_ioc();
   connect_to_server();
 

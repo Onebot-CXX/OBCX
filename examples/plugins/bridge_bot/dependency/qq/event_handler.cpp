@@ -263,12 +263,15 @@ auto QQEventHandler::handle_poke_event(obcx::core::IBot &telegram_bot,
 
     // 检查转发是否启用
     bool forward_enabled = false;
+    bool display_name = false;
     if (bridge_config->mode == BridgeMode::GROUP_TO_GROUP) {
       forward_enabled = bridge_config->enable_qq_to_tg;
+      display_name = bridge_config->show_qq_to_tg_sender;
     } else {
       const TopicBridgeConfig *topic_config =
           get_topic_config(telegram_group_id, topic_id);
       forward_enabled = topic_config ? topic_config->enable_qq_to_tg : false;
+      display_name = topic_config ? topic_config->show_qq_to_tg_sender : false;
     }
 
     if (!forward_enabled) {
@@ -277,17 +280,19 @@ auto QQEventHandler::handle_poke_event(obcx::core::IBot &telegram_bot,
     }
 
     // 获取两个用户的显示名称
-    std::string user_display_name =
-        co_await fetch_user_display_name(qq_bot, user_id, qq_group_id);
-    std::string target_display_name =
-        co_await fetch_user_display_name(qq_bot, target_id, qq_group_id);
-
-    // 如果显示名称为空，使用QQ号作为后备
-    if (user_display_name.empty()) {
-      user_display_name = user_id;
-    }
-    if (target_display_name.empty()) {
-      target_display_name = target_id;
+    std::string user_display_name = " ", target_display_name = " ";
+    if (display_name) {
+      user_display_name =
+          co_await fetch_user_display_name(qq_bot, user_id, qq_group_id);
+      target_display_name =
+          co_await fetch_user_display_name(qq_bot, target_id, qq_group_id);
+      // 如果显示名称为空，使用QQ号作为后备
+      if (user_display_name.empty()) {
+        user_display_name = user_id;
+      }
+      if (target_display_name.empty()) {
+        target_display_name = target_id;
+      }
     }
 
     // 构建戳一戳消息

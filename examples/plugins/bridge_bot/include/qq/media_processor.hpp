@@ -90,7 +90,10 @@ public:
    */
   auto process_at_segment(obcx::core::IBot &qq_bot,
                           const obcx::common::MessageSegment &segment,
-                          const obcx::common::MessageEvent &event)
+                          const obcx::common::MessageEvent &event,
+                          const std::string &telegram_group_id,
+                          int64_t topic_id,
+                          const GroupBridgeConfig *bridge_config)
       -> boost::asio::awaitable<obcx::common::MessageSegment>;
 
   /**

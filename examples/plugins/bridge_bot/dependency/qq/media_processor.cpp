@@ -46,7 +46,8 @@ auto QQMediaProcessor::process_qq_media_segment(
     } else if (segment.type == "mface") {
       co_return co_await process_mface_segment(segment);
     } else if (segment.type == "at") {
-      co_return co_await process_at_segment(qq_bot, segment, event);
+      co_return co_await process_at_segment(
+          qq_bot, segment, event, telegram_group_id, topic_id, bridge_config);
     } else if (segment.type == "shake") {
       co_return co_await process_shake_segment(segment);
     } else if (segment.type == "music") {
@@ -230,7 +231,9 @@ auto QQMediaProcessor::process_file_segment(
 
 auto QQMediaProcessor::process_at_segment(
     obcx::core::IBot &qq_bot, const obcx::common::MessageSegment &segment,
-    const obcx::common::MessageEvent &event)
+    const obcx::common::MessageEvent &event,
+    const std::string &telegram_group_id, int64_t topic_id,
+    const GroupBridgeConfig *bridge_config)
     -> boost::asio::awaitable<obcx::common::MessageSegment> {
 
   obcx::common::MessageSegment converted_segment;
@@ -253,14 +256,29 @@ auto QQMediaProcessor::process_at_segment(
         "qq", qq_user_id, event.group_id.value_or(""));
   }
 
+  // 判断是否显示发送者信息（基于配置）
+  bool show_sender = false;
+  if (bridge_config->mode == BridgeMode::GROUP_TO_GROUP) {
+    show_sender = bridge_config->show_qq_to_tg_sender;
+  } else {
+    // Topic模式：获取对应topic的配置
+    const TopicBridgeConfig *topic_config =
+        bridge::get_topic_config(telegram_group_id, topic_id);
+    show_sender = topic_config ? topic_config->show_qq_to_tg_sender : false;
+  }
+
   // 设置最终显示文本
-  if (at_display_name.has_value()) {
+  if (show_sender && at_display_name.has_value()) {
     converted_segment.data["text"] =
         fmt::format("@{} ", at_display_name.value());
     PLUGIN_DEBUG("qq_to_tg", "转换QQ@消息: {} -> @{}", qq_user_id,
                  at_display_name.value());
-  } else {
+  } else if (show_sender) {
     converted_segment.data["text"] = fmt::format("[@{}] ", qq_user_id);
+  } else {
+    // 不显示发送者，返回空文本
+    converted_segment.data["text"] = "";
+    PLUGIN_DEBUG("qq_to_tg", "QQ@消息不显示发送者: {}", qq_user_id);
   }
 
   co_return converted_segment;

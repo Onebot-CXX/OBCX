@@ -2,6 +2,7 @@
 #include "common/i18n_log_messages.hpp"
 #include "common/logger.hpp"
 
+#include <fmt/format.h>
 #include <iostream>
 #include <print>
 #include <spdlog/common.h>
@@ -9,7 +10,9 @@
 
 namespace obcx::common {
 
-CliHandler::CliHandler(Context ctx) : ctx_(ctx) { register_default_handlers(); }
+CliHandler::CliHandler(Context ctx) : ctx_(std::move(ctx)) {
+  register_default_handlers();
+}
 
 void CliHandler::register_default_handlers() {
   handlers_["exit"] = handle_exit;
@@ -106,12 +109,20 @@ auto CliHandler::handle_reload(Context &ctx,
   return true; // Continue the CLI loop
 }
 
+void CliHandler::output(Context &ctx, const std::string &msg) {
+  if (ctx.output_cb) {
+    ctx.output_cb(msg);
+  } else {
+    std::println("{}", msg);
+  }
+}
+
 auto CliHandler::handle_log_level([[maybe_unused]] Context &ctx,
                                   const std::string &level_str) -> bool {
   auto level = Logger::parse_level(level_str);
   if (level.has_value()) {
     Logger::set_level(*level);
-    std::println("Log level changed to: {}", level_str);
+    output(ctx, fmt::format("Log level changed to: {}", level_str));
   } else {
     OBCX_WARN("Invalid log level: {}. Valid levels: trace, debug, info, warn, "
               "error, critical, off",

@@ -5,6 +5,8 @@
 #include <spdlog/spdlog.h>
 #include <string>
 
+#include "tui/tui_sink.hpp"
+
 /*
  * \if CHINESE
  * 如果启用调试追溯，则包含 fmt 相关的头文件
@@ -131,8 +133,21 @@ public:
    */
   static void flush();
 
+  /**
+   * \if CHINESE
+   * @brief 获取TUI sink实例
+   * @return TUI sink的shared_ptr，如果未初始化则返回nullptr
+   * \endif
+   * \if ENGLISH
+   * @brief Get the TUI sink instance
+   * @return shared_ptr to TUI sink, nullptr if not initialized
+   * \endif
+   */
+  static auto get_tui_sink() -> std::shared_ptr<tui_sink_mt>;
+
 private:
   static std::shared_ptr<spdlog::logger> default_logger_;
+  static std::shared_ptr<tui_sink_mt> tui_sink_;
   static bool initialized_;
 };
 
