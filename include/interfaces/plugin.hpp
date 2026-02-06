@@ -4,7 +4,6 @@
 #include "interfaces/bot.hpp"
 
 #include <boost/asio/awaitable.hpp>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
