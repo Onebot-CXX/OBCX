@@ -101,9 +101,9 @@ auto ComponentManager::create_connection_config(const toml::table &conn_table)
     config.use_ssl = false;
   }
 
-  if (const auto *timeout = conn_table.get("timeout")) {
-    if (auto timeout_ms = timeout->value<int64_t>()) {
-      config.timeout = std::chrono::milliseconds(*timeout_ms);
+  if (const auto *connect_timeout = conn_table.get("connect_timeout")) {
+    if (auto connect_timeout_ms = connect_timeout->value<int64_t>()) {
+      config.connect_timeout = std::chrono::milliseconds(*connect_timeout_ms);
     }
   }
 

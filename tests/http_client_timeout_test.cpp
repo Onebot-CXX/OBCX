@@ -230,13 +230,13 @@ protected:
     }
   }
 
-  auto create_client(std::chrono::milliseconds timeout)
+  auto create_client(std::chrono::milliseconds connect_timeout)
       -> std::unique_ptr<network::HttpClient> {
     common::ConnectionConfig config;
     config.host = "127.0.0.1";
     config.port = server_->get_port();
     config.use_ssl = false;
-    config.timeout = timeout;
+    config.connect_timeout = connect_timeout;
 
     return std::make_unique<network::HttpClient>(ioc_, config);
   }

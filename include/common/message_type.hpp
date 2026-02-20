@@ -363,12 +363,12 @@ struct ConnectionConfig {
   uint16_t port = 8080;
   std::string access_token;
   std::string secret;
-  std::chrono::milliseconds timeout{30000};
+  std::chrono::milliseconds connect_timeout{5000};
   std::chrono::milliseconds poll_timeout{
       25000}; // Long-poll timeout sent to server (e.g., Telegram getUpdates)
   std::chrono::milliseconds poll_force_close{30000};
   std::chrono::milliseconds poll_retry_interval{3000};
-  std::chrono::milliseconds heartbeat_interval{5000};
+  std::chrono::milliseconds heartbeat_interval{30000};
   bool use_ssl = false;
 
   // Proxy configuration

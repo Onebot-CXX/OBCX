@@ -89,9 +89,6 @@ private:
   std::atomic<bool> is_connected_{false};
   asio::steady_timer poll_timer_;
 
-  // 轮询间隔（毫秒）
-  std::chrono::milliseconds poll_retry_interval_{30000};
-
   // 更新偏移量
   int update_offset_{0};
 };

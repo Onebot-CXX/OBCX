@@ -172,25 +172,29 @@ auto HttpClient::post(std::string_view path, std::string_view body,
           asio::use_awaitable);
 
       // 设置超时并异步连接
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       co_await beast::get_lowest_layer(stream).async_connect(
           results, asio::use_awaitable);
 
       pimpl_->connected = true;
 
       // SSL握手
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       co_await stream.async_handshake(ssl::stream_base::client,
                                       asio::use_awaitable);
 
       // 发送请求
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       co_await http::async_write(stream, req, asio::use_awaitable);
 
       // 接收响应
       beast::flat_buffer buffer;
       http::response<http::string_body> res;
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       co_await http::async_read(stream, buffer, res, asio::use_awaitable);
 
       response.status_code = res.result_int();
@@ -208,19 +212,19 @@ auto HttpClient::post(std::string_view path, std::string_view body,
           asio::use_awaitable);
 
       // 设置超时并异步连接
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
       co_await stream.async_connect(results, asio::use_awaitable);
 
       pimpl_->connected = true;
 
       // 发送请求
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
       co_await http::async_write(stream, req, asio::use_awaitable);
 
       // 接收响应
       beast::flat_buffer buffer;
       http::response<http::string_body> res;
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
       co_await http::async_read(stream, buffer, res, asio::use_awaitable);
 
       response.status_code = res.result_int();
@@ -276,25 +280,29 @@ auto HttpClient::get(std::string_view path,
           asio::use_awaitable);
 
       // 设置超时并异步连接
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       co_await beast::get_lowest_layer(stream).async_connect(
           results, asio::use_awaitable);
 
       pimpl_->connected = true;
 
       // SSL握手
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       co_await stream.async_handshake(ssl::stream_base::client,
                                       asio::use_awaitable);
 
       // 发送请求
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       co_await http::async_write(stream, req, asio::use_awaitable);
 
       // 接收响应
       beast::flat_buffer buffer;
       http::response<http::string_body> res;
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       co_await http::async_read(stream, buffer, res, asio::use_awaitable);
 
       response.status_code = res.result_int();
@@ -312,19 +320,19 @@ auto HttpClient::get(std::string_view path,
           asio::use_awaitable);
 
       // 设置超时并异步连接
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
       co_await stream.async_connect(results, asio::use_awaitable);
 
       pimpl_->connected = true;
 
       // 发送请求
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
       co_await http::async_write(stream, req, asio::use_awaitable);
 
       // 接收响应
       beast::flat_buffer buffer;
       http::response<http::string_body> res;
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
       co_await http::async_read(stream, buffer, res, asio::use_awaitable);
 
       response.status_code = res.result_int();
@@ -378,25 +386,29 @@ auto HttpClient::head(std::string_view path,
           asio::use_awaitable);
 
       // 设置超时并异步连接
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       co_await beast::get_lowest_layer(stream).async_connect(
           results, asio::use_awaitable);
 
       pimpl_->connected = true;
 
       // SSL握手
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       co_await stream.async_handshake(ssl::stream_base::client,
                                       asio::use_awaitable);
 
       // 发送请求
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       co_await http::async_write(stream, req, asio::use_awaitable);
 
       // 接收响应
       beast::flat_buffer buffer;
       http::response<http::string_body> res;
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
 
       boost::system::error_code ec;
       co_await http::async_read(stream, buffer, res,
@@ -423,19 +435,19 @@ auto HttpClient::head(std::string_view path,
           asio::use_awaitable);
 
       // 设置超时并异步连接
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
       co_await stream.async_connect(results, asio::use_awaitable);
 
       pimpl_->connected = true;
 
       // 发送请求
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
       co_await http::async_write(stream, req, asio::use_awaitable);
 
       // 接收响应
       beast::flat_buffer buffer;
       http::response<http::string_body> res;
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
 
       boost::system::error_code ec;
       co_await http::async_read(stream, buffer, res,
@@ -512,7 +524,8 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
       // 设置超时并异步连接
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       beast::get_lowest_layer(stream).async_connect(
           results, [&](boost::system::error_code ec,
                        tcp::resolver::results_type::endpoint_type) {
@@ -524,7 +537,7 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
 
             // SSL握手
             beast::get_lowest_layer(stream).expires_after(
-                pimpl_->config.timeout);
+                pimpl_->config.connect_timeout);
             stream.async_handshake(
                 ssl::stream_base::client, [&](boost::system::error_code ec) {
                   if (ec) {
@@ -534,7 +547,7 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
 
                   // 发送请求
                   beast::get_lowest_layer(stream).expires_after(
-                      pimpl_->config.timeout);
+                      pimpl_->config.connect_timeout);
                   http::async_write(
                       stream, req,
                       [&](boost::system::error_code ec, std::size_t) {
@@ -548,7 +561,7 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
                         auto res = std::make_shared<
                             http::response<http::string_body>>();
                         beast::get_lowest_layer(stream).expires_after(
-                            pimpl_->config.timeout);
+                            pimpl_->config.connect_timeout);
                         http::async_read(
                             stream, *buffer, *res,
                             [&, buffer, res](boost::system::error_code ec,
@@ -578,7 +591,7 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
       // 设置超时并异步连接
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
       stream.async_connect(
           results, [&](boost::system::error_code ec,
                        tcp::resolver::results_type::endpoint_type) {
@@ -589,7 +602,7 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
             pimpl_->connected = true;
 
             // 发送请求
-            stream.expires_after(pimpl_->config.timeout);
+            stream.expires_after(pimpl_->config.connect_timeout);
             http::async_write(
                 stream, req, [&](boost::system::error_code ec, std::size_t) {
                   if (ec) {
@@ -601,7 +614,7 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
                   auto buffer = std::make_shared<beast::flat_buffer>();
                   auto res =
                       std::make_shared<http::response<http::string_body>>();
-                  stream.expires_after(pimpl_->config.timeout);
+                  stream.expires_after(pimpl_->config.connect_timeout);
                   http::async_read(
                       stream, *buffer, *res,
                       [&, buffer, res](boost::system::error_code ec,
@@ -674,7 +687,8 @@ auto HttpClient::get_sync(std::string_view path,
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
       // 设置超时并异步连接
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       beast::get_lowest_layer(stream).async_connect(
           results, [&](boost::system::error_code ec,
                        tcp::resolver::results_type::endpoint_type) {
@@ -686,7 +700,7 @@ auto HttpClient::get_sync(std::string_view path,
 
             // SSL握手
             beast::get_lowest_layer(stream).expires_after(
-                pimpl_->config.timeout);
+                pimpl_->config.connect_timeout);
             stream.async_handshake(
                 ssl::stream_base::client, [&](boost::system::error_code ec) {
                   if (ec) {
@@ -696,7 +710,7 @@ auto HttpClient::get_sync(std::string_view path,
 
                   // 发送请求
                   beast::get_lowest_layer(stream).expires_after(
-                      pimpl_->config.timeout);
+                      pimpl_->config.connect_timeout);
                   http::async_write(
                       stream, req,
                       [&](boost::system::error_code ec, std::size_t) {
@@ -710,7 +724,7 @@ auto HttpClient::get_sync(std::string_view path,
                         auto res = std::make_shared<
                             http::response<http::string_body>>();
                         beast::get_lowest_layer(stream).expires_after(
-                            pimpl_->config.timeout);
+                            pimpl_->config.connect_timeout);
                         http::async_read(
                             stream, *buffer, *res,
                             [&, buffer, res](boost::system::error_code ec,
@@ -740,7 +754,7 @@ auto HttpClient::get_sync(std::string_view path,
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
       // 设置超时并异步连接
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
       stream.async_connect(
           results, [&](boost::system::error_code ec,
                        tcp::resolver::results_type::endpoint_type) {
@@ -751,7 +765,7 @@ auto HttpClient::get_sync(std::string_view path,
             pimpl_->connected = true;
 
             // 发送请求
-            stream.expires_after(pimpl_->config.timeout);
+            stream.expires_after(pimpl_->config.connect_timeout);
             http::async_write(
                 stream, req, [&](boost::system::error_code ec, std::size_t) {
                   if (ec) {
@@ -763,7 +777,7 @@ auto HttpClient::get_sync(std::string_view path,
                   auto buffer = std::make_shared<beast::flat_buffer>();
                   auto res =
                       std::make_shared<http::response<http::string_body>>();
-                  stream.expires_after(pimpl_->config.timeout);
+                  stream.expires_after(pimpl_->config.connect_timeout);
                   http::async_read(
                       stream, *buffer, *res,
                       [&, buffer, res](boost::system::error_code ec,
@@ -834,7 +848,8 @@ auto HttpClient::head_sync(std::string_view path,
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
       // 设置超时并异步连接
-      beast::get_lowest_layer(stream).expires_after(pimpl_->config.timeout);
+      beast::get_lowest_layer(stream).expires_after(
+          pimpl_->config.connect_timeout);
       beast::get_lowest_layer(stream).async_connect(
           results, [&](boost::system::error_code ec,
                        tcp::resolver::results_type::endpoint_type) {
@@ -846,7 +861,7 @@ auto HttpClient::head_sync(std::string_view path,
 
             // SSL握手
             beast::get_lowest_layer(stream).expires_after(
-                pimpl_->config.timeout);
+                pimpl_->config.connect_timeout);
             stream.async_handshake(
                 ssl::stream_base::client, [&](boost::system::error_code ec) {
                   if (ec) {
@@ -856,7 +871,7 @@ auto HttpClient::head_sync(std::string_view path,
 
                   // 发送请求
                   beast::get_lowest_layer(stream).expires_after(
-                      pimpl_->config.timeout);
+                      pimpl_->config.connect_timeout);
                   http::async_write(
                       stream, req,
                       [&](boost::system::error_code ec, std::size_t) {
@@ -870,7 +885,7 @@ auto HttpClient::head_sync(std::string_view path,
                         auto res = std::make_shared<
                             http::response<http::string_body>>();
                         beast::get_lowest_layer(stream).expires_after(
-                            pimpl_->config.timeout);
+                            pimpl_->config.connect_timeout);
                         http::async_read(
                             stream, *buffer, *res,
                             [&, buffer, res](boost::system::error_code ec,
@@ -902,7 +917,7 @@ auto HttpClient::head_sync(std::string_view path,
           pimpl_->config.host, std::to_string(pimpl_->config.port));
 
       // 设置超时并异步连接
-      stream.expires_after(pimpl_->config.timeout);
+      stream.expires_after(pimpl_->config.connect_timeout);
       stream.async_connect(
           results, [&](boost::system::error_code ec,
                        tcp::resolver::results_type::endpoint_type) {
@@ -913,7 +928,7 @@ auto HttpClient::head_sync(std::string_view path,
             pimpl_->connected = true;
 
             // 发送请求
-            stream.expires_after(pimpl_->config.timeout);
+            stream.expires_after(pimpl_->config.connect_timeout);
             http::async_write(
                 stream, req, [&](boost::system::error_code ec, std::size_t) {
                   if (ec) {
@@ -925,7 +940,7 @@ auto HttpClient::head_sync(std::string_view path,
                   auto buffer = std::make_shared<beast::flat_buffer>();
                   auto res =
                       std::make_shared<http::response<http::string_body>>();
-                  stream.expires_after(pimpl_->config.timeout);
+                  stream.expires_after(pimpl_->config.connect_timeout);
                   http::async_read(
                       stream, *buffer, *res,
                       [&, buffer, res](boost::system::error_code ec,
@@ -971,7 +986,7 @@ auto HttpClient::head_sync(std::string_view path,
 // ============================================================
 
 void HttpClient::set_timeout(std::chrono::milliseconds timeout) {
-  pimpl_->config.timeout = timeout;
+  pimpl_->config.connect_timeout = timeout;
 }
 
 auto HttpClient::is_connected() const -> bool {
@@ -979,7 +994,7 @@ auto HttpClient::is_connected() const -> bool {
 }
 
 auto HttpClient::get_timeout() const -> std::chrono::milliseconds {
-  return pimpl_->config.timeout;
+  return pimpl_->config.connect_timeout;
 }
 
 auto HttpClient::get_host() const -> const std::string & {

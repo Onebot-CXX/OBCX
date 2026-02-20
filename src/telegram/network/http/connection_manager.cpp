@@ -24,9 +24,6 @@ void TelegramConnectionManager::connect(
     const common::ConnectionConfig &config) {
   config_ = config;
 
-  // 从配置加载轮询间隔
-  poll_retry_interval_ = config_.poll_retry_interval;
-
   // 检查是否需要使用代理
   if (!config_.proxy_host.empty() && config_.proxy_port > 0) {
     // 使用代理HTTP客户端
@@ -112,6 +109,7 @@ auto TelegramConnectionManager::send_action_and_wait_async(
     // 获取请求体（去除method字段）
     payload_json.erase("method");
     payload_json.erase("echo"); // Telegram API不支持echo字段
+    payload_json["timeout"] = config_.poll_timeout.count(); // 设置轮询超时参数
     std::string body = payload_json.dump();
 
     // 发送POST请求到Telegram API (使用协程)
@@ -245,10 +243,9 @@ auto TelegramConnectionManager::download_file_content(
 
 void TelegramConnectionManager::start_polling() {
   if (is_polling_.exchange(true) == false) {
-    // 启动轮询协程
     asio::co_spawn(ioc_, poll_updates(), asio::detached);
     OBCX_I18N_INFO(common::LogMessageKey::START_POLLING,
-                   poll_retry_interval_.count());
+                   config_.poll_timeout.count());
   }
 }
 
@@ -315,7 +312,7 @@ auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
 
     // 仅在出错时等待，正常情况下立即开始下一次轮询
     if (should_delay) {
-      poll_timer_.expires_after(poll_retry_interval_);
+      poll_timer_.expires_after(config_.poll_retry_interval);
       try {
         co_await poll_timer_.async_wait(asio::use_awaitable);
       } catch (const boost::system::system_error &e) {
