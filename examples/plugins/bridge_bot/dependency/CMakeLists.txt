@@ -25,4 +25,10 @@ add_library(
   database/manager_update.cpp
   database/manager_delete.cpp)
 
-target_link_libraries(bridge_core PUBLIC obcx_core unofficial::sqlite3::sqlite3)
+target_link_libraries(bridge_core PUBLIC obcx_core )
+if ("$ENV{IN_NIX_SHELL}" STREQUAL "")
+    target_link_libraries(bridge_core PUBLIC unofficial::sqlite3::sqlite3 )
+else()
+    target_link_libraries(bridge_core PUBLIC SQLite::SQLite3)
+endif()
+

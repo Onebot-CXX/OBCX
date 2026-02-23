@@ -1,4 +1,9 @@
-find_package(unofficial-sqlite3 CONFIG REQUIRED)
+if("$ENV{IN_NIX_SHELL}" STREQUAL "")
+  find_package(unofficial-sqlite3 CONFIG REQUIRED)
+else()
+  find_package(SQLite3 REQUIRED)
+endif()
+
 find_package(tomlplusplus REQUIRED)
 
 include_directories(include)

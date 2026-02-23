@@ -66,5 +66,5 @@ docs/
 logs/
 *.core
 
-# vcpkg dependencies
 vcpkg_installed/
+.direnv/

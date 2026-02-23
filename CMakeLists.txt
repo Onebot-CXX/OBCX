@@ -48,8 +48,12 @@ elseif(UNIX)
   endif()
 endif()
 
+if ("$ENV{IN_NIX_SHELL}" STREQUAL "")
 set(CMAKE_PREFIX_PATH
     "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TRIPLET}")
+else()
+    message(STATUS "NIX shell activation detected, disable vcpkg")
+endif()
 
 option(ENABLE_DEBUG_TRACE "Enable logging with file and line numbers" OFF)
 
