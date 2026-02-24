@@ -20,6 +20,7 @@ pkgs.mkShell.override { stdenv = pkgs.clangStdenv; } {
     lld
     gettext
     cmake-format
+    ffmpeg
   ];
 
   buildInputs = obcxDependencies;

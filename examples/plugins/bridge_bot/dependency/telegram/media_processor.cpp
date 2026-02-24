@@ -1,4 +1,5 @@
 #include "telegram/media_processor.hpp"
+#include "config.hpp"
 #include "media_processor.hpp"
 
 #include "path_manager.hpp"
@@ -595,9 +596,8 @@ auto TelegramMediaProcessor::download_sticker_with_cache(
 
     std::string download_url = download_urls[0].value();
 
-    // 使用正确的挂载点路径
-    std::string host_bridge_files_dir =
-        "/home/lambillda/Codes/OBCX/tests/llonebot/bridge_files";
+    // 使用配置中的挂载点路径
+    std::string host_bridge_files_dir = bridge::config::BRIDGE_FILES_DIR;
     std::string original_dir = host_bridge_files_dir + "/stickers/original";
     std::filesystem::create_directories(original_dir);
 
@@ -829,9 +829,8 @@ auto TelegramMediaProcessor::download_animation_with_cache(
 
     std::string download_url = download_urls[0].value();
 
-    // 使用正确的挂载点路径
-    std::string host_bridge_files_dir =
-        "/home/lambillda/Codes/OBCX/tests/llonebot/bridge_files";
+    // 使用配置中的挂载点路径
+    std::string host_bridge_files_dir = bridge::config::BRIDGE_FILES_DIR;
     std::string original_dir = host_bridge_files_dir + "/animations/original";
     std::string converted_dir = host_bridge_files_dir + "/animations/converted";
     std::filesystem::create_directories(original_dir);

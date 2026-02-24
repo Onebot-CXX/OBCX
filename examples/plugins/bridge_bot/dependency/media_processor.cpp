@@ -1,10 +1,13 @@
 #include "media_processor.hpp"
+#include "config.hpp"
 #include "path_manager.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <common/logger.hpp>
 #include <fmt/format.h>
+#include <memory>
+#include <mutex>
 #include <nlohmann/json.hpp>
 
 namespace bridge {
@@ -64,12 +67,22 @@ auto MediaProcessor::cleanup_media_file(const std::string &file_path) -> void {
 }
 
 auto MediaProcessor::get_path_manager() -> const PathManager & {
-  // 创建静态PathManager实例，使用llonebot挂载目录
-  static const PathManager path_manager(
-      "/home/lambillda/Codes/OBCX/tests/llonebot/bridge_files", // 主机路径
-      "/root/llonebot/bridge_files"                             // 容器路径
-  );
-  return path_manager;
+  // 使用单例模式，延迟初始化
+  static std::unique_ptr<PathManager> path_manager_instance;
+  static std::once_flag init_flag;
+
+  std::call_once(init_flag, []() {
+    if (bridge::config::BRIDGE_FILES_DIR.empty()) {
+      throw std::runtime_error(
+          "PathManager: BRIDGE_FILES_DIR is not configured. Please ensure "
+          "initialize_config() is called before using MediaProcessor.");
+    }
+    path_manager_instance = std::make_unique<PathManager>(
+        bridge::config::BRIDGE_FILES_DIR,
+        bridge::config::BRIDGE_FILES_CONTAINER_DIR);
+  });
+
+  return *path_manager_instance;
 }
 
 auto MediaProcessor::is_gif_content_type(const std::string &content_type)

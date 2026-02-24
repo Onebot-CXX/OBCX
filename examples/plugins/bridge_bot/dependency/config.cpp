@@ -186,9 +186,15 @@ int MEDIA_RETRY_BASE_INTERVAL_SEC;
 int RETRY_QUEUE_CHECK_INTERVAL_SEC;
 int MAX_RETRY_INTERVAL_SEC;
 
+// 文件存储路径配置
+std::string BRIDGE_FILES_DIR;
+std::string BRIDGE_FILES_CONTAINER_DIR;
+
 void load_config() {
   try {
     auto &loader = obcx::common::ConfigLoader::instance();
+    PLUGIN_DEBUG("bridge", "Config file path: {}", loader.get_config_path());
+    PLUGIN_DEBUG("bridge", "Config loaded: {}", loader.is_loaded());
 
     // 加载 Telegram Bot Token
     if (auto telegram_bot =
@@ -228,12 +234,72 @@ void load_config() {
     MAX_RETRY_INTERVAL_SEC = 300;
 
     // 从插件配置加载数据库配置
-    DATABASE_FILE = "bridge_bot.db"; // 默认值
-    if (auto plugin_config = loader.get_section("plugins.qq_to_tg.config")) {
-      DATABASE_FILE = plugin_config->get("database_file")
-                          ->value_or<std::string>("bridge_bot.db");
-      ENABLE_RETRY_QUEUE =
-          plugin_config->get("enable_retry_queue")->value_or<bool>(true);
+    // 尝试从 qq_to_tg 或 tg_to_qq 插件配置中读取
+    bool config_loaded = false;
+
+    // 先尝试从 qq_to_tg 读取
+    // 注意：需要使用 at_path 访问嵌套配置
+    if (auto qq_to_tg_config = loader.get_value<std::string>(
+            "plugins.qq_to_tg.config.database_file")) {
+      PLUGIN_DEBUG("bridge", "Found plugins.qq_to_tg.config section");
+      DATABASE_FILE = *qq_to_tg_config;
+    }
+    if (auto retry = loader.get_value<bool>(
+            "plugins.qq_to_tg.config.enable_retry_queue")) {
+      ENABLE_RETRY_QUEUE = *retry;
+    }
+
+    // bridge_files_dir 是必需的配置
+    if (auto dir = loader.get_value<std::string>(
+            "plugins.qq_to_tg.config.bridge_files_dir")) {
+      BRIDGE_FILES_DIR = *dir;
+      config_loaded = true;
+      PLUGIN_INFO("bridge", "Loaded bridge_files_dir from qq_to_tg: {}",
+                  BRIDGE_FILES_DIR);
+    } else {
+      PLUGIN_DEBUG("bridge", "bridge_files_dir not found in qq_to_tg.config");
+    }
+
+    if (auto dir = loader.get_value<std::string>(
+            "plugins.qq_to_tg.config.bridge_files_container_dir")) {
+      BRIDGE_FILES_CONTAINER_DIR = *dir;
+    }
+
+    // 再尝试从 tg_to_qq 读取
+    if (auto db = loader.get_value<std::string>(
+            "plugins.tg_to_qq.config.database_file")) {
+      if (DATABASE_FILE.empty()) {
+        DATABASE_FILE = *db;
+      }
+    }
+    if (auto retry = loader.get_value<bool>(
+            "plugins.tg_to_qq.config.enable_retry_queue")) {
+      ENABLE_RETRY_QUEUE = *retry;
+    }
+
+    // 如果 qq_to_tg 没有配置 bridge_files_dir，从 tg_to_qq 读取
+    if (!config_loaded) {
+      if (auto dir = loader.get_value<std::string>(
+              "plugins.tg_to_qq.config.bridge_files_dir")) {
+        BRIDGE_FILES_DIR = *dir;
+        config_loaded = true;
+        PLUGIN_INFO("bridge", "Loaded bridge_files_dir from tg_to_qq: {}",
+                    BRIDGE_FILES_DIR);
+      } else {
+        PLUGIN_DEBUG("bridge", "bridge_files_dir not found in tg_to_qq.config");
+      }
+
+      if (auto dir = loader.get_value<std::string>(
+              "plugins.tg_to_qq.config.bridge_files_container_dir")) {
+        BRIDGE_FILES_CONTAINER_DIR = *dir;
+      }
+    }
+
+    // 如果两个插件配置都没有提供 bridge_files_dir，报错
+    if (!config_loaded) {
+      throw std::runtime_error(
+          "bridge_files_dir must be configured in either "
+          "plugins.qq_to_tg.config or plugins.tg_to_qq.config");
     }
 
     PLUGIN_INFO("bridge", "Configuration loaded successfully");
@@ -241,6 +307,9 @@ void load_config() {
                 TELEGRAM_BOT_TOKEN.substr(0, 20));
     PLUGIN_INFO("bridge", "QQ Host: {}:{}", QQ_HOST, QQ_PORT);
     PLUGIN_INFO("bridge", "Database: {}", DATABASE_FILE);
+    PLUGIN_INFO("bridge", "Bridge files dir (host): {}", BRIDGE_FILES_DIR);
+    PLUGIN_INFO("bridge", "Bridge files dir (container): {}",
+                BRIDGE_FILES_CONTAINER_DIR);
 
   } catch (const std::exception &e) {
     PLUGIN_ERROR("bridge", "Failed to load configuration: {}", e.what());
@@ -266,6 +335,8 @@ void load_config() {
     MEDIA_RETRY_BASE_INTERVAL_SEC = 5;
     RETRY_QUEUE_CHECK_INTERVAL_SEC = 10;
     MAX_RETRY_INTERVAL_SEC = 300;
+    BRIDGE_FILES_DIR = "/tmp/bridge_files";
+    BRIDGE_FILES_CONTAINER_DIR = "/root/llonebot/bridge_files";
   }
 }
 

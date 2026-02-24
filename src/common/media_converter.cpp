@@ -162,32 +162,12 @@ auto MediaConverter::convert_tgs_to_gif(const std::string &tgs_url,
 auto MediaConverter::generate_temp_path(const std::string &extension)
     -> std::string {
   try {
-    // 优先使用Docker共享目录
-    std::filesystem::path shared_dir =
-        "/home/lambillda/Codes/OBCX/tests/llonebot/bridge_files";
+    // 使用环境变量指定的共享目录，或使用默认路径
+    const char *env_dir = std::getenv("OBCX_BRIDGE_FILES_DIR");
+    std::filesystem::path shared_dir = env_dir ? env_dir : "/tmp/bridge_files";
 
-    // 检查共享目录是否存在，如果存在则使用它
-    if (std::filesystem::exists(shared_dir)) {
-      std::filesystem::create_directories(shared_dir);
-
-      // 生成随机文件名
-      std::random_device rd;
-      std::mt19937 gen(rd());
-      std::uniform_int_distribution<> dis(100000, 999999);
-
-      std::string filename =
-          "convert_" + std::to_string(dis(gen)) + "." + extension;
-      std::filesystem::path temp_file = shared_dir / filename;
-
-      OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_DOCKER_PATH,
-                      temp_file.string());
-      return temp_file.string();
-    }
-
-    // 回退：创建临时目录
-    std::filesystem::path temp_dir =
-        std::filesystem::temp_directory_path() / "obcx_bridge";
-    std::filesystem::create_directories(temp_dir);
+    // 创建共享目录，如果失败则抛出异常
+    std::filesystem::create_directories(shared_dir);
 
     // 生成随机文件名
     std::random_device rd;
@@ -196,17 +176,15 @@ auto MediaConverter::generate_temp_path(const std::string &extension)
 
     std::string filename =
         "convert_" + std::to_string(dis(gen)) + "." + extension;
-    std::filesystem::path temp_file = temp_dir / filename;
+    std::filesystem::path temp_file = shared_dir / filename;
 
-    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_TEMP_PATH,
+    OBCX_I18N_DEBUG(common::LogMessageKey::MEDIA_CONVERT_DOCKER_PATH,
                     temp_file.string());
     return temp_file.string();
   } catch (const std::exception &e) {
     OBCX_I18N_ERROR(common::LogMessageKey::MEDIA_CONVERT_TEMP_PATH_FAILED,
                     e.what());
-    // 回退到简单路径
-    return "/tmp/obcx_convert_" + std::to_string(std::time(nullptr)) + "." +
-           extension;
+    throw;
   }
 }
 

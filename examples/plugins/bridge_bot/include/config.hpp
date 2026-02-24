@@ -225,6 +225,10 @@ extern int MEDIA_RETRY_BASE_INTERVAL_SEC;
 extern int RETRY_QUEUE_CHECK_INTERVAL_SEC;
 extern int MAX_RETRY_INTERVAL_SEC;
 
+// 文件存储路径配置
+extern std::string BRIDGE_FILES_DIR;           // 主机端路径
+extern std::string BRIDGE_FILES_CONTAINER_DIR; // 容器端路径
+
 /**
  * @brief 从配置文件加载配置
  */
