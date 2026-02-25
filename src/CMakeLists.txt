@@ -33,7 +33,7 @@ target_link_libraries(
         obcx_core
         PUBLIC fmt::fmt
         spdlog::spdlog
-        Boost::system
+        ${BOOST_SYSTEM_TARGET}
         Boost::locale
         nlohmann_json::nlohmann_json
         Threads::Threads

@@ -26,12 +26,6 @@ pkgs.mkShell.override { stdenv = pkgs.clangStdenv; } {
   buildInputs = obcxDependencies;
 
   shellHook = ''
-    export LDFLAGS="$LDFLAGS -Wl,-rpath,${pkgs.lib.makeLibraryPath obcxDependencies}"
     export NIX_ENFORCE_PURITY=0
-    if [ -z "$ZSH_VERSION" ]; then
-      export SHELL="zsh"
-      exec zsh
-    fi
-    echo "Welcome to OBCX."
   '';
 }
