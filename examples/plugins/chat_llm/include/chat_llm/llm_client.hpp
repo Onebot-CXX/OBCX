@@ -84,12 +84,6 @@ public:
   void set_timeout(std::chrono::milliseconds timeout) { timeout_ = timeout; }
 
 private:
-  enum class ToolRequestMode {
-    forced_function,
-    auto_choice,
-    legacy_function_call,
-  };
-
   boost::asio::io_context &ioc_;
   Config config_;
   std::chrono::milliseconds timeout_;
@@ -99,8 +93,7 @@ private:
    */
   [[nodiscard]] auto build_request_body(
       const std::vector<nlohmann::json> &messages,
-      const nlohmann::json &tools,
-      ToolRequestMode mode) -> std::string;
+      const nlohmann::json &tools) -> std::string;
 };
 
 } // namespace plugins::chat_llm

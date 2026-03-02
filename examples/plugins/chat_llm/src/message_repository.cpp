@@ -211,14 +211,6 @@ auto MessageRepository::append_message(
     return true;
   }
 
-  // Skip empty content
-  if (record.content.empty()) {
-    PLUGIN_DEBUG("message_repository",
-                 "Skipping empty content message from group {} user {}",
-                 record.group_id, record.user_id);
-    return true;
-  }
-
   PLUGIN_DEBUG("message_repository",
                "Inserting message: platform={}, group_id={}, user_id={}, "
                "is_bot={}, is_command={}, content_len={}, timestamp_ms={}",
@@ -299,15 +291,11 @@ auto MessageRepository::fetch_context(const ContextQuery &query)
     rec.message_id =
         reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
     rec.user_id = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3));
-    const char *content_ptr =
-        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
-    rec.content = content_ptr ? content_ptr : "";
+    rec.content = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
     rec.timestamp_ms = sqlite3_column_int64(stmt, 5);
     rec.is_bot = sqlite3_column_int(stmt, 6) != 0;
 
-    if (!rec.content.empty()) {
-      result.push_back(rec);
-    }
+    result.push_back(rec);
   }
 
   sqlite3_finalize(stmt);

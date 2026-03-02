@@ -73,7 +73,6 @@ private:
   auto parse_url(const std::string &url) -> bool;
   auto send_response(obcx::core::IBot &bot, const chat_llm::ParsedCommand &cmd,
                      const std::string &text) -> boost::asio::awaitable<void>;
-  auto filter_llm_response(const std::string &response) -> std::string;
   auto get_llm_tools() const -> nlohmann::json;
   auto execute_tool_call(obcx::core::IBot &bot,
                          const chat_llm::ParsedCommand &cmd,

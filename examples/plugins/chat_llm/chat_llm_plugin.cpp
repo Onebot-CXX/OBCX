@@ -113,23 +113,15 @@ auto ChatLLMPlugin::initialize() -> bool {
 }
 
 void ChatLLMPlugin::deinitialize() {
-  try {
-    PLUGIN_INFO(get_name(), "Deinitializing Chat LLM Plugin...");
-    stop_all_runtimes();
-    PLUGIN_INFO(get_name(), "Chat LLM Plugin deinitialized successfully");
-  } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Exception during deinitialization: {}", e.what());
-  }
+  PLUGIN_INFO(get_name(), "Deinitializing Chat LLM Plugin...");
+  stop_all_runtimes();
+  PLUGIN_INFO(get_name(), "Chat LLM Plugin deinitialized successfully");
 }
 
 void ChatLLMPlugin::shutdown() {
-  try {
-    PLUGIN_INFO(get_name(), "Shutting down Chat LLM Plugin...");
-    stop_all_runtimes();
-    PLUGIN_INFO(get_name(), "Chat LLM Plugin shutdown complete");
-  } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Exception during shutdown: {}", e.what());
-  }
+  PLUGIN_INFO(get_name(), "Shutting down Chat LLM Plugin...");
+  stop_all_runtimes();
+  PLUGIN_INFO(get_name(), "Chat LLM Plugin shutdown complete");
 }
 
 auto ChatLLMPlugin::load_configuration() -> bool {
@@ -214,9 +206,7 @@ auto ChatLLMPlugin::load_configuration() -> bool {
     }
 
     if (auto val = config["max_tool_steps"].value<int64_t>()) {
-      if (*val > 0) {
-        max_tool_steps_ = static_cast<int>(*val);
-      }
+      max_tool_steps_ = static_cast<int>(*val);
     }
 
     PLUGIN_INFO(get_name(),
@@ -315,26 +305,6 @@ auto ChatLLMPlugin::parse_url(const std::string &url) -> bool {
   }
 }
 
-auto ChatLLMPlugin::filter_llm_response(const std::string &response)
-    -> std::string {
-  try {
-    std::regex pattern(R"(^\s*\d+:\s*)", std::regex::optimize);
-    std::string result = response;
-    std::string prev;
-    do {
-      prev = result;
-      result = std::regex_replace(result, pattern, "");
-    } while (result != prev);
-
-    std::regex cleanup_pattern(R"(</think>[^<]*</think>)", std::regex::optimize);
-    result = std::regex_replace(result, cleanup_pattern, "");
-    return result;
-  } catch (const std::exception &e) {
-    PLUGIN_WARN(get_name(), "Failed to filter LLM response: {}", e.what());
-    return response;
-  }
-}
-
 auto ChatLLMPlugin::get_llm_tools() const -> nlohmann::json {
   nlohmann::json def;
   def["type"] = "function";
@@ -358,41 +328,14 @@ auto ChatLLMPlugin::execute_tool_call(
     obcx::core::IBot &bot, const chat_llm::ParsedCommand &cmd,
     const chat_llm::LlmResponse::ToolCall &tool_call)
     -> boost::asio::awaitable<nlohmann::json> {
+  auto args = nlohmann::json::parse(tool_call.arguments);
+  const auto text = args["text"].get<std::string>();
+
+  co_await send_response(bot, cmd, text);
+
   nlohmann::json result;
   result["tool"] = tool_call.name;
   result["call_id"] = tool_call.id;
-  result["sent"] = false;
-
-  if (tool_call.name != "send_message") {
-    result["ok"] = false;
-    result["error"] = "Unknown tool";
-    co_return result;
-  }
-
-  nlohmann::json args;
-  try {
-    args = nlohmann::json::parse(tool_call.arguments.empty() ? "{}"
-                                                           : tool_call.arguments);
-  } catch (const std::exception &e) {
-    result["ok"] = false;
-    result["error"] = std::string("Invalid arguments JSON: ") + e.what();
-    co_return result;
-  }
-
-  if (!args.contains("text") || !args["text"].is_string()) {
-    result["ok"] = false;
-    result["error"] = "Missing required string field: text";
-    co_return result;
-  }
-
-  const auto text = args["text"].get<std::string>();
-  if (text.empty()) {
-    result["ok"] = false;
-    result["error"] = "text must not be empty";
-    co_return result;
-  }
-
-  co_await send_response(bot, cmd, text);
   result["ok"] = true;
   result["sent"] = true;
   result["length"] = text.size();
@@ -410,10 +353,6 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
                                     const obcx::common::MessageEvent &event)
     -> boost::asio::awaitable<void> {
   auto rt = ensure_runtime(bot);
-  if (!rt || rt->is_stopping()) {
-    co_return;
-  }
-
   const auto &rt_config = rt->get_config();
 
   // Only process group messages
@@ -446,11 +385,8 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
   // Get text content
   std::string text_content;
   for (const auto &segment : event.message) {
-    if (segment.type == "text" && segment.data.contains("text")) {
-      try {
-        text_content += segment.data["text"].get<std::string>();
-      } catch (...) {
-      }
+    if (segment.type == "text") {
+      text_content += segment.data["text"].get<std::string>();
     }
   }
 
@@ -473,12 +409,9 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
     record.content = text_content;
     record.timestamp_ms = timestamp_ms;
     record.is_bot = false;
-    try {
-      if (event.data.contains("from") &&
-          event.data["from"].contains("is_bot")) {
-        record.is_bot = event.data["from"]["is_bot"].get<bool>();
-      }
-    } catch (...) {
+    if (event.data.contains("from") &&
+        event.data["from"].contains("is_bot")) {
+      record.is_bot = event.data["from"]["is_bot"].get<bool>();
     }
     record.is_command = false;
 
@@ -534,11 +467,8 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
   cmd_record.content = cmd.text;
   cmd_record.timestamp_ms = cmd_timestamp_ms;
   cmd_record.is_bot = false;
-  try {
-    if (event.data.contains("from") && event.data["from"].contains("is_bot")) {
-      cmd_record.is_bot = event.data["from"]["is_bot"].get<bool>();
-    }
-  } catch (...) {
+  if (event.data.contains("from") && event.data["from"].contains("is_bot")) {
+    cmd_record.is_bot = event.data["from"]["is_bot"].get<bool>();
   }
   cmd_record.is_command = true;
 
@@ -676,12 +606,8 @@ auto ChatLLMPlugin::send_response(obcx::core::IBot &bot,
                                   const std::string &text)
     -> boost::asio::awaitable<void> {
   auto rt = ensure_runtime(bot);
-  if (!rt || rt->is_stopping()) {
-    co_return;
-  }
 
-  try {
-    obcx::common::Message message;
+  obcx::common::Message message;
 
     if (cmd.platform == "telegram" && !cmd.message_id.empty()) {
       obcx::common::MessageSegment reply_segment;
@@ -720,10 +646,6 @@ auto ChatLLMPlugin::send_response(obcx::core::IBot &bot,
       return repo_->append_message(bot_rec, rt_config.collect_enabled,
                                    rt_config.collect_allowed_groups);
     });
-
-  } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Failed to send response: {}", e.what());
-  }
 }
 
 auto ChatLLMPlugin::ensure_runtime(obcx::core::IBot &bot)
@@ -731,7 +653,7 @@ auto ChatLLMPlugin::ensure_runtime(obcx::core::IBot &bot)
   std::lock_guard<std::mutex> lock(runtimes_mutex_);
 
   auto it = runtimes_.find(&bot);
-  if (it != runtimes_.end() && it->second && !it->second->is_stopping()) {
+  if (it != runtimes_.end()) {
     return it->second;
   }
 
@@ -744,11 +666,7 @@ auto ChatLLMPlugin::ensure_runtime(obcx::core::IBot &bot)
     if (!rt || rt->is_stopping()) {
       return;
     }
-    try {
-      repo_->cleanup_ttl(runtime_config_.history_ttl_days);
-    } catch (const std::exception &e) {
-      PLUGIN_ERROR(get_name(), "Cleanup task failed: {}", e.what());
-    }
+    repo_->cleanup_ttl(runtime_config_.history_ttl_days);
   });
 
   runtimes_[&bot] = runtime;
@@ -758,9 +676,7 @@ auto ChatLLMPlugin::ensure_runtime(obcx::core::IBot &bot)
 void ChatLLMPlugin::stop_all_runtimes() {
   std::lock_guard<std::mutex> lock(runtimes_mutex_);
   for (auto &[_, rt] : runtimes_) {
-    if (rt) {
-      rt->stop();
-    }
+    rt->stop();
   }
   runtimes_.clear();
 }

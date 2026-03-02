@@ -62,14 +62,7 @@ auto CommandParser::extract_text(const obcx::common::Message &msg)
   std::string result;
   for (const auto &segment : msg) {
     if (segment.type == "text") {
-      if (segment.data.contains("text")) {
-        try {
-          std::string text = segment.data["text"].get<std::string>();
-          result += text;
-        } catch (...) {
-          // Skip invalid text segments
-        }
-      }
+      result += segment.data["text"].get<std::string>();
     }
   }
   return result;
@@ -79,10 +72,8 @@ auto CommandParser::detect_platform(const obcx::core::IBot &bot)
     -> std::string {
   if (dynamic_cast<const obcx::core::QQBot *>(&bot) != nullptr) {
     return "qq";
-  } else if (dynamic_cast<const obcx::core::TGBot *>(&bot) != nullptr) {
-    return "telegram";
   }
-  return "unknown";
+  return "telegram";
 }
 
 } // namespace plugins::chat_llm
