@@ -72,6 +72,9 @@ auto PromptBuilder::determine_role(const MessageRecord &record,
 }
 
 auto PromptBuilder::format_message(const MessageRecord &record) -> std::string {
+  if (record.is_bot) {
+    return record.content;
+  }
   return record.user_id + ": " + record.content;
 }
 
