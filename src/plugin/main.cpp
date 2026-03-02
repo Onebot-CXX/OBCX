@@ -66,15 +66,8 @@ public:
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
-    // Get log level from OBCX_LOG_LEVEL environment variable, default to info
-    auto log_level = common::Logger::get_level_from_env();
-    common::Logger::initialize(
-        log_level,
-        fmt::format("logs/obcx-bridge-{}.log",
-                    boost::posix_time::to_iso_extended_string(
-                        boost::posix_time::second_clock::local_time())));
-
     std::string config_path = "config.toml";
+    bool use_tui = true;
 
     // Parse command line arguments using boost-program-options
     try {
@@ -82,7 +75,8 @@ public:
       desc.add_options()("help,h", "Show this help message")(
           "version,v",
           "Show version information")("config", po::value<std::string>(),
-                                      "Path to TOML configuration file");
+                                      "Path to TOML configuration file")(
+          "no-tui", "Disable TUI, use stdout logging (useful for debuggers)");
 
       po::positional_options_description p;
       p.add("config", -1);
@@ -107,10 +101,21 @@ public:
         config_path = vm["config"].as<std::string>();
       }
 
+      use_tui = !vm.count("no-tui");
+
     } catch (const po::error &e) {
       std::println(std::cerr, "Error parsing arguments: {}", e.what());
       return 1;
     }
+
+    // Get log level from OBCX_LOG_LEVEL environment variable, default to info
+    auto log_level = common::Logger::get_level_from_env();
+    common::Logger::initialize(
+        log_level,
+        fmt::format("logs/obcx-bridge-{}.log",
+                    boost::posix_time::to_iso_extended_string(
+                        boost::posix_time::second_clock::local_time())),
+        use_tui);
 
     // Initialize configuration
     auto &config_loader = common::ConfigLoader::instance();
@@ -271,9 +276,22 @@ public:
         OBCX_I18N_INFO(common::LogMessageKey::FRAMEWORK_SHUTDOWN_COMPLETE);
       };
 
-      auto tui_sink = common::Logger::get_tui_sink();
-      common::TuiApp tui_app(tui_sink, std::move(ctx));
-      tui_app.run();
+      if (use_tui) {
+        auto tui_sink = common::Logger::get_tui_sink();
+        common::TuiApp tui_app(tui_sink, std::move(ctx));
+        tui_app.run();
+      } else {
+        common::CliHandler cli_handler(ctx);
+        cli_handler.run();
+        // Wait for signal if stdin closed before SIGINT
+        {
+          std::unique_lock lock(g_stop_mtx);
+          g_stop_cv.wait(lock, [] { return g_should_stop.load(); });
+        }
+        if (ctx.shutdown_cb) {
+          ctx.shutdown_cb();
+        }
+      }
     }
 
     return 0;

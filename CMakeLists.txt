@@ -90,7 +90,7 @@ set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Boost CONFIG REQUIRED COMPONENTS thread locale OPTIONAL_COMPONENTS system)
+find_package(Boost CONFIG REQUIRED COMPONENTS thread locale iostreams OPTIONAL_COMPONENTS system)
 if(TARGET Boost::system)
     set(BOOST_SYSTEM_TARGET Boost::system)
 else()

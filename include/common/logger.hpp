@@ -55,7 +55,7 @@ public:
    * \endif
    */
   static void initialize(spdlog::level::level_enum level = spdlog::level::info,
-                         const std::string &log_file = "");
+                         const std::string &log_file = "", bool use_tui = true);
 
   /**
    * \if CHINESE

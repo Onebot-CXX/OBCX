@@ -50,6 +50,7 @@ _deps
 .vim/
 .cache/
 .tasks
+.claude/
 
 # Build dir
 cmake-build*/

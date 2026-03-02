@@ -10,7 +10,12 @@
 #include <boost/beast/http.hpp>
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/version.hpp>
+#include <boost/iostreams/copy.hpp>
+#include <boost/iostreams/filter/gzip.hpp>
+#include <boost/iostreams/filter/zlib.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -20,6 +25,53 @@ namespace beast = boost::beast;
 namespace http = beast::http;
 namespace ssl = asio::ssl;
 using tcp = asio::ip::tcp;
+
+namespace {
+
+void decompress_inplace(http::response<http::string_body> &res) {
+  namespace bio = boost::iostreams;
+  auto ce = res[http::field::content_encoding];
+  if (ce.empty()) {
+    return;
+  }
+  const std::string &body = res.body();
+  if (body.empty()) {
+    return;
+  }
+  std::string encoding(ce);
+  for (auto &c : encoding) {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+  try {
+    std::string decompressed;
+    if (encoding == "gzip" || encoding == "x-gzip") {
+      bio::filtering_istream fis;
+      fis.push(bio::gzip_decompressor());
+      std::istringstream iss(body);
+      fis.push(iss);
+      std::ostringstream oss;
+      bio::copy(fis, oss);
+      decompressed = oss.str();
+    } else if (encoding == "deflate") {
+      bio::filtering_istream fis;
+      fis.push(bio::zlib_decompressor());
+      std::istringstream iss(body);
+      fis.push(iss);
+      std::ostringstream oss;
+      bio::copy(fis, oss);
+      decompressed = oss.str();
+    } else {
+      return;
+    }
+    res.body() = std::move(decompressed);
+    res.erase(http::field::content_encoding);
+    res.prepare_payload();
+  } catch (...) {
+    // Decompression failed: leave body as-is
+  }
+}
+
+} // namespace
 
 struct HttpClient::Impl {
   asio::io_context &ioc;
@@ -197,6 +249,7 @@ auto HttpClient::post(std::string_view path, std::string_view body,
           pimpl_->config.connect_timeout);
       co_await http::async_read(stream, buffer, res, asio::use_awaitable);
 
+      decompress_inplace(res);
       response.status_code = res.result_int();
       response.body = res.body();
       response.raw_response = std::move(res);
@@ -227,6 +280,7 @@ auto HttpClient::post(std::string_view path, std::string_view body,
       stream.expires_after(pimpl_->config.connect_timeout);
       co_await http::async_read(stream, buffer, res, asio::use_awaitable);
 
+      decompress_inplace(res);
       response.status_code = res.result_int();
       response.body = res.body();
       response.raw_response = std::move(res);
@@ -305,6 +359,7 @@ auto HttpClient::get(std::string_view path,
           pimpl_->config.connect_timeout);
       co_await http::async_read(stream, buffer, res, asio::use_awaitable);
 
+      decompress_inplace(res);
       response.status_code = res.result_int();
       response.body = res.body();
       response.raw_response = std::move(res);
@@ -335,6 +390,7 @@ auto HttpClient::get(std::string_view path,
       stream.expires_after(pimpl_->config.connect_timeout);
       co_await http::async_read(stream, buffer, res, asio::use_awaitable);
 
+      decompress_inplace(res);
       response.status_code = res.result_int();
       response.body = res.body();
       response.raw_response = std::move(res);
@@ -420,6 +476,7 @@ auto HttpClient::head(std::string_view path,
         throw boost::system::system_error(ec);
       }
 
+      decompress_inplace(res);
       response.status_code = res.result_int();
       response.body = res.body();
       response.raw_response = std::move(res);
@@ -459,6 +516,7 @@ auto HttpClient::head(std::string_view path,
         throw boost::system::system_error(ec);
       }
 
+      decompress_inplace(res);
       response.status_code = res.result_int();
       response.body = res.body();
       response.raw_response = std::move(res);
@@ -569,6 +627,7 @@ auto HttpClient::post_sync(std::string_view path, std::string_view body,
                               if (ec) {
                                 final_ec = ec;
                               } else {
+                                decompress_inplace(*res);
                                 response.status_code = res->result_int();
                                 response.body = res->body();
                                 response.raw_response = std::move(*res);
@@ -732,6 +791,7 @@ auto HttpClient::get_sync(std::string_view path,
                               if (ec) {
                                 final_ec = ec;
                               } else {
+                                decompress_inplace(*res);
                                 response.status_code = res->result_int();
                                 response.body = res->body();
                                 response.raw_response = std::move(*res);
@@ -895,6 +955,7 @@ auto HttpClient::head_sync(std::string_view path,
                                   ec != http::error::partial_message) {
                                 final_ec = ec;
                               } else {
+                                decompress_inplace(*res);
                                 response.status_code = res->result_int();
                                 response.body = res->body();
                                 response.raw_response = std::move(*res);

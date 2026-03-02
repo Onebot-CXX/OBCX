@@ -35,6 +35,7 @@ target_link_libraries(
         spdlog::spdlog
         ${BOOST_SYSTEM_TARGET}
         Boost::locale
+        Boost::iostreams
         nlohmann_json::nlohmann_json
         Threads::Threads
         OpenSSL::SSL

@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <spdlog/async.h>
 #include <spdlog/sinks/rotating_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <unordered_map>
 #include <vector>
 
@@ -14,7 +15,7 @@ std::shared_ptr<tui_sink_mt> Logger::tui_sink_ = nullptr;
 bool Logger::initialized_ = false;
 
 void Logger::initialize(spdlog::level::level_enum level,
-                        const std::string &log_file) {
+                        const std::string &log_file, bool use_tui) {
   if (initialized_) {
     return;
   }
@@ -25,19 +26,27 @@ void Logger::initialize(spdlog::level::level_enum level,
   try {
     std::vector<spdlog::sink_ptr> sinks;
 
-    /*
-     * \if CHINESE
-     * TUI sink - 捕获日志到内存供TUI渲染（替代控制台输出）
-     * \endif
-     * \if ENGLISH
-     * TUI sink - captures logs to memory for TUI rendering (replaces console
-     * output)
-     * \endif
-     */
-    tui_sink_ = std::make_shared<tui_sink_mt>();
-    tui_sink_->set_level(level);
-    tui_sink_->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v");
-    sinks.push_back(tui_sink_);
+    if (use_tui) {
+      /*
+       * \if CHINESE
+       * TUI sink - 捕获日志到内存供TUI渲染（替代控制台输出）
+       * \endif
+       * \if ENGLISH
+       * TUI sink - captures logs to memory for TUI rendering (replaces console
+       * output)
+       * \endif
+       */
+      tui_sink_ = std::make_shared<tui_sink_mt>();
+      tui_sink_->set_level(level);
+      tui_sink_->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v");
+      sinks.push_back(tui_sink_);
+    } else {
+      auto stdout_sink =
+          std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+      stdout_sink->set_level(level);
+      stdout_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v");
+      sinks.push_back(stdout_sink);
+    }
 
     /*
      * \if CHINESE
