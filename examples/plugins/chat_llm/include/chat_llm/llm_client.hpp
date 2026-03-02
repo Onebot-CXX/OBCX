@@ -84,8 +84,7 @@ public:
   [[nodiscard]] auto chat_completion(
       const std::vector<nlohmann::json> &messages,
       const nlohmann::json &tools = nlohmann::json::array(),
-      bool force_tool = true)
-      -> LlmResponse override;
+      bool force_tool = true) -> LlmResponse override;
 
   /**
    * @brief Set request timeout
@@ -101,8 +100,7 @@ private:
    * @brief Build JSON request body
    */
   [[nodiscard]] auto build_request_body(
-      const std::vector<nlohmann::json> &messages,
-      const nlohmann::json &tools,
+      const std::vector<nlohmann::json> &messages, const nlohmann::json &tools,
       bool force_tool) -> std::string;
 };
 

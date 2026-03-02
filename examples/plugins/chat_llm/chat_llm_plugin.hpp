@@ -41,7 +41,8 @@ namespace plugins {
  *   - max_reply_chars: Maximum reply length (default: 500)
  *   - llm_timeout_ms: LLM request timeout (default: 120000)
  *   - proactive_enabled: Enable proactive chat (default: false)
- *   - proactive_interval_ms: Interval between proactive checks in ms (default: 300000)
+ *   - proactive_interval_ms: Interval between proactive checks in ms (default:
+ * 300000)
  *   - proactive_groups: Groups where proactive chat is allowed
  */
 class ChatLLMPlugin : public obcx::interface::IPlugin {

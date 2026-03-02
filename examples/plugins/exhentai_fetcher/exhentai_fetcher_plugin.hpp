@@ -52,24 +52,38 @@ private:
 
     // Timeout in milliseconds
     int64_t timeout_ms = 30000;
+
+    // Max galleries to post per request
+    int max_galleries = 10;
   };
 
   bool load_configuration();
   std::map<std::string, std::string> build_headers() const;
+  std::map<std::string, std::string> build_thumbnail_headers() const;
+
+  // Create or retrieve a cached HTTP client for the given hostname
+  obcx::network::HttpClient &get_thumbnail_client(const std::string &host,
+                                                  bool use_ssl);
 
   boost::asio::awaitable<obcx::network::HttpResponse> fetch_page(
-      std::string path) const;
+      std::string_view path) const;
 
   boost::asio::awaitable<void> handle_tg_message(
       obcx::core::IBot &bot, const obcx::common::MessageEvent &event);
 
   Config config_;
+
+  // Primary HTTP client (exhentai.org)
   boost::asio::io_context http_ioc_;
   std::unique_ptr<obcx::network::HttpClient> http_client_;
   std::unique_ptr<
       boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>
       work_guard_;
   std::thread http_ioc_thread_;
+
+  // Thumbnail HTTP clients keyed by hostname
+  std::map<std::string, std::unique_ptr<obcx::network::HttpClient>>
+      thumbnail_clients_;
 };
 
 } // namespace plugins

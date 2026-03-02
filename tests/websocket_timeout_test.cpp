@@ -326,29 +326,29 @@ TEST_F(WsTimeoutTest, TimeoutScenario) {
 
   auto start_time = std::chrono::steady_clock::now();
 
-  std::promise<void> result_promise;
-  auto result_future = result_promise.get_future();
-  std::atomic timeout_occurred = false;
+  auto result_promise = std::make_shared<std::promise<void>>();
+  auto result_future = result_promise->get_future();
+  auto timeout_occurred = std::make_shared<std::atomic<bool>>(false);
 
   asio::co_spawn(
       client_ioc_,
-      [this, request, &result_promise,
-       &timeout_occurred]() -> asio::awaitable<void> {
+      [this, request, result_promise,
+       timeout_occurred]() -> asio::awaitable<void> {
         try {
           [[maybe_unused]] std::string _ =
               co_await connection_manager_->send_action_and_wait_async(
                   request.dump(), TEST_ECHO_2);
-          result_promise.set_value(); // 不应执行到这里
+          result_promise->set_value(); // 不应执行到这里
         } catch (const std::runtime_error &e) {
           std::string error_msg = e.what();
           // 假设超时异常信息包含 "超时" 或 "timeout"
           if (error_msg.find("超时") != std::string::npos ||
               error_msg.find("timeout") != std::string::npos) {
-            timeout_occurred = true;
+            *timeout_occurred = true;
           }
-          result_promise.set_exception(std::current_exception());
+          result_promise->set_exception(std::current_exception());
         } catch (...) {
-          result_promise.set_exception(std::current_exception());
+          result_promise->set_exception(std::current_exception());
         }
       },
       asio::detached);
@@ -364,7 +364,7 @@ TEST_F(WsTimeoutTest, TimeoutScenario) {
 
   EXPECT_THROW(result_future.get(), std::runtime_error)
       << "应该抛出 std::runtime_error 异常";
-  EXPECT_TRUE(timeout_occurred) << "异常信息应该与超时有关";
+  EXPECT_TRUE(*timeout_occurred) << "异常信息应该与超时有关";
 
   // 验证超时时间是否在预期范围内 (例如 30s +/- 2s)
   EXPECT_GE(duration.count(), CLIENT_DEFAULT_TIMEOUT.count() - 2)

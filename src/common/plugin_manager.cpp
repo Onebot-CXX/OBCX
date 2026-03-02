@@ -1,6 +1,7 @@
 #include "common/plugin_manager.hpp"
 #include "common/config_loader.hpp"
 #include "common/logger.hpp"
+#include "obcx/version.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -231,6 +232,23 @@ auto PluginManager::load_plugin_library(const std::string &plugin_path)
                     plugin_path, dlsym_error);
     dlclose(handle);
     return nullptr;
+  }
+
+  // ABI version check
+  dlerror();
+  using get_abi_version_t = int (*)();
+  auto get_abi_version = reinterpret_cast<get_abi_version_t>(
+      dlsym(handle, "obcx_get_abi_version"));
+  if (get_abi_version) {
+    int plugin_abi = get_abi_version();
+    if (plugin_abi != OBCX_ABI_VERSION) {
+      OBCX_I18N_ERROR(common::LogMessageKey::PLUGIN_ABI_MISMATCH, plugin_path,
+                      plugin_abi, OBCX_ABI_VERSION);
+      dlclose(handle);
+      return nullptr;
+    }
+  } else {
+    OBCX_I18N_WARN(common::LogMessageKey::PLUGIN_ABI_NOT_FOUND, plugin_path);
   }
 
   try {

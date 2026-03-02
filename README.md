@@ -48,7 +48,20 @@ export PATH=$VCPKG_ROOT:$PATH
 
 ### 2. 安装项目依赖
 
-项目使用 vcpkg manifest 模式，依赖会在 CMake 配置时自动安装。或者在项目根目录下执行 `vpckg install` 来安装
+项目使用 vcpkg manifest 模式。`vcpkg.json` 由脚本根据启用的插件自动生成：
+
+```bash
+# 生成 vcpkg.json（合并核心依赖 + 插件依赖）
+python3 cmake/gen_vcpkg_manifest.py plugins.toml
+
+# 查看所有需要的包（适用于非 vcpkg 用户）
+python3 cmake/gen_vcpkg_manifest.py plugins.toml --list
+```
+
+核心依赖声明在 `vcpkg-base.json`，各插件的额外依赖声明在各自的 `plugin.toml` 的 `[build].vcpkg_deps` 字段中。
+生成 `vcpkg.json` 后，依赖会在 CMake 配置时自动安装，或者手动执行 `vcpkg install`。
+
+> **不使用 vcpkg？** 运行 `python3 cmake/gen_vcpkg_manifest.py plugins.toml --list` 查看需要安装的包列表，然后通过系统包管理器或 Nix 安装即可。
 
 ### 3. 安装 LLOneBot（QQ 支持）
 
@@ -329,6 +342,35 @@ extern "C" {
 add_library(my_plugin SHARED my_plugin.cpp)
 target_link_libraries(my_plugin PRIVATE obcx_core)
 ```
+
+也可以使用模板仓库快速创建独立插件项目：[obcx-plugin-template](https://github.com/Onebot-CXX/obcx-plugin-template)
+
+#### plugin.toml
+
+每个插件应包含一个 `plugin.toml` 文件声明元信息和依赖：
+
+```toml
+[plugin]
+name = "my_plugin"
+version = "0.1.0"
+description = "My custom plugin"
+authors = ["Your Name"]
+license = "MIT"
+
+[compatibility]
+obcx_abi_version = 1
+obcx_min_version = "1.1.0"
+
+[dependencies]
+required_plugins = []
+
+[build]
+# 插件需要的额外包（OBCX 核心依赖之外的）
+# 用于自动生成 vcpkg.json，也作为非 vcpkg 用户的安装参考
+vcpkg_deps = ["nlohmann-json", "sqlite3"]
+```
+
+`vcpkg_deps` 字段不绑定 vcpkg——它只是声明包名。`CMakeLists.txt` 中使用标准的 `find_package()` 来发现依赖。
 
 #### shutdown() 注意事项
 

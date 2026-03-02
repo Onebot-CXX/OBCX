@@ -27,7 +27,9 @@
 
           obcxDependencies = with pkgs; [
             boost
+            brotli
             fmt
+            zlib
             gtest
             nlohmann_json
             openssl
@@ -35,15 +37,20 @@
             sqlite
             tomlplusplus
             ftxui
+            libxml2
+            zstd
             stdenv.cc.cc.lib
           ];
         in
         {
           default = pkgs.mkShell.override { stdenv = pkgs.clangStdenv; } {
             nativeBuildInputs = with pkgs; [
+              perf
+              clang-tools
               cmake
               ninja
-              lld
+              llvmPackages.bintools
+              pkg-config
               gettext
               cmake-format
               ffmpeg
@@ -51,13 +58,7 @@
 
             buildInputs = obcxDependencies;
 
-            shellHook = ''
-              export NIX_ENFORCE_PURITY=0
-
-              # Optional: Uncomment below if CLion still throws Wayland HeadlessExceptions
-              # export DISPLAY=''${DISPLAY:-:0}
-              # export WAYLAND_DISPLAY=''${WAYLAND_DISPLAY:-wayland-0}
-            '';
+            shellHook = '''';
           };
         }
       );

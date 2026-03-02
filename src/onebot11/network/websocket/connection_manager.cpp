@@ -21,6 +21,7 @@ void WebSocketConnectionManager::set_event_callback(EventCallback callback) {
 
 void WebSocketConnectionManager::connect(
     const common::ConnectionConfig &config) {
+  action_timeout_ = config.connect_timeout;
   connect_ws(config.host, config.port, config.access_token);
 }
 
@@ -224,15 +225,12 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
 
   OBCX_I18N_DEBUG(common::LogMessageKey::ONEBOT11_WS_USE_COROUTINE);
 
-  // 用于存储响应结果
   std::optional<std::string> response_result;
   std::optional<boost::system::error_code> response_error;
   std::mutex result_mutex;
 
-  // 创建 pending request
   auto request = std::make_shared<PendingRequest>(ioc_);
 
-  // 设置 completion handler
   request->completion_handler =
       [&result_mutex, &response_result, &response_error,
        request](boost::system::error_code ec, std::string response) {
@@ -245,7 +243,7 @@ auto WebSocketConnectionManager::send_action_and_wait_async(
         request->timeout_timer.cancel();
       };
 
-  request->timeout_timer.expires_after(std::chrono::seconds(5));
+  request->timeout_timer.expires_after(action_timeout_);
 
   {
     std::lock_guard lock(pending_requests_mutex_);

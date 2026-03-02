@@ -1,5 +1,7 @@
 #include "common/logger.hpp"
 #include "network/http_client.hpp"
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/use_future.hpp>
 #include <chat_llm/llm_client.hpp>
 #include <nlohmann/json.hpp>
 
@@ -10,8 +12,7 @@ OpenAiCompatClient::OpenAiCompatClient(boost::asio::io_context &ioc,
     : ioc_(ioc), config_(std::move(config)), timeout_(config.timeout) {}
 
 auto OpenAiCompatClient::chat_completion(
-    const std::vector<nlohmann::json> &messages,
-    const nlohmann::json &tools,
+    const std::vector<nlohmann::json> &messages, const nlohmann::json &tools,
     bool force_tool) -> LlmResponse {
   LlmResponse result;
 
@@ -32,10 +33,17 @@ auto OpenAiCompatClient::chat_completion(
   headers["Accept-Encoding"] = "identity";
 
   std::string body = build_request_body(messages, tools, force_tool);
-  PLUGIN_DEBUG("llm_client",
-               "Sending LLM request to {}:{}{} (body size: {})",
+  PLUGIN_DEBUG("llm_client", "Sending LLM request to {}:{}{} (body size: {})",
                config_.host, config_.port, config_.path, body.size());
-  auto response = http_client.post_sync(config_.path, body, headers);
+  obcx::network::HttpResponse response;
+  boost::asio::co_spawn(
+      ioc_,
+      [&]() -> boost::asio::awaitable<void> {
+        response = co_await http_client.post(config_.path, body, headers);
+      },
+      boost::asio::detached);
+  ioc_.run();
+  ioc_.restart();
 
   PLUGIN_DEBUG("llm_client", "LLM API response status: {}",
                response.status_code);
@@ -57,7 +65,8 @@ auto OpenAiCompatClient::chat_completion(
 
   // Check for API-level error in response body
   if (response_json.contains("error")) {
-    std::string error_msg = "LLM API Error: " +
+    std::string error_msg =
+        "LLM API Error: " +
         response_json["error"]["message"].get<std::string>();
     PLUGIN_ERROR("llm_client", "LLM API returned error: {}",
                  response.body.substr(0, 200));
@@ -102,7 +111,8 @@ auto OpenAiCompatClient::chat_completion(
                          : cleaned.substr(start, end - start + 1);
   }
 
-  // tool_calls is only present when the model decides to call tools (OpenAI API spec)
+  // tool_calls is only present when the model decides to call tools (OpenAI API
+  // spec)
   if (message.contains("tool_calls")) {
     for (const auto &item : message["tool_calls"]) {
       const auto &fn = item["function"];
@@ -121,8 +131,7 @@ auto OpenAiCompatClient::chat_completion(
 }
 
 auto OpenAiCompatClient::build_request_body(
-    const std::vector<nlohmann::json> &messages,
-    const nlohmann::json &tools,
+    const std::vector<nlohmann::json> &messages, const nlohmann::json &tools,
     bool force_tool) -> std::string {
   nlohmann::json request_body;
   request_body["model"] = config_.model_name;

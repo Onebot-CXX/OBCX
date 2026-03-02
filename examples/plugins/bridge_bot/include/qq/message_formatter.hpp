@@ -120,9 +120,9 @@ private:
    * @param group_id 群ID
    * @return 用户显示名称
    */
-  auto fetch_user_display_name(obcx::core::IBot &qq_bot,
-                               const std::string &user_id,
-                               const std::string &group_id)
+  auto get_user_display_name(obcx::core::IBot &qq_bot,
+                             const std::string &user_id,
+                             const std::string &group_id)
       -> boost::asio::awaitable<std::string>;
 
   /**

@@ -242,7 +242,7 @@ auto QQMediaProcessor::process_at_segment(
   converted_segment.data.clear();
 
   // 从数据库查询用户的显示名称（使用群组特定的昵称）
-  auto at_display_name = db_manager_->get_user_display_name(
+  auto at_display_name = db_manager_->query_user_display_name(
       "qq", qq_user_id, event.group_id.value_or(""));
 
   // 如果没有找到用户信息，尝试获取一次
@@ -252,7 +252,7 @@ auto QQMediaProcessor::process_at_segment(
         db_manager_, qq_bot, qq_user_id, event.group_id.value());
 
     // 更新显示名称
-    at_display_name = db_manager_->get_user_display_name(
+    at_display_name = db_manager_->query_user_display_name(
         "qq", qq_user_id, event.group_id.value_or(""));
   }
 

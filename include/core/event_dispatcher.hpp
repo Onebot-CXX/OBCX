@@ -23,10 +23,10 @@ class EventDispatcher {
 public:
   /**
    * @brief 构造函数
-   * @param io_context Asio的io_context引用，用于启动协程
+   * @param worker_pool 工作线程池，用于在独立线程中执行事件处理器
    */
-  explicit EventDispatcher(asio::io_context &io_context)
-      : io_context_(io_context) {}
+  explicit EventDispatcher(asio::thread_pool &worker_pool)
+      : worker_pool_(worker_pool) {}
 
   /**
    * @brief 注册一个事件处理器 (新版本，支持Bot引用)
@@ -81,10 +81,9 @@ public:
                        handlers_for_type.size());
 
             for (const auto &handler : handlers_for_type) {
-              // 使用 co_spawn 启动用户的协程事件处理器
-              // 我们传递 concrete_event 的一个拷贝以确保生命周期
+              // 将事件处理器投递到工作线程池执行，避免阻塞网络IO线程
               asio::co_spawn(
-                  io_context_,
+                  worker_pool_,
                   [handler, bot, concrete_event]() -> asio::awaitable<void> {
                     co_await handler(bot, concrete_event);
                   },
@@ -100,7 +99,7 @@ public:
   }
 
 private:
-  asio::io_context &io_context_;
+  asio::thread_pool &worker_pool_;
   std::map<std::type_index,
            std::vector<std::function<asio::awaitable<void>(IBot *, std::any)>>>
       handlers_;

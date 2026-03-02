@@ -355,9 +355,8 @@ auto MessageRepository::get_schema_version() const -> int {
   int rc = sqlite3_prepare_v2(static_cast<sqlite3 *>(db_),
                               "PRAGMA user_version;", -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    throw std::runtime_error(
-        std::string("Failed to query schema version: ") +
-        sqlite3_errmsg(static_cast<sqlite3 *>(db_)));
+    throw std::runtime_error(std::string("Failed to query schema version: ") +
+                             sqlite3_errmsg(static_cast<sqlite3 *>(db_)));
   }
 
   rc = sqlite3_step(stmt);

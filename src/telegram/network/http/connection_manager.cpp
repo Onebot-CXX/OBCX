@@ -67,11 +67,6 @@ void TelegramConnectionManager::disconnect() {
   stop_polling();
   is_connected_ = false;
 
-  if (http_client_) {
-    http_client_->close();
-    http_client_.reset();
-  }
-
   OBCX_I18N_INFO(common::LogMessageKey::CONNECTION_CLOSED);
 }
 
@@ -109,7 +104,6 @@ auto TelegramConnectionManager::send_action_and_wait_async(
     // 获取请求体（去除method字段）
     payload_json.erase("method");
     payload_json.erase("echo"); // Telegram API不支持echo字段
-    payload_json["timeout"] = config_.poll_timeout.count(); // 设置轮询超时参数
     std::string body = payload_json.dump();
 
     // 发送POST请求到Telegram API (使用协程)
@@ -239,6 +233,79 @@ auto TelegramConnectionManager::download_file_content(
                     e.what());
     throw;
   }
+}
+
+auto TelegramConnectionManager::upload_photo_multipart(
+    std::string_view chat_id, const std::string &image_data,
+    std::string_view filename, std::string_view mime_type,
+    std::string_view caption, std::optional<int64_t> message_thread_id)
+    -> asio::awaitable<std::string> {
+  if (!http_client_) {
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::HTTP_CLIENT_NOT_INIT));
+  }
+
+  static constexpr std::string_view kBoundary = "----OBCXBoundary7MA4YWxk";
+
+  std::string body;
+  body.reserve(image_data.size() + 512);
+
+  // chat_id field
+  body += "--";
+  body += kBoundary;
+  body += "\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n";
+  body += chat_id;
+  body += "\r\n";
+
+  // message_thread_id field (optional)
+  if (message_thread_id.has_value()) {
+    body += "--";
+    body += kBoundary;
+    body += "\r\nContent-Disposition: form-data; "
+            "name=\"message_thread_id\"\r\n\r\n";
+    body += std::to_string(*message_thread_id);
+    body += "\r\n";
+  }
+
+  // caption field
+  if (!caption.empty()) {
+    body += "--";
+    body += kBoundary;
+    body += "\r\nContent-Disposition: form-data; name=\"caption\"\r\n\r\n";
+    body += caption;
+    body += "\r\n";
+  }
+
+  // photo field (binary)
+  body += "--";
+  body += kBoundary;
+  body += "\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"";
+  body += filename;
+  body += "\"\r\nContent-Type: ";
+  body += mime_type;
+  body += "\r\n\r\n";
+  body += image_data;
+  body += "\r\n";
+
+  // closing boundary
+  body += "--";
+  body += kBoundary;
+  body += "--\r\n";
+
+  std::map<std::string, std::string> headers;
+  headers["Content-Type"] =
+      std::string("multipart/form-data; boundary=") + std::string(kBoundary);
+
+  std::string api_path = "/bot" + config_.access_token + "/sendPhoto";
+  HttpResponse response = co_await http_client_->post(api_path, body, headers);
+
+  if (!response.is_success()) {
+    throw std::runtime_error(common::I18nLogMessages::format_message(
+        common::LogMessageKey::HTTP_REQUEST_FAILED_STATUS,
+        std::to_string(response.status_code)));
+  }
+
+  co_return response.body;
 }
 
 void TelegramConnectionManager::start_polling() {

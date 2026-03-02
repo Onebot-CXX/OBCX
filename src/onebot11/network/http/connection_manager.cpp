@@ -1,6 +1,5 @@
 #include "onebot11/network/http/connection_manager.hpp"
 #include "common/logger.hpp"
-#include "network/proxy_http_client.hpp"
 #include "onebot11/adapter/protocol_adapter.hpp"
 
 #include <boost/asio/co_spawn.hpp>

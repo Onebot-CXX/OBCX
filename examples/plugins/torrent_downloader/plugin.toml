@@ -1,0 +1,16 @@
+[plugin]
+name = "torrent_downloader"
+version = "0.1.0"
+description = "Torrent download manager with qBittorrent and rclone integration"
+authors = ["Vollate"]
+license = "MIT"
+
+[compatibility]
+obcx_abi_version = 1
+obcx_min_version = "1.1.0"
+
+[dependencies]
+required_plugins = []
+
+[build]
+vcpkg_deps = ["nlohmann-json"]

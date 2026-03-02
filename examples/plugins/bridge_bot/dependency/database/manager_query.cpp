@@ -3,6 +3,7 @@
 #include <chrono>
 #include <common/logger.hpp>
 #include <iomanip>
+#include <optional>
 #include <sstream>
 
 namespace storage {
@@ -154,23 +155,26 @@ auto DatabaseManager::get_user(const std::string &platform,
     sqlite3_finalize(stmt);
     return user_info;
   }
-
   sqlite3_finalize(stmt);
   return std::nullopt;
 }
 
-auto DatabaseManager::get_user_display_name(const std::string &platform,
-                                            const std::string &user_id,
-                                            const std::string &group_id)
+auto DatabaseManager::query_user_display_name(const std::string &platform,
+                                              const std::string &user_id,
+                                              const std::string &group_id)
     -> std::optional<std::string> {
-  // 用户信息过期时间（30分钟）
-  constexpr auto kUserInfoExpiration = std::chrono::minutes(30);
+  constexpr auto kUserInfoExpiration = std::chrono::minutes(10);
 
   // Telegram 用户始终使用空 group_id 查询（存储时就是空的）
   std::string query_group_id = (platform == "telegram") ? "" : group_id;
   auto user_info = get_user(platform, user_id, query_group_id);
 
   if (!user_info.has_value()) {
+    PLUGIN_WARN(
+        "bridge_db",
+        "Database entry not found find for platform: {}, group_id {}, id: {}",
+        platform, group_id, user_id);
+    // ensure_user_exists(platform, user_id, group_id);
     return std::nullopt;
   }
 
@@ -179,8 +183,10 @@ auto DatabaseManager::get_user_display_name(const std::string &platform,
   // 检查用户信息是否过期
   auto now = std::chrono::system_clock::now();
   if (now - user.last_updated > kUserInfoExpiration) {
-    PLUGIN_DEBUG("bridge", "User info expired for {}:{}, triggering refresh",
-                 platform, user_id);
+    PLUGIN_DEBUG(
+        "bridge_db",
+        "User info expired for platform: {}, id :{}, triggering refresh",
+        platform, user_id);
     return std::nullopt;
   }
 

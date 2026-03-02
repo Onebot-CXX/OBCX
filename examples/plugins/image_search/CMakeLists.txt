@@ -39,9 +39,14 @@ target_include_directories(
 # Link against OBCX core and dependency/bridge_bot dependencies
 target_link_libraries(
   tg_to_qq_plugin
-  PRIVATE obcx_core tomlplusplus::tomlplusplus unofficial::sqlite3::sqlite3
-          OpenSSL::SSL OpenSSL::Crypto)
+  PRIVATE obcx_core tomlplusplus::tomlplusplus OpenSSL::SSL OpenSSL::Crypto)
 
+target_link_libraries(bridge_core PUBLIC obcx_core )
+if ("$ENV{IN_NIX_SHELL}" STREQUAL "")
+    target_link_libraries(tg_to_qq_plugin private unofficial::sqlite3::sqlite3 )
+else()
+    target_link_libraries(tg_to_qq_plugin PUBLIC SQLite::SQLite3)
+endif()
 # Set the output directory to build/plugins
 set_target_properties(tg_to_qq_plugin PROPERTIES LIBRARY_OUTPUT_DIRECTORY
                                                  ${CMAKE_BINARY_DIR}/plugins)

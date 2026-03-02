@@ -2,7 +2,11 @@
 
 # Find required packages
 find_package(nlohmann_json REQUIRED)
-find_package(unofficial-sqlite3 CONFIG REQUIRED)
+if("$ENV{IN_NIX_SHELL}" STREQUAL "")
+  find_package(unofficial-sqlite3 CONFIG REQUIRED)
+else()
+  find_package(SQLite3 REQUIRED)
+endif()
 
 # Create the Chat LLM plugin shared library
 add_library(
@@ -28,14 +32,17 @@ set_target_properties(
 target_include_directories(
   chat_llm_plugin
   PRIVATE ${CMAKE_SOURCE_DIR}/examples
-          ${CMAKE_SOURCE_DIR}/include
-          ${CMAKE_SOURCE_DIR}/src
           ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Link against OBCX core and required libraries
 target_link_libraries(chat_llm_plugin
-                      PRIVATE obcx_core nlohmann_json::nlohmann_json unofficial::sqlite3::sqlite3)
+                      PRIVATE obcx_core nlohmann_json::nlohmann_json)
 
+if ("$ENV{IN_NIX_SHELL}" STREQUAL "")
+    target_link_libraries(chat_llm_plugin PRIVATE unofficial::sqlite3::sqlite3)
+else()
+    target_link_libraries(chat_llm_plugin PRIVATE SQLite::SQLite3)
+endif()
 # Set the output directory to build/plugins
 set_target_properties(
   chat_llm_plugin PROPERTIES LIBRARY_OUTPUT_DIRECTORY

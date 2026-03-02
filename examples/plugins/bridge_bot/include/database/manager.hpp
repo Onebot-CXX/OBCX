@@ -234,9 +234,9 @@ public:
    * 群组ID（可选，用于获取群组特定的昵称，Telegram用户忽略此参数）
    * @return 用户显示名称，如果未找到用户信息返回nullopt
    */
-  auto get_user_display_name(const std::string &platform,
-                             const std::string &user_id,
-                             const std::string &group_id = "")
+  auto query_user_display_name(const std::string &platform,
+                               const std::string &user_id,
+                               const std::string &group_id = "")
       -> std::optional<std::string>;
 
   // === 消息ID映射相关操作 ===
@@ -316,6 +316,17 @@ public:
   [[maybe_unused]] auto save_user_from_event(
       const obcx::common::MessageEvent &event, const std::string &platform)
       -> bool;
+
+  /**
+   * @brief 确保用户在数据库中存在（INSERT OR IGNORE），不覆盖已有数据
+   * @param platform 平台名称
+   * @param user_id 用户ID
+   * @param group_id 群组ID
+   * @return 成功返回true，失败返回false
+   */
+  auto ensure_user_exists(const std::string &platform,
+                          const std::string &user_id,
+                          const std::string &group_id) -> bool;
 
   // === 表情包缓存相关操作 ===
 

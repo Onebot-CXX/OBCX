@@ -19,7 +19,7 @@ auto QQMessageFormatter::format_sender_info(
     obcx::common::Message &message_to_send)
     -> boost::asio::awaitable<std::string> {
 
-  std::string sender_display_name = co_await fetch_user_display_name(
+  std::string sender_display_name = co_await get_user_display_name(
       qq_bot, event.user_id, event.group_id.value_or(""));
 
   // 根据配置决定是否添加发送者信息
@@ -505,17 +505,18 @@ auto QQMessageFormatter::send_media_group(
   co_return any_batch_sent;
 }
 
-auto QQMessageFormatter::fetch_user_display_name(obcx::core::IBot &qq_bot,
-                                                 const std::string &user_id,
-                                                 const std::string &group_id)
+auto QQMessageFormatter::get_user_display_name(obcx::core::IBot &qq_bot,
+                                               const std::string &user_id,
+                                               const std::string &group_id)
     -> boost::asio::awaitable<std::string> {
 
   auto display_name =
-      db_manager_->get_user_display_name("qq", user_id, group_id);
+      db_manager_->query_user_display_name("qq", user_id, group_id);
 
   if (!display_name.has_value()) {
     co_await fetch_user_info(qq_bot, user_id, group_id);
-    display_name = db_manager_->get_user_display_name("qq", user_id, group_id);
+    display_name =
+        db_manager_->query_user_display_name("qq", user_id, group_id);
   }
 
   co_return display_name.value_or(user_id);

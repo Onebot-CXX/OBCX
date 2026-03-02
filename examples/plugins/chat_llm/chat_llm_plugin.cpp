@@ -171,9 +171,8 @@ auto ChatLLMPlugin::load_configuration() -> bool {
               "max_reply_chars={}, history_ttl_days={}, max_tool_steps={}, "
               "proactive_enabled={}, proactive_interval_ms={}",
               runtime_config_.collect_enabled, runtime_config_.history_limit,
-              runtime_config_.max_reply_chars,
-              runtime_config_.history_ttl_days, max_tool_steps_,
-              runtime_config_.proactive_enabled,
+              runtime_config_.max_reply_chars, runtime_config_.history_ttl_days,
+              max_tool_steps_, runtime_config_.proactive_enabled,
               runtime_config_.proactive_interval.count());
   PLUGIN_INFO(get_name(), "Configuration loaded successfully");
   return true;
@@ -231,8 +230,7 @@ auto ChatLLMPlugin::parse_url(const std::string &url) -> bool {
     url_port_ = url_use_ssl_ ? 443 : 80;
   }
 
-  PLUGIN_DEBUG(get_name(),
-               "Parsed URL - host: {}, port: {}, path: {}, ssl: {}",
+  PLUGIN_DEBUG(get_name(), "Parsed URL - host: {}, port: {}, path: {}, ssl: {}",
                url_host_, url_port_, url_path_, url_use_ssl_);
 
   return true;
@@ -411,24 +409,23 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
 
   // Step 3: Build messages for LLM
   const auto tools = get_llm_tools();
-  auto openai_messages =
-      prompt_builder_->build(history_records, user_id, cmd.text, self_id, tools);
+  auto openai_messages = prompt_builder_->build(history_records, user_id,
+                                                cmd.text, self_id, tools);
   std::vector<nlohmann::json> llm_messages;
   llm_messages.reserve(openai_messages.size());
   for (const auto &msg : openai_messages) {
     nlohmann::json m;
-    m["role"] = (msg.role == chat_llm::MessageRole::system)
-                    ? "system"
-                    : (msg.role == chat_llm::MessageRole::user) ? "user"
-                                                                : "assistant";
+    m["role"] = (msg.role == chat_llm::MessageRole::system) ? "system"
+                : (msg.role == chat_llm::MessageRole::user) ? "user"
+                                                            : "assistant";
     m["content"] = msg.content;
     llm_messages.push_back(std::move(m));
   }
 
   nlohmann::json tool_policy_msg;
   tool_policy_msg["role"] = "system";
-  tool_policy_msg["content"] =
-      "You must respond by calling the send_message tool. Do not output plain text answers.";
+  tool_policy_msg["content"] = "You must respond by calling the send_message "
+                               "tool. Do not output plain text answers.";
   llm_messages.push_back(std::move(tool_policy_msg));
 
   // Step 4: Call LLM API (with tool-calling loop)
@@ -452,11 +449,12 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
           return client.chat_completion(llm_messages, tools);
         });
 
-    PLUGIN_INFO(get_name(), "LLM step {} returned {} tool calls",
-                step + 1, llm_response.tool_calls.size());
+    PLUGIN_INFO(get_name(), "LLM step {} returned {} tool calls", step + 1,
+                llm_response.tool_calls.size());
 
     if (!llm_response.success) {
-      PLUGIN_ERROR(get_name(), "LLM request failed: {}", llm_response.error_message);
+      PLUGIN_ERROR(get_name(), "LLM request failed: {}",
+                   llm_response.error_message);
       last_error = llm_response.error_message;
       break;
     }
@@ -464,8 +462,8 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
     if (llm_response.tool_calls.empty()) {
       if (!llm_response.content.empty()) {
         plain_text_rounds++;
-        PLUGIN_WARN(get_name(),
-                    "LLM returned plain text without tool call; asking model to call send_message");
+        PLUGIN_WARN(get_name(), "LLM returned plain text without tool call; "
+                                "asking model to call send_message");
         // Append the assistant's plain-text reply so the model sees its own
         // output and the conversation stays well-formed (alternating roles).
         nlohmann::json assistant_plain;
@@ -475,8 +473,8 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
 
         nlohmann::json reminder;
         reminder["role"] = "user";
-        reminder["content"] =
-            "Do not answer with plain text. To reply to user, you MUST call the send_message tool.";
+        reminder["content"] = "Do not answer with plain text. To reply to "
+                              "user, you MUST call the send_message tool.";
         llm_messages.push_back(std::move(reminder));
       }
       continue;
@@ -540,43 +538,43 @@ auto ChatLLMPlugin::send_response(obcx::core::IBot &bot,
 
   obcx::common::Message message;
 
-    if (cmd.platform == "telegram" && !cmd.message_id.empty()) {
-      obcx::common::MessageSegment reply_segment;
-      reply_segment.type = "reply";
-      reply_segment.data["id"] = cmd.message_id;
-      message.push_back(reply_segment);
-    }
+  if (cmd.platform == "telegram" && !cmd.message_id.empty()) {
+    obcx::common::MessageSegment reply_segment;
+    reply_segment.type = "reply";
+    reply_segment.data["id"] = cmd.message_id;
+    message.push_back(reply_segment);
+  }
 
-    obcx::common::MessageSegment text_segment;
-    text_segment.type = "text";
-    text_segment.data["text"] = text;
-    message.push_back(text_segment);
+  obcx::common::MessageSegment text_segment;
+  text_segment.type = "text";
+  text_segment.data["text"] = text;
+  message.push_back(text_segment);
 
-    co_await bot.send_group_message(cmd.group_id, message);
+  co_await bot.send_group_message(cmd.group_id, message);
 
-    // Save bot's reply to database
-    int64_t timestamp_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch())
-            .count();
-    std::string message_id =
-        "local-bot-" + std::to_string(timestamp_ms) + "-" + cmd.group_id;
+  // Save bot's reply to database
+  int64_t timestamp_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch())
+          .count();
+  std::string message_id =
+      "local-bot-" + std::to_string(timestamp_ms) + "-" + cmd.group_id;
 
-    chat_llm::MessageRecord bot_rec;
-    bot_rec.platform = cmd.platform;
-    bot_rec.group_id = cmd.group_id;
-    bot_rec.message_id = message_id;
-    bot_rec.user_id = cmd.self_id;
-    bot_rec.content = text;
-    bot_rec.timestamp_ms = timestamp_ms;
-    bot_rec.is_bot = true;
-    bot_rec.is_command = false;
+  chat_llm::MessageRecord bot_rec;
+  bot_rec.platform = cmd.platform;
+  bot_rec.group_id = cmd.group_id;
+  bot_rec.message_id = message_id;
+  bot_rec.user_id = cmd.self_id;
+  bot_rec.content = text;
+  bot_rec.timestamp_ms = timestamp_ms;
+  bot_rec.is_bot = true;
+  bot_rec.is_command = false;
 
-    const auto &rt_config = rt->get_config();
-    co_await bot.run_heavy_task([this, bot_rec, &rt_config]() {
-      return repo_->append_message(bot_rec, rt_config.collect_enabled,
-                                   rt_config.collect_allowed_groups);
-    });
+  const auto &rt_config = rt->get_config();
+  co_await bot.run_heavy_task([this, bot_rec, &rt_config]() {
+    return repo_->append_message(bot_rec, rt_config.collect_enabled,
+                                 rt_config.collect_allowed_groups);
+  });
 }
 
 auto ChatLLMPlugin::send_proactive_message(obcx::core::IBot &bot,
@@ -652,8 +650,8 @@ auto ChatLLMPlugin::run_proactive_for_group(obcx::core::IBot &bot,
 
   // Skip if no recent messages to analyze
   if (history.empty()) {
-    PLUGIN_INFO(get_name(),
-                "Proactive: no history for group {}, skipping", group_id);
+    PLUGIN_INFO(get_name(), "Proactive: no history for group {}, skipping",
+                group_id);
     co_return;
   }
 
@@ -669,29 +667,28 @@ auto ChatLLMPlugin::run_proactive_for_group(obcx::core::IBot &bot,
     co_return;
   }
 
-  PLUGIN_INFO(get_name(),
-              "Proactive: fetched {} history messages for group {}",
+  PLUGIN_INFO(get_name(), "Proactive: fetched {} history messages for group {}",
               history.size(), group_id);
 
-  // Step 2: Build proactive prompt (no user message, just history + decision instruction)
+  // Step 2: Build proactive prompt (no user message, just history + decision
+  // instruction)
   const auto tools = get_llm_tools();
   auto openai_messages = prompt_builder_->build_proactive(history, "", tools);
   std::vector<nlohmann::json> llm_messages;
   llm_messages.reserve(openai_messages.size());
   for (const auto &msg : openai_messages) {
     nlohmann::json m;
-    m["role"] = (msg.role == chat_llm::MessageRole::system)
-                    ? "system"
-                    : (msg.role == chat_llm::MessageRole::user) ? "user"
-                                                                 : "assistant";
+    m["role"] = (msg.role == chat_llm::MessageRole::system) ? "system"
+                : (msg.role == chat_llm::MessageRole::user) ? "user"
+                                                            : "assistant";
     m["content"] = msg.content;
     llm_messages.push_back(std::move(m));
   }
 
   // Step 3: Call LLM with tool_choice="auto" (NOT forced)
   // The LLM decides whether to call send_message or stay silent.
-  auto llm_response = co_await bot.run_heavy_task(
-      [this, llm_messages, tools]() {
+  auto llm_response =
+      co_await bot.run_heavy_task([this, llm_messages, tools]() {
         boost::asio::io_context ioc;
         chat_llm::OpenAiCompatClient::Config client_config;
         client_config.model_name = model_name_;
@@ -719,18 +716,17 @@ auto ChatLLMPlugin::run_proactive_for_group(obcx::core::IBot &bot,
               "content=\"{}\" tool_calls={} response_size={}",
               group_id,
               llm_response.content.empty() ? "(empty)" : llm_response.content,
-              llm_response.tool_calls.size(),
-              llm_response.response_size);
+              llm_response.tool_calls.size(), llm_response.response_size);
 
-  // Step 4: If LLM chose NOT to call any tool, it means it decided to stay silent
+  // Step 4: If LLM chose NOT to call any tool, it means it decided to stay
+  // silent
   if (llm_response.tool_calls.empty()) {
     PLUGIN_INFO(get_name(),
                 "Proactive: LLM decided NOT to speak in group {} — "
                 "reason: \"{}\"",
                 group_id,
-                llm_response.content.empty()
-                    ? "(no content returned)"
-                    : llm_response.content);
+                llm_response.content.empty() ? "(no content returned)"
+                                             : llm_response.content);
     co_return;
   }
 
@@ -746,8 +742,7 @@ auto ChatLLMPlugin::run_proactive_for_group(obcx::core::IBot &bot,
     auto args = nlohmann::json::parse(call.arguments);
     const auto text = args["text"].get<std::string>();
 
-    PLUGIN_INFO(get_name(),
-                "Proactive: sending message to group {} (len={})",
+    PLUGIN_INFO(get_name(), "Proactive: sending message to group {} (len={})",
                 group_id, text.size());
     co_await send_proactive_message(bot, platform, group_id, text);
   }
@@ -792,7 +787,7 @@ auto ChatLLMPlugin::ensure_runtime(obcx::core::IBot &bot)
           // Detect platform from bot type
           std::string platform =
               (dynamic_cast<obcx::core::QQBot *>(&bot) != nullptr) ? "qq"
-                                                                    : "telegram";
+                                                                   : "telegram";
 
           const auto &proactive_groups = rt->get_config().proactive_groups;
 
@@ -800,8 +795,7 @@ auto ChatLLMPlugin::ensure_runtime(obcx::core::IBot &bot)
           boost::asio::co_spawn(
               rt->get_executor(),
               [this, &bot, platform, proactive_groups,
-               weak_rt2 = std::weak_ptr(rt)]()
-                  -> boost::asio::awaitable<void> {
+               weak_rt2 = std::weak_ptr(rt)]() -> boost::asio::awaitable<void> {
                 auto rt2 = weak_rt2.lock();
                 if (!rt2 || rt2->is_stopping()) {
                   co_return;

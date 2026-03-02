@@ -426,11 +426,15 @@ auto QQEventHandler::fetch_user_display_name(obcx::core::IBot &qq_bot,
     -> boost::asio::awaitable<std::string> {
 
   auto display_name =
-      db_manager_->get_user_display_name("qq", user_id, group_id);
+      db_manager_->query_user_display_name("qq", user_id, group_id);
 
   if (!display_name.has_value()) {
+    PLUGIN_DEBUG("bridge_qq",
+                 "Fetch userinfo for platform: qq, group: {}, id: {}", group_id,
+                 user_id);
     co_await fetch_user_info(qq_bot, user_id, group_id);
-    display_name = db_manager_->get_user_display_name("qq", user_id, group_id);
+    display_name =
+        db_manager_->query_user_display_name("qq", user_id, group_id);
   }
 
   co_return display_name.value_or(user_id);
@@ -446,13 +450,13 @@ auto QQEventHandler::fetch_user_info(obcx::core::IBot &qq_bot,
         co_await qq_bot.get_group_member_info(group_id, user_id, false);
     nlohmann::json response_json = nlohmann::json::parse(response);
 
-    PLUGIN_DEBUG("qq_to_tg", "QQ群成员信息API响应: {}", response);
+    PLUGIN_DEBUG("bridge_qq", "QQ群成员信息API响应: {}", response);
 
     if (response_json.contains("status") && response_json["status"] == "ok" &&
         response_json.contains("data") && response_json["data"].is_object()) {
 
       auto data = response_json["data"];
-      PLUGIN_DEBUG("qq_to_tg", "QQ群成员信息详细数据: {}", data.dump());
+      PLUGIN_DEBUG("bridge_qq", "QQ群成员信息详细数据: {}", data.dump());
 
       storage::UserInfo user_info;
       user_info.platform = "qq";

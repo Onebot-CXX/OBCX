@@ -2,6 +2,7 @@
 
 #include "common/config_loader.hpp"
 #include "interfaces/bot.hpp"
+#include "obcx/version.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <functional>
@@ -146,5 +147,6 @@ private:
       return "unknown";                                                        \
     }                                                                          \
   }                                                                            \
+  auto obcx_get_abi_version() -> int { return OBCX_ABI_VERSION; }              \
   }
 } // namespace obcx::interface

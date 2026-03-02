@@ -55,6 +55,7 @@ _deps
 # Build dir
 cmake-build*/
 build/
+__pycache__/
 
 # Doc
 docs/
@@ -68,6 +69,7 @@ logs/
 *.core
 
 vcpkg_installed/
+vcpkg.json
 .direnv/
 
 # Local config

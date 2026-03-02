@@ -25,8 +25,6 @@ struct RuntimeConfig {
   bool proactive_enabled = false;
   std::chrono::milliseconds proactive_interval{300000}; // 5 minutes default
   std::vector<std::string> proactive_groups; // groups to proactively chat in
-
-
 };
 
 /**

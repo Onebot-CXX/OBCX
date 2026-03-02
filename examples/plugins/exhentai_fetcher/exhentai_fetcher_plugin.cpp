@@ -1,4 +1,5 @@
 #include "exhentai_fetcher_plugin.hpp"
+#include "exhentai_parser.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -19,17 +20,19 @@ ExHentaiFetcherPlugin::~ExHentaiFetcherPlugin() {
   PLUGIN_DEBUG(get_name(), "ExHentaiFetcherPlugin destructor called");
 }
 
-std::string ExHentaiFetcherPlugin::get_name() const {
+auto ExHentaiFetcherPlugin::get_name() const -> std::string {
   return "exhentai_fetcher";
 }
 
-std::string ExHentaiFetcherPlugin::get_version() const { return "1.0.0"; }
+auto ExHentaiFetcherPlugin::get_version() const -> std::string {
+  return "1.0.0";
+}
 
-std::string ExHentaiFetcherPlugin::get_description() const {
+auto ExHentaiFetcherPlugin::get_description() const -> std::string {
   return "ExHentai page fetcher plugin with cookie-based authentication";
 }
 
-bool ExHentaiFetcherPlugin::initialize() {
+auto ExHentaiFetcherPlugin::initialize() -> bool {
   try {
     PLUGIN_INFO(get_name(), "Initializing ExHentai Fetcher Plugin...");
 
@@ -129,6 +132,7 @@ void ExHentaiFetcherPlugin::shutdown() {
     if (http_ioc_thread_.joinable()) {
       http_ioc_thread_.join();
     }
+    thumbnail_clients_.clear();
     http_client_.reset();
 
     PLUGIN_INFO(get_name(), "ExHentai Fetcher Plugin shutdown complete");
@@ -175,7 +179,7 @@ bool ExHentaiFetcherPlugin::load_configuration() {
 
     // HTTP target
     auto host = get_config_value<std::string>("host");
-    config_.host = host.value_or("exhentai.org");
+    config_.host = host.value_or("exhentai.org/watched");
 
     auto port = get_config_value<int64_t>("port");
     config_.port = static_cast<uint16_t>(port.value_or(443));
@@ -209,6 +213,10 @@ bool ExHentaiFetcherPlugin::load_configuration() {
     // Timeout
     auto timeout_ms = get_config_value<int64_t>("timeout_ms");
     config_.timeout_ms = timeout_ms.value_or(30000);
+
+    // Max galleries
+    auto max_galleries = get_config_value<int64_t>("max_galleries");
+    config_.max_galleries = static_cast<int>(max_galleries.value_or(10));
 
     PLUGIN_INFO(get_name(),
                 "Configuration loaded: host={}:{}, proxy={}, "
@@ -253,7 +261,69 @@ std::map<std::string, std::string> ExHentaiFetcherPlugin::build_headers()
   };
 }
 
-auto ExHentaiFetcherPlugin::fetch_page(std::string path) const
+std::map<std::string, std::string>
+ExHentaiFetcherPlugin::build_thumbnail_headers() const {
+  return {
+      {"User-Agent",
+       "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 "
+       "Firefox/148.0"},
+      {"Accept", "image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8"},
+      {"Accept-Language", "en-US,en;q=0.5"},
+      {"Accept-Encoding", "gzip, deflate, br, zstd"},
+      {"Cookie", fmt::format("ipb_member_id={}; ipb_pass_hash={}; igneous={}",
+                             config_.ipb_member_id, config_.ipb_pass_hash,
+                             config_.igneous)},
+      {"Referer", "https://exhentai.org/"},
+      {"Pragma", ""},
+      {"Cache-Control", ""},
+  };
+}
+
+obcx::network::HttpClient &ExHentaiFetcherPlugin::get_thumbnail_client(
+    const std::string &host, bool use_ssl) {
+  auto it = thumbnail_clients_.find(host);
+  if (it != thumbnail_clients_.end()) {
+    return *it->second;
+  }
+
+  obcx::common::ConnectionConfig conn_cfg;
+  conn_cfg.host = host;
+  conn_cfg.port = use_ssl ? 443 : 80;
+  conn_cfg.use_ssl = use_ssl;
+  conn_cfg.connect_timeout = std::chrono::milliseconds(config_.timeout_ms);
+
+  std::unique_ptr<obcx::network::HttpClient> client;
+
+  if (config_.proxy_enabled && !config_.proxy_host.empty() &&
+      config_.proxy_port > 0) {
+    obcx::network::ProxyConfig proxy_cfg;
+    proxy_cfg.host = config_.proxy_host;
+    proxy_cfg.port = config_.proxy_port;
+    if (config_.proxy_type == "https") {
+      proxy_cfg.type = obcx::network::ProxyType::HTTPS;
+    } else if (config_.proxy_type == "socks5") {
+      proxy_cfg.type = obcx::network::ProxyType::SOCKS5;
+    } else {
+      proxy_cfg.type = obcx::network::ProxyType::HTTP;
+    }
+    if (!config_.proxy_username.empty()) {
+      proxy_cfg.username = config_.proxy_username;
+    }
+    if (!config_.proxy_password.empty()) {
+      proxy_cfg.password = config_.proxy_password;
+    }
+    client = std::make_unique<obcx::network::ProxyHttpClient>(
+        http_ioc_, proxy_cfg, conn_cfg);
+  } else {
+    client = std::make_unique<obcx::network::HttpClient>(http_ioc_, conn_cfg);
+  }
+
+  auto &ref = *client;
+  thumbnail_clients_.emplace(host, std::move(client));
+  return ref;
+}
+
+auto ExHentaiFetcherPlugin::fetch_page(std::string_view path) const
     -> boost::asio::awaitable<obcx::network::HttpResponse> {
   auto headers = build_headers();
   auto response = co_await http_client_->get(path, headers);
@@ -262,51 +332,168 @@ auto ExHentaiFetcherPlugin::fetch_page(std::string path) const
   co_return response;
 }
 
-boost::asio::awaitable<void> ExHentaiFetcherPlugin::handle_tg_message(
-    obcx::core::IBot &bot, const obcx::common::MessageEvent &event) {
+// Parse the absolute URL to extract host and path.
+// Returns {host, path, use_ssl} or empty strings on failure.
+static std::tuple<std::string, std::string, bool> parse_url(
+    const std::string &url) {
+  bool use_ssl = false;
+  std::string_view rest = url;
+  if (rest.starts_with("https://")) {
+    use_ssl = true;
+    rest.remove_prefix(8);
+  } else if (rest.starts_with("http://")) {
+    rest.remove_prefix(7);
+  } else {
+    return {};
+  }
+  auto slash = rest.find('/');
+  if (slash == std::string_view::npos) {
+    return {std::string(rest), "/", use_ssl};
+  }
+  return {std::string(rest.substr(0, slash)), std::string(rest.substr(slash)),
+          use_ssl};
+}
+
+auto ExHentaiFetcherPlugin::handle_tg_message(
+    obcx::core::IBot &bot, const obcx::common::MessageEvent &event)
+    -> boost::asio::awaitable<void> {
   if (!event.raw_message.starts_with(config_.command)) {
     co_return;
   }
 
   std::string chat_id =
       event.group_id.has_value() ? event.group_id.value() : event.user_id;
+  std::optional<int64_t> topic_id;
+  // topic_id is not available in the generic MessageEvent; left as nullopt
 
   PLUGIN_INFO(get_name(), "Received {} command from chat {}", config_.command,
               chat_id);
 
-  std::string reply_text;
-  bool has_error = false;
+  auto send_text =
+      [&](const std::string &text) -> boost::asio::awaitable<void> {
+    obcx::common::Message reply = {
+        {{.type = {"text"}, .data = {{"text", text}}}}};
+    if (event.group_id.has_value()) {
+      co_await bot.send_group_message(event.group_id.value(), reply);
+    } else {
+      co_await bot.send_private_message(event.user_id, reply);
+    }
+  };
 
+  // Extract optional path from command (e.g. "/exhentai /watched")
+  std::string path = "/";
+  if (event.raw_message.size() > config_.command.size()) {
+    std::string arg = event.raw_message.substr(config_.command.size());
+    auto start = arg.find_first_not_of(" \t");
+    if (start != std::string::npos) {
+      path = arg.substr(start);
+    }
+  }
+
+  std::string outer_error;
+
+  // Fetch + parse
+  std::vector<GalleryEntry> galleries;
+  obcx::network::HttpResponse page_response;
   try {
-    // Extract optional path from command (e.g. "/exhentai /g/12345/abc/")
-    std::string path = "https://exhentai.org/";
-    if (event.raw_message.size() > config_.command.size()) {
-      std::string arg = event.raw_message.substr(config_.command.size());
-      // Trim leading whitespace
-      auto start = arg.find_first_not_of(" \t");
-      if (start != std::string::npos) {
-        path = arg.substr(start);
+    page_response = co_await fetch_page(path);
+  } catch (const std::exception &e) {
+    PLUGIN_ERROR(get_name(), "Error fetching page: {}", e.what());
+    outer_error = fmt::format("Error: {}", e.what());
+  }
+
+  if (!outer_error.empty()) {
+    co_await send_text(outer_error);
+    co_return;
+  }
+
+  if (!page_response.is_success()) {
+    co_await send_text(fmt::format("HTTP error {}", page_response.status_code));
+    co_return;
+  }
+
+  galleries = ExHentaiParser::parse(page_response.body);
+  if (galleries.empty()) {
+    co_await send_text("No galleries found.");
+    co_return;
+  }
+
+  auto *tg_bot = dynamic_cast<obcx::core::TGBot *>(&bot);
+
+  int count = 0;
+  for (const auto &gallery : galleries) {
+    if (count >= config_.max_galleries) {
+      break;
+    }
+    ++count;
+
+    // Build caption
+    std::string tags_str;
+    for (std::size_t i = 0; i < gallery.tags.size(); ++i) {
+      if (i > 0) {
+        tags_str += ", ";
+      }
+      tags_str += gallery.tags[i];
+    }
+    std::string caption =
+        fmt::format("{}\nTags: {}\n{}", gallery.title, tags_str, gallery.url);
+
+    // Try to download thumbnail and send as photo
+    bool sent_photo = false;
+    if (tg_bot && !gallery.thumbnail_url.empty() &&
+        (gallery.thumbnail_url.starts_with("http://") ||
+         gallery.thumbnail_url.starts_with("https://"))) {
+      auto [thumb_host, thumb_path, thumb_ssl] =
+          parse_url(gallery.thumbnail_url);
+      if (!thumb_host.empty()) {
+        bool thumb_ok = true;
+        obcx::network::HttpResponse thumb_resp;
+        try {
+          auto &thumb_client = get_thumbnail_client(thumb_host, thumb_ssl);
+          auto thumb_headers = build_thumbnail_headers();
+          thumb_resp = co_await thumb_client.get(thumb_path, thumb_headers);
+        } catch (const std::exception &e) {
+          PLUGIN_WARN(get_name(), "Thumbnail download failed: {}", e.what());
+          thumb_ok = false;
+        }
+
+        if (thumb_ok && thumb_resp.is_success() && !thumb_resp.body.empty()) {
+          // Detect mime type from URL extension
+          std::string mime = "image/jpeg";
+          std::string fname = "thumb.jpg";
+          if (gallery.thumbnail_url.ends_with(".webp")) {
+            mime = "image/webp";
+            fname = "thumb.webp";
+          } else if (gallery.thumbnail_url.ends_with(".png")) {
+            mime = "image/png";
+            fname = "thumb.png";
+          } else if (gallery.thumbnail_url.ends_with(".gif")) {
+            mime = "image/gif";
+            fname = "thumb.gif";
+          }
+
+          bool upload_ok = true;
+          try {
+            co_await tg_bot->send_photo_bytes(chat_id, thumb_resp.body, fname,
+                                              mime, caption, topic_id);
+          } catch (const std::exception &e) {
+            PLUGIN_WARN(get_name(), "Thumbnail upload failed: {}", e.what());
+            upload_ok = false;
+          }
+          if (upload_ok) {
+            sent_photo = true;
+          }
+        }
       }
     }
 
-    auto response = co_await fetch_page(path);
-    reply_text =
-        fmt::format("ExHentai GET {} -> HTTP {}", path, response.status_code);
-  } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Error fetching ExHentai page: {}", e.what());
-    reply_text = fmt::format("Error: {}", e.what());
-    has_error = true;
+    if (!sent_photo) {
+      co_await send_text(caption);
+    }
   }
 
-  (void)has_error;
-  obcx::common::Message reply = {
-      {{.type = {"text"}, .data = {{"text", reply_text}}}}};
-
-  if (event.group_id.has_value()) {
-    co_await bot.send_group_message(event.group_id.value(), reply);
-  } else {
-    co_await bot.send_private_message(event.user_id, reply);
-  }
+  const auto posted = static_cast<std::size_t>(count);
+  co_await send_text(fmt::format("Fetched {} galleries.", posted));
 
   co_return;
 }

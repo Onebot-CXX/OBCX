@@ -240,14 +240,54 @@ auto DatabaseManager::save_user_from_event(
     }
   }
 
-  // 如果没有提取到任何有意义的用户信息，跳过保存
-  // 避免用空数据覆盖已有数据或触发无效更新
+  // 如果没有提取到任何有意义的用户信息，仍然确保用户记录存在（INSERT OR
+  // IGNORE） 这样 last_updated 可以被设置，expiry 机制才能正常工作
   if (user_info.nickname.empty() && user_info.username.empty() &&
       user_info.first_name.empty() && user_info.last_name.empty()) {
     return true; // 静默跳过，不是错误
+
+    // return ensure_user_exists(user_info.platform, user_info.user_id,
+    // user_info.group_id);
   }
 
   return save_or_update_user(user_info);
+}
+
+auto DatabaseManager::ensure_user_exists(const std::string &platform,
+                                         const std::string &user_id,
+                                         const std::string &group_id) -> bool {
+  std::lock_guard lock(db_mutex_);
+
+  // INSERT OR IGNORE：若用户已存在则不做任何修改，保留已有的名称字段
+  const std::string sql = R"(
+      INSERT OR IGNORE INTO users (platform, user_id, group_id, last_updated)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP);
+  )";
+
+  sqlite3_stmt *stmt;
+  int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+  if (rc != SQLITE_OK) {
+    PLUGIN_ERROR("bridge", "Failed to prepare ensure_user_exists statement: {}",
+                 sqlite3_errmsg(db_));
+    return false;
+  }
+
+  sqlite3_bind_text(stmt, 1, platform.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, user_id.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 3, group_id.c_str(), -1, SQLITE_STATIC);
+
+  rc = sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  if (rc != SQLITE_DONE) {
+    PLUGIN_ERROR("bridge", "Failed to ensure user exists: {}",
+                 sqlite3_errmsg(db_));
+    return false;
+  }
+
+  PLUGIN_DEBUG("bridge", "Ensured user exists: {}:{}:{}", platform, user_id,
+               group_id);
+  return true;
 }
 
 // === 消息映射表 INSERT 操作 ===

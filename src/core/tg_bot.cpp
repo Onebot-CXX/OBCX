@@ -48,12 +48,8 @@ void TGBot::run() {
     io_context_->restart();
   }
 
-  // Start long polling for Telegram updates
-  asio::co_spawn(
-      *io_context_,
-      [this]() -> asio::awaitable<void> { co_await this->poll_updates(); },
-      asio::detached);
-
+  // Polling is handled by TelegramConnectionManager::poll_updates() which is
+  // started in connect(). No separate polling loop needed here.
   OBCX_I18N_INFO(common::LogMessageKey::TELEGRAMBOT_STARTING_EVENT_LOOP);
   io_context_->run();
   OBCX_I18N_INFO(common::LogMessageKey::TELEGRAMBOT_EVENT_LOOP_ENDED);
@@ -173,6 +169,24 @@ auto TGBot::send_group_photo(std::string_view group_id,
   std::string payload = request.dump();
   co_return co_await connection_manager_->send_action_and_wait_async(payload,
                                                                      echo_id);
+}
+
+auto TGBot::send_photo_bytes(std::string_view chat_id,
+                             const std::string &image_data,
+                             std::string_view filename,
+                             std::string_view mime_type,
+                             std::string_view caption,
+                             std::optional<int64_t> topic_id)
+    -> asio::awaitable<std::string> {
+  ensure_connection_manager();
+  auto *tg_conn_mgr = dynamic_cast<network::TelegramConnectionManager *>(
+      connection_manager_.get());
+  if (!tg_conn_mgr) {
+    throw std::runtime_error(common::I18nLogMessages::get_message(
+        common::LogMessageKey::TELEGRAMBOT_INVALID_CONNECTION_MANAGER));
+  }
+  co_return co_await tg_conn_mgr->upload_photo_multipart(
+      chat_id, image_data, filename, mime_type, caption, topic_id);
 }
 
 auto TGBot::send_media_group(

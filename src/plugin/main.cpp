@@ -1,3 +1,5 @@
+#include "plugin_cli.hpp"
+
 #include "common/cli_handler.hpp"
 #include "common/component_manager.hpp"
 #include "common/config_loader.hpp"
@@ -12,6 +14,7 @@
 #include <boost/date_time/posix_time/time_formatters.hpp>
 #include <boost/program_options.hpp>
 #include <csignal>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -38,13 +41,19 @@ void print_version() {
 }
 
 void print_help(const po::options_description &desc) {
-  std::println("Usage: OBCX [OPTIONS] [CONFIG_FILE]");
+  std::println("Usage: obcx [OPTIONS] [CONFIG_FILE]");
+  std::println("       obcx plugin <command> [args]");
   std::println("");
   std::println("OPTIONS:");
   std::cout << desc << "\n";
   std::println("");
   std::println("CONFIG_FILE:");
   std::println("  Path to TOML configuration file (default: config.toml)");
+  std::println("");
+  std::println("SUBCOMMANDS:");
+  std::println("  plugin              Manage plugins (search, install, update, "
+               "remove, list, info)");
+  std::println("                      Run 'obcx plugin --help' for details");
 }
 
 void signal_handler(int signal) {
@@ -63,6 +72,11 @@ namespace obcx::common {
 class MainApplication {
 public:
   static auto run(int argc, char *argv[]) -> int {
+    // Handle `obcx plugin <subcommand>` before anything else
+    if (argc >= 2 && std::string(argv[1]) == "plugin") {
+      return plugin_cli::run_plugin_command(argc, argv);
+    }
+
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
@@ -152,6 +166,13 @@ public:
       plugin_manager.add_plugin_directory("./plugins");
       plugin_manager.add_plugin_directory("./build/plugins");
       plugin_manager.add_plugin_directory("/usr/local/lib/obcx/plugins");
+
+      // User-local plugin directory (for plugins installed via `obcx plugin
+      // install`)
+      if (const char *home = std::getenv("HOME")) {
+        plugin_manager.add_plugin_directory(std::string(home) +
+                                            "/.obcx/plugins");
+      }
     }
 
     // Load bot configurations

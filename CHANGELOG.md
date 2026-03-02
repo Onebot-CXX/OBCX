@@ -10,24 +10,29 @@
 ## [Unreleased] (2026-01-25)
 
 ### 新增
+
 - **HTTP Client**: 完善HTTP客户端超时机制，支持请求超时控制
 - **Test**: 添加HTTP客户端超时测试 `http_client_timeout_test.cpp`
 
 ### 重构
+
 - **HTTP Client**: 大幅重构HTTP客户端实现，优化代码结构和错误处理
 - **Bot Interface**: 简化机器人接口设计，移除冗余方法
 - **Core**: 精简QQBot和TGBot核心实现
 
 ### 修复
+
 - **Chat LLM**: 添加响应过滤器，去除LLM回复中的user_id前缀（如 "6545430341: content"）
 - **Test Chat LLM**: 修复chat_llm测试中引用已移除的connect_ws和connect_http方法导致的编译错误
 
 ### 优化
+
 - **Bridge Plugin**: 增强QQ到Telegram和Telegram到QQ的桥接功能
 - **Retry Queue**: 改进重试队列管理器，提升消息转发可靠性
 - **Proxy HTTP**: 优化代理HTTP客户端实现
 
 ### 国际化
+
 - 添加HTTP相关日志消息的中英文支持
 
 ---
@@ -35,9 +40,11 @@
 ## [Unreleased] (2026-01-17)
 
 ### 新增
+
 - **Plugin Chat**: 新增 `chat_llm` 示例插件，提供群聊 `/chat <text>` 命令，调用 OpenAI 兼容接口并将回复发送回群
 
 ### 修复
+
 - **Chat LLM**: 修复配置被默认值覆盖导致群聊消息无法入库
 - **Chat LLM**: 修复消息 role 判断，使用 is_bot 字段而非 self_id 比较
 - **Chat LLM**: 修复 `/chat` 命令不入历史记录的问题
@@ -45,6 +52,7 @@
 - **Chat LLM**: 修复插入数据库的命令内容包含 `/chat` 前缀
 
 ### 测试
+
 - **Chat LLM**: 添加 `/chat` 命令流程测试与集成测试，用于验证插件加载与消息发送路径
 
 ---
@@ -52,26 +60,32 @@
 ## [0.x.x] - 2026-01-15
 
 ### 新增
+
 - **Plugin Manager**: 支持通过环境变量或控制台设置日志级别
 
 ### 修复
+
 - **Plugin Bridge**: 修复UTC与本地时间不匹配导致的显示名称缓存失效
 - **Plugin Bridge**: 正确更新用户名称
 - **Plugin Bridge**: 修复用户信息数据库无用更新问题
 - **Plugin Bridge**: 修复用户信息数据库更新逻辑
 
 ### 重构
+
 - **Plugin Bridge**: 澄清source命名
 - **Plugin Bridge**: 将数据库管理器拆分为多个小文件
 - **Plugin Bridge**: 更新依赖结构
 
 ### 性能优化
+
 - **Plugin Bridge**: Telegram群组消息转发限制为最多10条
 
 ### 表情支持
+
 - **Plugin Bridge**: 支持QQ mface图片emoji表情
 
 ### 其他
+
 - 更新vcpkg配置格式 && ctest
 - 修复clang-tidy提示
 
@@ -80,6 +94,7 @@
 ## [0.x.x] - 2025-12
 
 ### 新增
+
 - **i18n**: 添加国际化本地化支持 (使用C++26 `#embed`)
 - **Plugin Logger**: 插件日志显示插件名称
 - **CLI**: 支持从stdin接受输入命令
@@ -87,6 +102,7 @@
 - **TG Bot Torrent**: 支持从Telegram下载torrent/magnet链接
 
 ### 修复
+
 - **Plugin Bridge**: 修复多条图片在单条消息中无法全部转发的问题
 - **Plugin Bridge**: 多条转发图片现在以群组方式转发
 - **TG2QQ**: 确保更新数据库以映射tg msg_id到新的qq msg_id
@@ -96,21 +112,24 @@
 - **WebSocket Client**: 修复缺失的i18n日志
 
 ### 重构
+
 - 重构插件结构
 - 重构示例插件
 
 ---
 
-## [0.x.x] - 2025-09
+## [0.0.2] - 2025-09
 
 ### 修复
+
 - **OneBot11 WebSocket**: 修复未被唤醒的等待队列
 
 ---
 
-## [0.x.x] - 2025-06
+## [0.0.1] - 2025-06
 
 ### 初始版本
+
 - Initial commit
 - 创建.gitignore
 

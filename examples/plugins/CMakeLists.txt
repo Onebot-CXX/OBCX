@@ -12,4 +12,5 @@ add_subdirectory(group_member_backup)
 add_subdirectory(chat_llm)
 #add_subdirectory(image_search)
 add_subdirectory(exhentai_fetcher)
+add_subdirectory(sticker_export)
 

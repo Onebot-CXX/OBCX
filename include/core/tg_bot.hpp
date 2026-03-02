@@ -97,6 +97,21 @@ public:
                                                 std::string_view caption = "");
 
   /**
+   * @brief 通过multipart上传原始图片字节到Telegram
+   * @param chat_id 目标聊天ID
+   * @param image_data 图片二进制数据
+   * @param filename 文件名
+   * @param mime_type MIME类型
+   * @param caption 图片说明
+   * @param topic_id 可选的话题ID
+   * @return API响应JSON字符串
+   */
+  asio::awaitable<std::string> send_photo_bytes(
+      std::string_view chat_id, const std::string &image_data,
+      std::string_view filename, std::string_view mime_type,
+      std::string_view caption, std::optional<int64_t> topic_id = std::nullopt);
+
+  /**
    * @brief 发送媒体组（多张图片/视频）到群组或topic
    * @param chat_id 聊天ID
    * @param media 媒体列表（类型和URL的pair列表）

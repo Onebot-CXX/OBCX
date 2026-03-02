@@ -26,7 +26,40 @@ if(NOT CMAKE_C_COMPILER)
   endif()
 endif()
 
-project(OBCX LANGUAGES CXX)
+# On macOS, prefer CommandLineTools SDK over Xcode SDK to avoid header search
+# path conflicts when using Homebrew LLVM (its clang config points to
+# CommandLineTools, but CMake's xcrun picks Xcode SDK and inserts it first).
+if(APPLE AND NOT CMAKE_OSX_SYSROOT)
+  execute_process(
+    COMMAND xcrun --sdk macosx --show-sdk-path
+    OUTPUT_VARIABLE XCRUN_SDK_PATH
+    OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  set(_CLT_SDK
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
+  if(EXISTS "${_CLT_SDK}" AND NOT "${XCRUN_SDK_PATH}" MATCHES
+                               "CommandLineTools")
+    set(CMAKE_OSX_SYSROOT
+        "${_CLT_SDK}"
+        CACHE PATH "Use CommandLineTools SDK to match Homebrew LLVM sysroot"
+              FORCE)
+    message(
+      STATUS
+        "Overriding Xcode SDK with CommandLineTools SDK: ${CMAKE_OSX_SYSROOT}")
+  endif()
+  unset(_CLT_SDK)
+endif()
+
+project(OBCX VERSION 1.1.0 LANGUAGES CXX)
+
+set(OBCX_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
+set(OBCX_VERSION_MINOR ${PROJECT_VERSION_MINOR})
+set(OBCX_VERSION_PATCH ${PROJECT_VERSION_PATCH})
+set(OBCX_ABI_VERSION 1)
+
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.hpp.in"
+  "${CMAKE_BINARY_DIR}/generated/obcx/version.hpp"
+  @ONLY)
 
 if(WIN32)
   if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -48,11 +81,11 @@ elseif(UNIX)
   endif()
 endif()
 
-if ("$ENV{IN_NIX_SHELL}" STREQUAL "")
-set(CMAKE_PREFIX_PATH
-    "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TRIPLET}")
+if("$ENV{IN_NIX_SHELL}" STREQUAL "")
+  set(CMAKE_PREFIX_PATH
+      "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TRIPLET}")
 else()
-    message(STATUS "NIX shell activation detected, disable vcpkg")
+  message(STATUS "NIX shell activation detected, disable vcpkg")
 endif()
 
 option(ENABLE_DEBUG_TRACE "Enable logging with file and line numbers" OFF)
@@ -90,20 +123,49 @@ set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Boost CONFIG REQUIRED COMPONENTS thread locale iostreams OPTIONAL_COMPONENTS system)
+find_package(
+  Boost CONFIG REQUIRED
+  COMPONENTS thread locale
+  OPTIONAL_COMPONENTS system)
 if(TARGET Boost::system)
-    set(BOOST_SYSTEM_TARGET Boost::system)
+  set(BOOST_SYSTEM_TARGET Boost::system)
 else()
-    set(BOOST_SYSTEM_TARGET Boost::headers)
+  set(BOOST_SYSTEM_TARGET Boost::headers)
 endif()
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
-find_package(tomlplusplus REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(unofficial-brotli CONFIG)
+if(unofficial-brotli_FOUND)
+  set(BROTLIDEC_TARGET unofficial::brotli::brotlidec)
+else()
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(BROTLIDEC REQUIRED IMPORTED_TARGET libbrotlidec)
+  set(BROTLIDEC_TARGET PkgConfig::BROTLIDEC)
+endif()
+
+find_package(zstd CONFIG)
+if(zstd_FOUND)
+  if(TARGET zstd::libzstd_static)
+    set(ZSTD_TARGET zstd::libzstd_static)
+  else()
+    set(ZSTD_TARGET zstd::libzstd_shared)
+  endif()
+else()
+  if(NOT PkgConfig_FOUND)
+    find_package(PkgConfig REQUIRED)
+  endif()
+  pkg_check_modules(LIBZSTD REQUIRED IMPORTED_TARGET libzstd)
+  set(ZSTD_TARGET PkgConfig::LIBZSTD)
+endif()
+
+find_package(tomlplusplus CONFIG REQUIRED)
 find_package(ftxui CONFIG REQUIRED)
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_BINARY_DIR}/generated)
 
 enable_testing()
 
@@ -136,5 +198,11 @@ else()
 endif()
 
 add_subdirectory(src)
-add_subdirectory(examples)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+include(cmake/OBCXPluginLoader.cmake)
+if(EXISTS ${CMAKE_SOURCE_DIR}/plugins.toml)
+    obcx_load_plugins(${CMAKE_SOURCE_DIR}/plugins.toml)
+else()
+    add_subdirectory(examples)
+endif()
 add_subdirectory(tests)

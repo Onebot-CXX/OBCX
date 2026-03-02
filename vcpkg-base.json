@@ -7,13 +7,15 @@
     "boost-locale",
     "boost-program-options",
     "boost-thread",
+    "brotli",
+    "zstd",
     "fmt",
+    "ftxui",
     "gtest",
     "nlohmann-json",
     "openssl",
     "spdlog",
     "sqlite3",
-    "tomlplusplus",
-    "ftxui"
+    "tomlplusplus"
   ]
 }

@@ -9,6 +9,7 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <memory>
+#include <optional>
 
 namespace obcx::network {
 
@@ -53,6 +54,23 @@ public:
    * @return 文件内容的二进制数据
    */
   auto download_file_content(std::string_view download_url)
+      -> asio::awaitable<std::string>;
+
+  /**
+   * @brief 通过multipart/form-data上传图片到Telegram Bot API
+   * @param chat_id 目标聊天ID
+   * @param image_data 图片二进制数据
+   * @param filename 文件名
+   * @param mime_type MIME类型
+   * @param caption 图片说明
+   * @param message_thread_id 可选的话题ID
+   * @return API响应JSON字符串
+   */
+  auto upload_photo_multipart(
+      std::string_view chat_id, const std::string &image_data,
+      std::string_view filename, std::string_view mime_type,
+      std::string_view caption,
+      std::optional<int64_t> message_thread_id = std::nullopt)
       -> asio::awaitable<std::string>;
 
 private:
