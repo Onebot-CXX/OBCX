@@ -213,12 +213,18 @@ auto ChatLLMPlugin::load_configuration() -> bool {
           std::chrono::milliseconds(static_cast<int64_t>(*val));
     }
 
+    if (auto val = config["max_tool_steps"].value<int64_t>()) {
+      if (*val > 0) {
+        max_tool_steps_ = static_cast<int>(*val);
+      }
+    }
+
     PLUGIN_INFO(get_name(),
                 "Final config: collect_enabled={}, history_limit={}, "
-                "max_reply_chars={}, history_ttl_days={}",
+                "max_reply_chars={}, history_ttl_days={}, max_tool_steps={}",
                 runtime_config_.collect_enabled, runtime_config_.history_limit,
                 runtime_config_.max_reply_chars,
-                runtime_config_.history_ttl_days);
+                runtime_config_.history_ttl_days, max_tool_steps_);
     PLUGIN_INFO(get_name(), "Configuration loaded successfully");
     return true;
   } catch (const std::exception &e) {
@@ -327,6 +333,77 @@ auto ChatLLMPlugin::filter_llm_response(const std::string &response)
     PLUGIN_WARN(get_name(), "Failed to filter LLM response: {}", e.what());
     return response;
   }
+}
+
+auto ChatLLMPlugin::get_llm_tools() const -> nlohmann::json {
+  nlohmann::json def;
+  def["type"] = "function";
+  def["function"] = {
+      {"name", "send_message"},
+      {"description",
+       "Send a message to the current group immediately. Use this when you "
+       "need to reply before your final answer."},
+      {"parameters",
+       {
+           {"type", "object"},
+           {"properties", {{"text", {{"type", "string"}}}}},
+           {"required", nlohmann::json::array({"text"})},
+           {"additionalProperties", false},
+       }},
+  };
+  return nlohmann::json::array({def});
+}
+
+auto ChatLLMPlugin::execute_tool_call(
+    obcx::core::IBot &bot, const chat_llm::ParsedCommand &cmd,
+    const chat_llm::LlmResponse::ToolCall &tool_call)
+    -> boost::asio::awaitable<nlohmann::json> {
+  nlohmann::json result;
+  result["tool"] = tool_call.name;
+  result["call_id"] = tool_call.id;
+  result["sent"] = false;
+
+  if (tool_call.name != "send_message") {
+    result["ok"] = false;
+    result["error"] = "Unknown tool";
+    co_return result;
+  }
+
+  nlohmann::json args;
+  try {
+    args = nlohmann::json::parse(tool_call.arguments.empty() ? "{}"
+                                                           : tool_call.arguments);
+  } catch (const std::exception &e) {
+    result["ok"] = false;
+    result["error"] = std::string("Invalid arguments JSON: ") + e.what();
+    co_return result;
+  }
+
+  if (!args.contains("text") || !args["text"].is_string()) {
+    result["ok"] = false;
+    result["error"] = "Missing required string field: text";
+    co_return result;
+  }
+
+  const auto text = args["text"].get<std::string>();
+  if (text.empty()) {
+    result["ok"] = false;
+    result["error"] = "text must not be empty";
+    co_return result;
+  }
+
+  co_await send_response(bot, cmd, text);
+  result["ok"] = true;
+  result["sent"] = true;
+  result["length"] = text.size();
+  co_return result;
+}
+
+auto ChatLLMPlugin::execute_tool_call_for_test(
+    obcx::core::IBot &bot, const chat_llm::ParsedCommand &cmd,
+    const chat_llm::LlmResponse::ToolCall &tool_call)
+    -> boost::asio::awaitable<nlohmann::json> {
+  co_return co_await execute_tool_call(bot, cmd, tool_call);
 }
 
 auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
@@ -471,61 +548,127 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
   });
 
   // Step 3: Build messages for LLM
-  auto messages =
+  auto openai_messages =
       prompt_builder_->build(history_records, user_id, cmd.text, self_id);
-
-  // Convert to JSON strings
-  std::vector<std::string> messages_json;
-  nlohmann::json sys_msg;
-  sys_msg["role"] = "system";
-  sys_msg["content"] = prompt_builder_->get_system_prompt();
-  messages_json.push_back(sys_msg.dump());
-
-  for (const auto &msg : messages) {
+  std::vector<nlohmann::json> llm_messages;
+  llm_messages.reserve(openai_messages.size());
+  for (const auto &msg : openai_messages) {
     nlohmann::json m;
-    m["role"] = (msg.role == chat_llm::MessageRole::system) ? "system"
-                : (msg.role == chat_llm::MessageRole::user) ? "user"
-                                                            : "assistant";
+    m["role"] = (msg.role == chat_llm::MessageRole::system)
+                    ? "system"
+                    : (msg.role == chat_llm::MessageRole::user) ? "user"
+                                                                : "assistant";
     m["content"] = msg.content;
-    messages_json.push_back(m.dump());
+    llm_messages.push_back(std::move(m));
   }
 
-  // Step 4: Call LLM API
-  auto response_text =
-      co_await bot.run_heavy_task([this, messages_json]() -> std::string {
-        // Create LLM client with new io_context per call (safer)
-        boost::asio::io_context ioc;
-        chat_llm::OpenAiCompatClient::Config client_config;
-        client_config.model_name = model_name_;
-        client_config.api_key = api_key_;
-        client_config.host = url_host_;
-        client_config.port = url_port_;
-        client_config.path = url_path_;
-        client_config.use_ssl = url_use_ssl_;
-        client_config.timeout = std::chrono::milliseconds(120000);
+  nlohmann::json tool_policy_msg;
+  tool_policy_msg["role"] = "system";
+  tool_policy_msg["content"] =
+      "You must respond by calling the send_message tool. Do not output plain text answers.";
+  llm_messages.push_back(std::move(tool_policy_msg));
 
-        chat_llm::OpenAiCompatClient client(ioc, client_config);
-        auto response = client.chat_completion(messages_json);
+  // Step 4: Call LLM API (with tool-calling loop)
+  const auto tools = get_llm_tools();
+  bool sent_via_tool = false;
+  int plain_text_rounds = 0;
+  std::string last_error;
+  for (int step = 0; step < max_tool_steps_; ++step) {
+    auto llm_response =
+        co_await bot.run_heavy_task([this, llm_messages, tools]() {
+          boost::asio::io_context ioc;
+          chat_llm::OpenAiCompatClient::Config client_config;
+          client_config.model_name = model_name_;
+          client_config.api_key = api_key_;
+          client_config.host = url_host_;
+          client_config.port = url_port_;
+          client_config.path = url_path_;
+          client_config.use_ssl = url_use_ssl_;
+          client_config.timeout = std::chrono::milliseconds(120000);
 
-        if (!response.success) {
-          return response.error_message;
-        }
-        return response.content;
-      });
+          chat_llm::OpenAiCompatClient client(ioc, client_config);
+          return client.chat_completion(llm_messages, tools);
+        });
 
-  // Filter LLM response to remove user_id prefix (e.g., "6545430341: content")
-  response_text = filter_llm_response(response_text);
+    PLUGIN_INFO(get_name(), "LLM step {} returned {} tool calls",
+                step + 1, llm_response.tool_calls.size());
 
-  // Check response length
-  if (prompt_builder_->is_response_too_long(response_text)) {
-    PLUGIN_INFO(get_name(), "LLM response too long ({} chars), truncating",
-                response_text.size());
-    response_text = "LLM 返回过长（" + std::to_string(response_text.size()) +
-                    " chars），已记录到日志";
+    if (!llm_response.success) {
+      PLUGIN_ERROR(get_name(), "LLM request failed: {}", llm_response.error_message);
+      last_error = llm_response.error_message;
+      break;
+    }
+
+    if (llm_response.tool_calls.empty()) {
+      if (!llm_response.content.empty()) {
+        plain_text_rounds++;
+        PLUGIN_WARN(get_name(),
+                    "LLM returned plain text without tool call; asking model to call send_message");
+        // Append the assistant's plain-text reply so the model sees its own
+        // output and the conversation stays well-formed (alternating roles).
+        nlohmann::json assistant_plain;
+        assistant_plain["role"] = "assistant";
+        assistant_plain["content"] = llm_response.content;
+        llm_messages.push_back(std::move(assistant_plain));
+
+        nlohmann::json reminder;
+        reminder["role"] = "user";
+        reminder["content"] =
+            "Do not answer with plain text. To reply to user, you MUST call the send_message tool.";
+        llm_messages.push_back(std::move(reminder));
+      }
+      continue;
+    }
+
+    nlohmann::json assistant_msg;
+    assistant_msg["role"] = "assistant";
+    if (llm_response.content.empty()) {
+      assistant_msg["content"] = nullptr;
+    } else {
+      assistant_msg["content"] = llm_response.content;
+    }
+    assistant_msg["tool_calls"] = nlohmann::json::array();
+    for (const auto &call : llm_response.tool_calls) {
+      nlohmann::json tool_call_json;
+      tool_call_json["id"] = call.id;
+      tool_call_json["type"] = "function";
+      tool_call_json["function"] = {
+          {"name", call.name},
+          {"arguments", call.arguments},
+      };
+      assistant_msg["tool_calls"].push_back(std::move(tool_call_json));
+    }
+    llm_messages.push_back(std::move(assistant_msg));
+
+    bool sent_this_round = false;
+    for (const auto &call : llm_response.tool_calls) {
+      const auto tool_result = co_await execute_tool_call(bot, cmd, call);
+      if (tool_result.contains("sent") && tool_result["sent"].is_boolean() &&
+          tool_result["sent"].get<bool>()) {
+        sent_via_tool = true;
+        sent_this_round = true;
+      }
+      nlohmann::json tool_msg;
+      tool_msg["role"] = "tool";
+      tool_msg["tool_call_id"] = call.id;
+      tool_msg["content"] = tool_result.dump();
+      llm_messages.push_back(std::move(tool_msg));
+    }
+
+    if (sent_this_round) {
+      PLUGIN_INFO(get_name(), "send_message executed at step {}, stopping loop",
+                  step + 1);
+      break;
+    }
   }
 
-  // Step 5: Send response
-  co_await send_response(bot, cmd, response_text);
+  if (!sent_via_tool) {
+    PLUGIN_WARN(get_name(),
+                "No send_message tool call produced within {} steps for "
+                "message {}. plain_text_rounds={}, last_error={}",
+                max_tool_steps_, cmd.message_id, plain_text_rounds,
+                last_error.empty() ? "(none)" : last_error);
+  }
 }
 
 auto ChatLLMPlugin::send_response(obcx::core::IBot &bot,

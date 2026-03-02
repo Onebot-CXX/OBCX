@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <unordered_map>
 
@@ -60,6 +61,12 @@ public:
                        const obcx::common::MessageEvent &event)
       -> boost::asio::awaitable<void>;
 
+  // Test helper: execute a tool call directly without /chat command flow.
+  auto execute_tool_call_for_test(
+      obcx::core::IBot &bot, const chat_llm::ParsedCommand &cmd,
+      const chat_llm::LlmResponse::ToolCall &tool_call)
+      -> boost::asio::awaitable<nlohmann::json>;
+
 private:
   auto load_configuration() -> bool;
   auto load_system_prompt() -> bool;
@@ -67,6 +74,11 @@ private:
   auto send_response(obcx::core::IBot &bot, const chat_llm::ParsedCommand &cmd,
                      const std::string &text) -> boost::asio::awaitable<void>;
   auto filter_llm_response(const std::string &response) -> std::string;
+  auto get_llm_tools() const -> nlohmann::json;
+  auto execute_tool_call(obcx::core::IBot &bot,
+                         const chat_llm::ParsedCommand &cmd,
+                         const chat_llm::LlmResponse::ToolCall &tool_call)
+      -> boost::asio::awaitable<nlohmann::json>;
 
   auto ensure_runtime(obcx::core::IBot &bot)
       -> std::shared_ptr<chat_llm::Runtime>;
@@ -97,6 +109,8 @@ private:
   uint16_t url_port_ = 443;
   std::string url_path_;
   bool url_use_ssl_ = true;
+
+  int max_tool_steps_ = 5;
 
   // Instance tracking (for debugging plugin reload issues)
   int instance_id_;
