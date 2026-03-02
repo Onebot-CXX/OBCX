@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdint>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,12 @@ namespace plugins::chat_llm {
 struct LlmResponse {
   bool success = false;
   std::string content;
+  struct ToolCall {
+    std::string id;
+    std::string name;
+    std::string arguments;
+  };
+  std::vector<ToolCall> tool_calls;
   std::string error_message;
   unsigned int status_code = 0;
   size_t response_size = 0;
@@ -33,7 +40,8 @@ public:
    * @return Response from LLM API
    */
   [[nodiscard]] virtual auto chat_completion(
-      const std::vector<std::string> &messages_json) -> LlmResponse {
+      const std::vector<nlohmann::json> &messages,
+      const nlohmann::json &tools = nlohmann::json::array()) -> LlmResponse {
     throw std::runtime_error("chat_completion not implemented");
   }
 };
@@ -66,7 +74,9 @@ public:
    * @brief Send chat completion request (synchronous, called from thread pool)
    */
   [[nodiscard]] auto chat_completion(
-      const std::vector<std::string> &messages_json) -> LlmResponse override;
+      const std::vector<nlohmann::json> &messages,
+      const nlohmann::json &tools = nlohmann::json::array())
+      -> LlmResponse override;
 
   /**
    * @brief Set request timeout
@@ -74,6 +84,12 @@ public:
   void set_timeout(std::chrono::milliseconds timeout) { timeout_ = timeout; }
 
 private:
+  enum class ToolRequestMode {
+    forced_function,
+    auto_choice,
+    legacy_function_call,
+  };
+
   boost::asio::io_context &ioc_;
   Config config_;
   std::chrono::milliseconds timeout_;
@@ -82,7 +98,9 @@ private:
    * @brief Build JSON request body
    */
   [[nodiscard]] auto build_request_body(
-      const std::vector<std::string> &messages_json) -> std::string;
+      const std::vector<nlohmann::json> &messages,
+      const nlohmann::json &tools,
+      ToolRequestMode mode) -> std::string;
 };
 
 } // namespace plugins::chat_llm

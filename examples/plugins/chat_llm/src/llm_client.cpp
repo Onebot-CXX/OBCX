@@ -10,13 +10,11 @@ OpenAiCompatClient::OpenAiCompatClient(boost::asio::io_context &ioc,
     : ioc_(ioc), config_(std::move(config)), timeout_(config.timeout) {}
 
 auto OpenAiCompatClient::chat_completion(
-    const std::vector<std::string> &messages_json) -> LlmResponse {
+    const std::vector<nlohmann::json> &messages,
+    const nlohmann::json &tools) -> LlmResponse {
   LlmResponse result;
 
   try {
-    // Build request body
-    std::string body = build_request_body(messages_json);
-
     // Create HTTP client
     obcx::common::ConnectionConfig conn_config;
     conn_config.host = config_.host;
@@ -33,11 +31,31 @@ auto OpenAiCompatClient::chat_completion(
     headers["Accept"] = "application/json";
     headers["Accept-Encoding"] = "identity";
 
-    PLUGIN_DEBUG("llm_client", "Sending LLM request to {}:{}{} (body size: {})",
-                 config_.host, config_.port, config_.path, body.size());
+    auto post_with_mode = [&](ToolRequestMode mode) {
+      std::string body = build_request_body(messages, tools, mode);
+      PLUGIN_DEBUG("llm_client",
+                   "Sending LLM request to {}:{}{} (mode: {}, body size: {})",
+                   config_.host, config_.port, config_.path,
+                   mode == ToolRequestMode::forced_function
+                       ? "forced"
+                       : mode == ToolRequestMode::auto_choice ? "auto" : "legacy",
+                   body.size());
+      return http_client.post_sync(config_.path, body, headers);
+    };
 
-    // Send request
-    auto response = http_client.post_sync(config_.path, body, headers);
+    auto response = post_with_mode(ToolRequestMode::forced_function);
+    if (!response.is_success() && tools.is_array() && !tools.empty()) {
+      PLUGIN_WARN("llm_client",
+                  "Forced tool_choice failed with HTTP {}, retrying with auto",
+                  response.status_code);
+      response = post_with_mode(ToolRequestMode::auto_choice);
+    }
+    if (!response.is_success() && tools.is_array() && !tools.empty()) {
+      PLUGIN_WARN("llm_client",
+                  "Auto tool_choice failed with HTTP {}, retrying with legacy function_call",
+                  response.status_code);
+      response = post_with_mode(ToolRequestMode::legacy_function_call);
+    }
 
     PLUGIN_DEBUG("llm_client", "LLM API response status: {}",
                  response.status_code);
@@ -91,16 +109,59 @@ auto OpenAiCompatClient::chat_completion(
     }
 
     auto &first_choice = response_json["choices"][0];
-    if (!first_choice.contains("message") ||
-        !first_choice["message"].contains("content")) {
-      PLUGIN_ERROR("llm_client", "LLM response missing message.content");
+    if (!first_choice.contains("message") || !first_choice["message"].is_object()) {
+      PLUGIN_ERROR("llm_client", "LLM response missing message object");
       result.success = false;
       result.error_message = "LLM 响应格式错误";
       return result;
     }
 
+    auto &message = first_choice["message"];
+    if (message.contains("content") && message["content"].is_string()) {
+      result.content = message["content"].get<std::string>();
+    }
+
+    if (message.contains("tool_calls") && message["tool_calls"].is_array()) {
+      for (const auto &item : message["tool_calls"]) {
+        if (!item.is_object()) {
+          continue;
+        }
+        if (!item.contains("id") || !item["id"].is_string()) {
+          continue;
+        }
+        if (!item.contains("function") || !item["function"].is_object()) {
+          continue;
+        }
+        const auto &fn = item["function"];
+        if (!fn.contains("name") || !fn["name"].is_string()) {
+          continue;
+        }
+
+        LlmResponse::ToolCall call;
+        call.id = item["id"].get<std::string>();
+        call.name = fn["name"].get<std::string>();
+        if (fn.contains("arguments") && fn["arguments"].is_string()) {
+          call.arguments = fn["arguments"].get<std::string>();
+        }
+        result.tool_calls.push_back(std::move(call));
+      }
+    }
+
+    if (result.tool_calls.empty() && message.contains("function_call") &&
+        message["function_call"].is_object()) {
+      const auto &fn = message["function_call"];
+      if (fn.contains("name") && fn["name"].is_string()) {
+        LlmResponse::ToolCall call;
+        call.id = "legacy_function_call_0";
+        call.name = fn["name"].get<std::string>();
+        if (fn.contains("arguments") && fn["arguments"].is_string()) {
+          call.arguments = fn["arguments"].get<std::string>();
+        }
+        result.tool_calls.push_back(std::move(call));
+      }
+    }
+
     result.success = true;
-    result.content = first_choice["message"]["content"].get<std::string>();
     result.response_size = result.content.size();
 
     return result;
@@ -114,18 +175,37 @@ auto OpenAiCompatClient::chat_completion(
 }
 
 auto OpenAiCompatClient::build_request_body(
-    const std::vector<std::string> &messages_json) -> std::string {
+    const std::vector<nlohmann::json> &messages,
+    const nlohmann::json &tools, ToolRequestMode mode) -> std::string {
   nlohmann::json request_body;
   request_body["model"] = config_.model_name;
   request_body["thinking"] = {{"type", "disabled"}};
   request_body["stream"] = false;
-  request_body["messages"] = nlohmann::json::array();
-
-  for (const auto &msg_json : messages_json) {
-    try {
-      request_body["messages"].push_back(nlohmann::json::parse(msg_json));
-    } catch (...) {
-      PLUGIN_WARN("llm_client", "Failed to parse message JSON, skipping");
+  request_body["messages"] = messages;
+  if (tools.is_array() && !tools.empty()) {
+    if (mode == ToolRequestMode::legacy_function_call) {
+      nlohmann::json functions = nlohmann::json::array();
+      for (const auto &tool : tools) {
+        if (!tool.is_object() || !tool.contains("function") ||
+            !tool["function"].is_object()) {
+          continue;
+        }
+        functions.push_back(tool["function"]);
+      }
+      request_body["functions"] = std::move(functions);
+      request_body["function_call"] = {
+          {"name", "send_message"},
+      };
+    } else {
+      request_body["tools"] = tools;
+      if (mode == ToolRequestMode::forced_function) {
+        request_body["tool_choice"] = {
+            {"type", "function"},
+            {"function", {{"name", "send_message"}}},
+        };
+      } else {
+        request_body["tool_choice"] = "auto";
+      }
     }
   }
 
