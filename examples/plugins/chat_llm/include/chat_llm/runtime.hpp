@@ -7,9 +7,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace plugins::chat_llm {
@@ -58,18 +56,6 @@ public:
    */
   void schedule_proactive_task(std::function<void()> task);
 
-  /**
-   * @brief Get the latest message timestamp seen for a group during the last
-   *        proactive check. Returns 0 if never checked.
-   */
-  auto get_last_proactive_ts(const std::string &group_id) -> int64_t;
-
-  /**
-   * @brief Update the latest message timestamp for a group after a proactive
-   *        check.
-   */
-  void set_last_proactive_ts(const std::string &group_id, int64_t ts);
-
 private:
   std::atomic<bool> stopping_{false};
   RuntimeConfig config_;
@@ -79,11 +65,6 @@ private:
 
   // Timer for periodic proactive chat
   boost::asio::steady_timer proactive_timer_;
-
-  // Per-group: latest message timestamp seen during last proactive check.
-  // Used to skip LLM calls when no new messages arrived.
-  std::mutex proactive_ts_mutex_;
-  std::unordered_map<std::string, int64_t> last_proactive_ts_;
 };
 
 } // namespace plugins::chat_llm

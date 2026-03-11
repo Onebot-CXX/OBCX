@@ -657,20 +657,17 @@ auto ChatLLMPlugin::run_proactive_for_group(obcx::core::IBot &bot,
     co_return;
   }
 
-  // Skip LLM call if no new messages since last proactive check.
-  // This avoids repeatedly calling the LLM with the same history, which
-  // wastes API quota and can cause the model to produce irritated responses.
-  int64_t latest_ts = history.back().timestamp_ms;
-  int64_t last_checked_ts = rt->get_last_proactive_ts(group_id);
-  if (latest_ts > 0 && latest_ts <= last_checked_ts) {
+  // Only ask the LLM whether to speak when the latest visible message in the
+  // group is from another user. If the bot was the last speaker, stay quiet
+  // until somebody else talks.
+  const auto &last_message = history.back();
+  if (last_message.is_bot) {
     PLUGIN_DEBUG(get_name(),
-                 "Proactive: no new messages in group {} since last check "
-                 "(latest_ts={}, last_checked={}), skipping LLM call",
-                 group_id, latest_ts, last_checked_ts);
+                 "Proactive: latest message in group {} is from bot, "
+                 "skipping LLM call",
+                 group_id);
     co_return;
   }
-  // Record the latest timestamp for next check
-  rt->set_last_proactive_ts(group_id, latest_ts);
 
   PLUGIN_INFO(get_name(),
               "Proactive: fetched {} history messages for group {}",

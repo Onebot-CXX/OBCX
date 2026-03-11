@@ -42,15 +42,4 @@ void Runtime::schedule_proactive_task(std::function<void()> task) {
   });
 }
 
-auto Runtime::get_last_proactive_ts(const std::string &group_id) -> int64_t {
-  std::lock_guard<std::mutex> lock(proactive_ts_mutex_);
-  auto it = last_proactive_ts_.find(group_id);
-  return (it != last_proactive_ts_.end()) ? it->second : 0;
-}
-
-void Runtime::set_last_proactive_ts(const std::string &group_id, int64_t ts) {
-  std::lock_guard<std::mutex> lock(proactive_ts_mutex_);
-  last_proactive_ts_[group_id] = ts;
-}
-
 } // namespace plugins::chat_llm
