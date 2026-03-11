@@ -410,8 +410,9 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
   });
 
   // Step 3: Build messages for LLM
+  const auto tools = get_llm_tools();
   auto openai_messages =
-      prompt_builder_->build(history_records, user_id, cmd.text, self_id);
+      prompt_builder_->build(history_records, user_id, cmd.text, self_id, tools);
   std::vector<nlohmann::json> llm_messages;
   llm_messages.reserve(openai_messages.size());
   for (const auto &msg : openai_messages) {
@@ -431,7 +432,6 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
   llm_messages.push_back(std::move(tool_policy_msg));
 
   // Step 4: Call LLM API (with tool-calling loop)
-  const auto tools = get_llm_tools();
   bool sent_via_tool = false;
   int plain_text_rounds = 0;
   std::string last_error;
@@ -674,7 +674,8 @@ auto ChatLLMPlugin::run_proactive_for_group(obcx::core::IBot &bot,
               history.size(), group_id);
 
   // Step 2: Build proactive prompt (no user message, just history + decision instruction)
-  auto openai_messages = prompt_builder_->build_proactive(history, "");
+  const auto tools = get_llm_tools();
+  auto openai_messages = prompt_builder_->build_proactive(history, "", tools);
   std::vector<nlohmann::json> llm_messages;
   llm_messages.reserve(openai_messages.size());
   for (const auto &msg : openai_messages) {
@@ -689,8 +690,6 @@ auto ChatLLMPlugin::run_proactive_for_group(obcx::core::IBot &bot,
 
   // Step 3: Call LLM with tool_choice="auto" (NOT forced)
   // The LLM decides whether to call send_message or stay silent.
-  const auto tools = get_llm_tools();
-
   auto llm_response = co_await bot.run_heavy_task(
       [this, llm_messages, tools]() {
         boost::asio::io_context ioc;

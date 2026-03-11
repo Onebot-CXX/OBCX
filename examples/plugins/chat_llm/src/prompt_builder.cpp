@@ -1,5 +1,8 @@
 #include <chat_llm/prompt_builder.hpp>
 
+#include <nlohmann/json.hpp>
+#include <sstream>
+
 namespace plugins::chat_llm {
 
 PromptBuilder::PromptBuilder(std::string system_prompt, int max_reply_chars)
@@ -9,12 +12,17 @@ PromptBuilder::PromptBuilder(std::string system_prompt, int max_reply_chars)
 auto PromptBuilder::build(const std::vector<MessageRecord> &history,
                           const std::string &user_id,
                           const std::string &user_text,
-                          const std::string &self_id)
+                          const std::string &self_id,
+                          const nlohmann::json &tools)
     -> std::vector<OpenAiMessage> {
   std::vector<OpenAiMessage> messages;
 
   // Add system prompt
   messages.push_back({MessageRole::system, system_prompt_});
+  const auto tool_instruction = build_tool_instruction(tools);
+  if (!tool_instruction.empty()) {
+    messages.push_back({MessageRole::system, tool_instruction});
+  }
 
   // Deduplicate and trim history
   auto deduped = deduplicate_history(history, user_id, user_text);
@@ -35,12 +43,17 @@ auto PromptBuilder::build(const std::vector<MessageRecord> &history,
 }
 
 auto PromptBuilder::build_proactive(const std::vector<MessageRecord> &history,
-                                    const std::string &self_id)
+                                    const std::string &self_id,
+                                    const nlohmann::json &tools)
     -> std::vector<OpenAiMessage> {
   std::vector<OpenAiMessage> messages;
 
   // Add system prompt
   messages.push_back({MessageRole::system, system_prompt_});
+  const auto tool_instruction = build_tool_instruction(tools);
+  if (!tool_instruction.empty()) {
+    messages.push_back({MessageRole::system, tool_instruction});
+  }
 
   // Add proactive context: tell the LLM this is a timer-triggered call
   messages.push_back(
@@ -132,6 +145,29 @@ auto PromptBuilder::trim_context(const std::vector<MessageRecord> &history)
   // Keep most recent messages (history is oldest-first, so take from end)
   size_t start = history.size() - history_limit_;
   return std::vector<MessageRecord>(history.begin() + start, history.end());
+}
+
+auto PromptBuilder::build_tool_instruction(const nlohmann::json &tools) const
+    -> std::string {
+  if (tools.empty()) {
+    return "";
+  }
+
+  std::ostringstream oss;
+  oss << "Tool calling instructions:\n";
+  oss << "- Use tools through structured tool calls, not by describing the call in plain text.\n";
+  oss << "- When a tool is the correct action, call it directly with valid JSON arguments.\n";
+  oss << "- Do not invent undeclared arguments.\n";
+
+  for (const auto &tool : tools) {
+    const auto &function = tool["function"];
+    const auto &parameters = function["parameters"];
+    oss << "- Tool `" << function["name"].get<std::string>() << "`: "
+        << function["description"].get<std::string>() << "\n";
+    oss << "  Arguments schema: " << parameters.dump() << "\n";
+  }
+
+  return oss.str();
 }
 
 } // namespace plugins::chat_llm

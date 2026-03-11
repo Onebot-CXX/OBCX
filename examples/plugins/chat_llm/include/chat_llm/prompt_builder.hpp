@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chat_llm/message_repository.hpp"
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -43,7 +44,9 @@ public:
   [[nodiscard]] auto build(const std::vector<MessageRecord> &history,
                            const std::string &user_id,
                            const std::string &user_text,
-                           const std::string &self_id)
+                           const std::string &self_id,
+                           const nlohmann::json &tools =
+                               nlohmann::json::array())
       -> std::vector<OpenAiMessage>;
 
   /**
@@ -58,7 +61,9 @@ public:
    * @return Vector of OpenAI-formatted messages
    */
   [[nodiscard]] auto build_proactive(const std::vector<MessageRecord> &history,
-                                     const std::string &self_id)
+                                     const std::string &self_id,
+                                     const nlohmann::json &tools =
+                                         nlohmann::json::array())
       -> std::vector<OpenAiMessage>;
 
   /**
@@ -120,6 +125,9 @@ private:
    */
   [[nodiscard]] auto trim_context(const std::vector<MessageRecord> &history)
       -> std::vector<MessageRecord>;
+
+  [[nodiscard]] auto build_tool_instruction(
+      const nlohmann::json &tools) const -> std::string;
 };
 
 } // namespace plugins::chat_llm
