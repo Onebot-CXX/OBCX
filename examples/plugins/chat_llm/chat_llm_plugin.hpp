@@ -40,6 +40,9 @@ namespace plugins {
  *   - history_limit: Number of history messages for context (default: 10)
  *   - max_reply_chars: Maximum reply length (default: 500)
  *   - llm_timeout_ms: LLM request timeout (default: 120000)
+ *   - proactive_enabled: Enable proactive chat (default: false)
+ *   - proactive_interval_ms: Interval between proactive checks in ms (default: 300000)
+ *   - proactive_groups: Groups where proactive chat is allowed
  */
 class ChatLLMPlugin : public obcx::interface::IPlugin {
 public:
@@ -73,6 +76,14 @@ private:
   auto parse_url(const std::string &url) -> bool;
   auto send_response(obcx::core::IBot &bot, const chat_llm::ParsedCommand &cmd,
                      const std::string &text) -> boost::asio::awaitable<void>;
+  /**
+   * @brief Send a proactive message to a group (no reply-to, no ParsedCommand)
+   */
+  auto send_proactive_message(obcx::core::IBot &bot,
+                              const std::string &platform,
+                              const std::string &group_id,
+                              const std::string &text)
+      -> boost::asio::awaitable<void>;
   auto get_llm_tools() const -> nlohmann::json;
   auto execute_tool_call(obcx::core::IBot &bot,
                          const chat_llm::ParsedCommand &cmd,
@@ -83,10 +94,24 @@ private:
       -> std::shared_ptr<chat_llm::Runtime>;
   void stop_all_runtimes();
 
+  /**
+   * @brief Run proactive chat logic for a single group
+   *
+   * Fetches recent history, builds a proactive prompt, sends to LLM with
+   * tool_choice="auto", and if the LLM calls send_message, delivers the
+   * message to the group.
+   */
+  auto run_proactive_for_group(obcx::core::IBot &bot,
+                               const std::string &platform,
+                               const std::string &group_id)
+      -> boost::asio::awaitable<void>;
+
   // Components
   // Per-bot runtime (lazy init on first message)
   std::unordered_map<obcx::core::IBot *, std::shared_ptr<chat_llm::Runtime>>
       runtimes_;
+  // Per-bot self_id cache (populated from first message event)
+  std::unordered_map<obcx::core::IBot *, std::string> bot_self_ids_;
   std::mutex runtimes_mutex_;
   chat_llm::RuntimeConfig runtime_config_;
   std::unique_ptr<chat_llm::MessageRepository> repo_;

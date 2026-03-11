@@ -47,6 +47,21 @@ public:
       -> std::vector<OpenAiMessage>;
 
   /**
+   * @brief Build messages array for proactive (timer-triggered) LLM calls
+   *
+   * Unlike build(), this does NOT append a current user message. Instead it
+   * provides the recent chat history and a system instruction asking the LLM
+   * to decide whether the conversation warrants a proactive reply.
+   *
+   * @param history Context history (oldest first)
+   * @param self_id Bot's self ID for role determination
+   * @return Vector of OpenAI-formatted messages
+   */
+  [[nodiscard]] auto build_proactive(const std::vector<MessageRecord> &history,
+                                     const std::string &self_id)
+      -> std::vector<OpenAiMessage>;
+
+  /**
    * @brief Set the maximum context limit (number of messages)
    */
   void set_history_limit(int limit) { history_limit_ = limit; }

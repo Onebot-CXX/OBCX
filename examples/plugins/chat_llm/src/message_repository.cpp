@@ -11,9 +11,7 @@ MessageRepository::MessageRepository(const std::string &db_path)
     : db_path_(db_path), db_(nullptr) {}
 
 MessageRepository::~MessageRepository() {
-  if (db_) {
-    sqlite3_close(static_cast<sqlite3 *>(db_));
-  }
+  sqlite3_close(static_cast<sqlite3 *>(db_));
 }
 
 auto MessageRepository::initialize() -> bool {
@@ -202,8 +200,11 @@ auto MessageRepository::migrate_v1_to_v2() -> bool {
 auto MessageRepository::append_message(
     const MessageRecord &record, bool collect_enabled,
     const std::vector<std::string> &allowed_groups) -> bool {
-  // Check whitelist
-  if (!is_group_allowed(record.group_id, collect_enabled, allowed_groups)) {
+  // Bot's own messages are always saved so that proactive chat and context
+  // building can see what the bot recently said, regardless of whether
+  // user-message collection is enabled for this group.
+  if (!record.is_bot &&
+      !is_group_allowed(record.group_id, collect_enabled, allowed_groups)) {
     PLUGIN_DEBUG("message_repository",
                  "Group {} not in whitelist (collect_enabled={}, "
                  "allowed_groups_count={}), skipping save",
@@ -266,6 +267,7 @@ auto MessageRepository::fetch_context(const ContextQuery &query)
     SELECT platform, group_id, message_id, user_id, content, timestamp_ms, is_bot
     FROM messages_v2
     WHERE platform = ? AND group_id = ? AND timestamp_ms < ?
+      AND is_command = 0 AND content != ''
     ORDER BY timestamp_ms DESC
     LIMIT ?;
   )";
@@ -274,9 +276,10 @@ auto MessageRepository::fetch_context(const ContextQuery &query)
   int rc = sqlite3_prepare_v2(static_cast<sqlite3 *>(db_), sql.c_str(), -1,
                               &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    PLUGIN_ERROR("message_repository", "Failed to prepare SELECT: {}",
-                 sqlite3_errmsg(static_cast<sqlite3 *>(db_)));
-    return result;
+    auto msg = std::string("Failed to prepare SELECT: ") +
+               sqlite3_errmsg(static_cast<sqlite3 *>(db_));
+    PLUGIN_ERROR("message_repository", "{}", msg);
+    throw std::runtime_error(msg);
   }
 
   sqlite3_bind_text(stmt, 1, query.platform.c_str(), -1, SQLITE_STATIC);
@@ -322,19 +325,21 @@ auto MessageRepository::cleanup_ttl(int ttl_days) -> int {
   int rc = sqlite3_prepare_v2(static_cast<sqlite3 *>(db_), sql.c_str(), -1,
                               &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    PLUGIN_ERROR("message_repository", "Failed to prepare DELETE: {}",
-                 sqlite3_errmsg(static_cast<sqlite3 *>(db_)));
-    return 0;
+    auto msg = std::string("Failed to prepare DELETE: ") +
+               sqlite3_errmsg(static_cast<sqlite3 *>(db_));
+    PLUGIN_ERROR("message_repository", "{}", msg);
+    throw std::runtime_error(msg);
   }
 
   sqlite3_bind_int64(stmt, 1, cutoff_ms);
 
   rc = sqlite3_step(stmt);
   if (rc != SQLITE_DONE) {
-    PLUGIN_ERROR("message_repository", "Failed to execute DELETE: {}",
-                 sqlite3_errmsg(static_cast<sqlite3 *>(db_)));
+    auto msg = std::string("Failed to execute DELETE: ") +
+               sqlite3_errmsg(static_cast<sqlite3 *>(db_));
+    PLUGIN_ERROR("message_repository", "{}", msg);
     sqlite3_finalize(stmt);
-    return 0;
+    throw std::runtime_error(msg);
   }
 
   sqlite3_finalize(stmt);
@@ -350,17 +355,20 @@ auto MessageRepository::get_schema_version() const -> int {
   int rc = sqlite3_prepare_v2(static_cast<sqlite3 *>(db_),
                               "PRAGMA user_version;", -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    return 0;
+    throw std::runtime_error(
+        std::string("Failed to query schema version: ") +
+        sqlite3_errmsg(static_cast<sqlite3 *>(db_)));
   }
 
-  if (sqlite3_step(stmt) == SQLITE_ROW) {
-    int version = sqlite3_column_int(stmt, 0);
+  rc = sqlite3_step(stmt);
+  if (rc != SQLITE_ROW) {
     sqlite3_finalize(stmt);
-    return version;
+    throw std::runtime_error("PRAGMA user_version returned no row");
   }
 
+  int version = sqlite3_column_int(stmt, 0);
   sqlite3_finalize(stmt);
-  return 0;
+  return version;
 }
 
 auto MessageRepository::is_group_allowed(

@@ -9,14 +9,10 @@ auto CommandParser::parse(const obcx::core::IBot &bot,
     -> ParsedCommand {
   ParsedCommand cmd;
   cmd.platform = detect_platform(bot);
-  cmd.group_id = event.group_id.value_or("");
+  cmd.group_id = event.group_id.value();
   cmd.user_id = event.user_id;
+  cmd.self_id = event.self_id;
   cmd.message_id = event.message_id;
-
-  // Only process group messages
-  if (event.message_type != "group" || !event.group_id.has_value()) {
-    return cmd;
-  }
 
   // Extract text from message segments
   std::string text_content = extract_text(event.message);
@@ -46,7 +42,7 @@ auto CommandParser::parse(const obcx::core::IBot &bot,
   // Check if user text is empty
   if (user_text.empty()) {
     cmd.type = ParsedCommand::Type::chat;
-    cmd.text = "用法: /chat <内容>";
+    cmd.text = "Usage: /chat <content>";
     cmd.is_valid = true;
     return cmd;
   }

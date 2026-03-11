@@ -22,6 +22,7 @@ struct ParsedCommand {
   std::string platform;
   std::string group_id;
   std::string user_id;
+  std::string self_id;
   std::string message_id;
 };
 

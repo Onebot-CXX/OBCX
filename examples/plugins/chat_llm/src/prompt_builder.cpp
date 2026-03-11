@@ -34,6 +34,48 @@ auto PromptBuilder::build(const std::vector<MessageRecord> &history,
   return messages;
 }
 
+auto PromptBuilder::build_proactive(const std::vector<MessageRecord> &history,
+                                    const std::string &self_id)
+    -> std::vector<OpenAiMessage> {
+  std::vector<OpenAiMessage> messages;
+
+  // Add system prompt
+  messages.push_back({MessageRole::system, system_prompt_});
+
+  // Add proactive context: tell the LLM this is a timer-triggered call
+  messages.push_back(
+      {MessageRole::system,
+       "This is an automatic timer-triggered call, not a user-initiated conversation. "
+       "You may choose not to respond. If you decide to speak, you **MUST** call the "
+       "send_message tool to send your message. Do NOT output plain text directly. "
+       "If you decide not to speak, do NOT call any tools and do NOT output any text."});
+
+  // Trim history
+  auto trimmed = trim_context(history);
+
+  // Add history messages
+  for (const auto &record : trimmed) {
+    auto role = determine_role(record, self_id);
+    auto content = format_message(record);
+    messages.push_back({role, content});
+  }
+
+  // Add proactive decision instruction as the final user message.
+  // This tells the LLM to review the conversation and decide whether
+  // it is appropriate to chime in proactively.
+  messages.push_back(
+      {MessageRole::system,
+       "Above is the recent chat history of the group. Review these messages and "
+       "decide whether it is appropriate for you to proactively join the conversation. "
+       "If you have something to say (e.g. the topic interests you, someone mentioned "
+       "you, there is a question you can help with, or you want to make a witty remark), "
+       "call the send_message tool. If you have nothing to say, the conversation has "
+       "ended, or you have spoken recently, do NOT call any tools. "
+       "Maintain your usual speaking style."});
+
+  return messages;
+}
+
 auto PromptBuilder::is_response_too_long(const std::string &response) const
     -> bool {
   return static_cast<int>(response.size()) > max_reply_chars_;

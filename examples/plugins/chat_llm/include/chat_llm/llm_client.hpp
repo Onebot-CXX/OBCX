@@ -37,11 +37,15 @@ public:
   /**
    * @brief Send chat completion request
    * @param messages OpenAI-formatted messages array
+   * @param tools Tool definitions array
+   * @param force_tool If true, force specific tool via tool_choice; if false,
+   *                   use "auto" so LLM decides whether to call tools
    * @return Response from LLM API
    */
   [[nodiscard]] virtual auto chat_completion(
       const std::vector<nlohmann::json> &messages,
-      const nlohmann::json &tools = nlohmann::json::array()) -> LlmResponse {
+      const nlohmann::json &tools = nlohmann::json::array(),
+      bool force_tool = true) -> LlmResponse {
     throw std::runtime_error("chat_completion not implemented");
   }
 };
@@ -72,10 +76,15 @@ public:
 
   /**
    * @brief Send chat completion request (synchronous, called from thread pool)
+   * @param messages OpenAI-formatted messages array
+   * @param tools Tool definitions array
+   * @param force_tool If true, force specific tool via tool_choice; if false,
+   *                   use "auto" so LLM decides whether to call tools
    */
   [[nodiscard]] auto chat_completion(
       const std::vector<nlohmann::json> &messages,
-      const nlohmann::json &tools = nlohmann::json::array())
+      const nlohmann::json &tools = nlohmann::json::array(),
+      bool force_tool = true)
       -> LlmResponse override;
 
   /**
@@ -93,7 +102,8 @@ private:
    */
   [[nodiscard]] auto build_request_body(
       const std::vector<nlohmann::json> &messages,
-      const nlohmann::json &tools) -> std::string;
+      const nlohmann::json &tools,
+      bool force_tool) -> std::string;
 };
 
 } // namespace plugins::chat_llm

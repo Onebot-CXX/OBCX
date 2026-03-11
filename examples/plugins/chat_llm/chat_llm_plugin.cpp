@@ -36,80 +36,81 @@ auto ChatLLMPlugin::get_description() const -> std::string {
 }
 
 auto ChatLLMPlugin::initialize() -> bool {
-  try {
+  // Determine base directory (repo root) from config path
+  auto config_path = obcx::common::ConfigLoader::instance().get_config_path();
+  base_dir_ = std::filesystem::path(config_path).parent_path().string();
+  PLUGIN_INFO(get_name(), "Base directory: {}", base_dir_);
 
-    // Determine base directory (repo root) from config path
-    auto config_path = obcx::common::ConfigLoader::instance().get_config_path();
-    if (!config_path.empty()) {
-      base_dir_ = std::filesystem::path(config_path).parent_path().string();
-    } else {
-      base_dir_ = std::filesystem::current_path().string();
-    }
-    PLUGIN_INFO(get_name(), "Base directory: {}", base_dir_);
-
-    // Load configuration
-    if (!load_configuration()) {
-      PLUGIN_ERROR(get_name(), "Failed to load plugin configuration");
-      return false;
-    }
-
-    // Parse URL
-    if (!parse_url(model_url_)) {
-      PLUGIN_ERROR(get_name(), "Failed to parse model_url: {}", model_url_);
-      return false;
-    }
-
-    // Load system prompt
-    if (!load_system_prompt()) {
-      PLUGIN_ERROR(get_name(), "Failed to load system prompt from: {}",
-                   prompt_path_);
-      return false;
-    }
-
-    // Initialize components
-    cmd_parser_ = std::make_unique<chat_llm::CommandParser>();
-    prompt_builder_ =
-        std::make_unique<chat_llm::PromptBuilder>(system_prompt_, 500);
-    prompt_builder_->set_max_reply_chars(runtime_config_.max_reply_chars);
-    prompt_builder_->set_history_limit(runtime_config_.history_limit);
-
-    // Initialize database
-    std::filesystem::path db_path;
-    if (std::filesystem::path(history_db_path_).is_absolute()) {
-      db_path = history_db_path_;
-    } else {
-      db_path = std::filesystem::path(base_dir_) / history_db_path_;
-    }
-
-    repo_ = std::make_unique<chat_llm::MessageRepository>(db_path.string());
-    if (!repo_->initialize()) {
-      PLUGIN_ERROR(get_name(), "Failed to initialize database");
-      return false;
-    }
-
-    // Register event callbacks for both QQ and Telegram bots
-    auto [lock, bots] = get_bots();
-    for (auto &bot_ptr : bots) {
-      auto *bot_ref = bot_ptr.get();
-      bot_ref->on_event<obcx::common::MessageEvent>(
-          [this](obcx::core::IBot &bot, const obcx::common::MessageEvent &event)
-              -> boost::asio::awaitable<void> {
-            co_await process_message(bot, event);
-          });
-    }
-
-    PLUGIN_INFO(get_name(), "Registered message callbacks");
-
-    PLUGIN_INFO(get_name(), "Chat LLM Plugin initialized successfully");
-    PLUGIN_INFO(get_name(), "  Model: {}", model_name_);
-    PLUGIN_INFO(get_name(), "  URL: {}:{}{}", url_host_, url_port_, url_path_);
-    PLUGIN_INFO(get_name(), "  Max reply chars: {}",
-                runtime_config_.max_reply_chars);
-    return true;
-  } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Exception during initialization: {}", e.what());
+  // Load configuration
+  if (!load_configuration()) {
+    PLUGIN_ERROR(get_name(), "Failed to load plugin configuration");
     return false;
   }
+
+  // Parse URL
+  if (!parse_url(model_url_)) {
+    PLUGIN_ERROR(get_name(), "Failed to parse model_url: {}", model_url_);
+    return false;
+  }
+
+  // Load system prompt
+  if (!load_system_prompt()) {
+    PLUGIN_ERROR(get_name(), "Failed to load system prompt from: {}",
+                 prompt_path_);
+    return false;
+  }
+
+  // Initialize components
+  cmd_parser_ = std::make_unique<chat_llm::CommandParser>();
+  prompt_builder_ =
+      std::make_unique<chat_llm::PromptBuilder>(system_prompt_, 500);
+  prompt_builder_->set_max_reply_chars(runtime_config_.max_reply_chars);
+  prompt_builder_->set_history_limit(runtime_config_.history_limit);
+
+  // Initialize database
+  auto db_path = std::filesystem::path(base_dir_) / history_db_path_;
+
+  repo_ = std::make_unique<chat_llm::MessageRepository>(db_path.string());
+  if (!repo_->initialize()) {
+    PLUGIN_ERROR(get_name(), "Failed to initialize database");
+    return false;
+  }
+
+  // Register event callbacks for both QQ and Telegram bots
+  auto [lock, bots] = get_bots();
+  for (auto &bot_ptr : bots) {
+    auto *bot_ref = bot_ptr.get();
+    bot_ref->on_event<obcx::common::MessageEvent>(
+        [this](obcx::core::IBot &bot, const obcx::common::MessageEvent &event)
+            -> boost::asio::awaitable<void> {
+          co_await process_message(bot, event);
+        });
+
+    // Eagerly create runtime for each bot so that the proactive timer
+    // starts immediately, rather than waiting for the first message.
+    // Note: bot may not be connected yet at plugin init time (e.g. TGBot
+    // requires connection_manager to be set up first), so we catch and
+    // defer to lazy init in process_message().
+    if (runtime_config_.proactive_enabled) {
+      try {
+        ensure_runtime(*bot_ref);
+      } catch (const std::exception &e) {
+        PLUGIN_WARN(get_name(),
+                    "Could not eagerly create runtime for bot ({}). "
+                    "Proactive timer will start on first message.",
+                    e.what());
+      }
+    }
+  }
+
+  PLUGIN_INFO(get_name(), "Registered message callbacks");
+
+  PLUGIN_INFO(get_name(), "Chat LLM Plugin initialized successfully");
+  PLUGIN_INFO(get_name(), "  Model: {}", model_name_);
+  PLUGIN_INFO(get_name(), "  URL: {}:{}{}", url_host_, url_port_, url_path_);
+  PLUGIN_INFO(get_name(), "  Max reply chars: {}",
+              runtime_config_.max_reply_chars);
+  return true;
 }
 
 void ChatLLMPlugin::deinitialize() {
@@ -125,184 +126,116 @@ void ChatLLMPlugin::shutdown() {
 }
 
 auto ChatLLMPlugin::load_configuration() -> bool {
-  try {
-    auto config_table = get_config_table();
-    if (!config_table.has_value()) {
-      PLUGIN_ERROR(get_name(), "No config found at [plugins.chat_llm.config]");
-      return false;
-    }
-
-    const auto &config = config_table.value();
-
-    // Required fields
-    if (auto val = config["model_url"].value<std::string>()) {
-      model_url_ = *val;
-    } else {
-      PLUGIN_ERROR(get_name(), "Missing required config: model_url");
-      return false;
-    }
-
-    if (auto val = config["model_name"].value<std::string>()) {
-      model_name_ = *val;
-    } else {
-      PLUGIN_ERROR(get_name(), "Missing required config: model_name");
-      return false;
-    }
-
-    if (auto val = config["api_key"].value<std::string>()) {
-      api_key_ = *val;
-    } else {
-      PLUGIN_ERROR(get_name(), "Missing required config: api_key");
-      return false;
-    }
-
-    if (auto val = config["prompt_path"].value<std::string>()) {
-      prompt_path_ = *val;
-    } else {
-      PLUGIN_ERROR(get_name(), "Missing required config: prompt_path");
-      return false;
-    }
-
-    if (auto val = config["history_db_path"].value<std::string>()) {
-      history_db_path_ = *val;
-      PLUGIN_INFO(get_name(), "History DB path configured: {}",
-                  history_db_path_);
-    } else {
-      PLUGIN_ERROR(get_name(), "Missing required config: history_db_path");
-      return false;
-    }
-
-    // Optional fields
-    if (auto val = config["max_reply_chars"].value<int64_t>()) {
-      if (prompt_builder_) {
-        prompt_builder_->set_max_reply_chars(static_cast<int>(*val));
-      }
-      runtime_config_.max_reply_chars = static_cast<int>(*val);
-    }
-
-    if (auto val = config["history_limit"].value<int64_t>()) {
-      if (prompt_builder_) {
-        prompt_builder_->set_history_limit(static_cast<int>(*val));
-      }
-      runtime_config_.history_limit = static_cast<int>(*val);
-    }
-
-    if (auto val = config["history_ttl_days"].value<int64_t>()) {
-      runtime_config_.history_ttl_days = static_cast<int>(*val);
-    }
-
-    if (auto val = config["collect_enabled"].value<bool>()) {
-      runtime_config_.collect_enabled = *val;
-    }
-
-    if (auto val = get_config_value<std::vector<std::string>>(
-            "collect_allowed_groups")) {
-      runtime_config_.collect_allowed_groups = *val;
-    }
-
-    if (auto val = config["cleanup_interval_ms"].value<int64_t>()) {
-      runtime_config_.cleanup_interval =
-          std::chrono::milliseconds(static_cast<int64_t>(*val));
-    }
-
-    if (auto val = config["max_tool_steps"].value<int64_t>()) {
-      max_tool_steps_ = static_cast<int>(*val);
-    }
-
-    PLUGIN_INFO(get_name(),
-                "Final config: collect_enabled={}, history_limit={}, "
-                "max_reply_chars={}, history_ttl_days={}, max_tool_steps={}",
-                runtime_config_.collect_enabled, runtime_config_.history_limit,
-                runtime_config_.max_reply_chars,
-                runtime_config_.history_ttl_days, max_tool_steps_);
-    PLUGIN_INFO(get_name(), "Configuration loaded successfully");
-    return true;
-  } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Failed to load configuration: {}", e.what());
+  auto config_table = get_config_table();
+  if (!config_table.has_value()) {
+    PLUGIN_ERROR(get_name(), "No config found at [plugins.chat_llm.config]");
     return false;
   }
+
+  const auto &config = config_table.value();
+
+  // Required fields
+  model_url_ = config["model_url"].value<std::string>().value();
+  model_name_ = config["model_name"].value<std::string>().value();
+  api_key_ = config["api_key"].value<std::string>().value();
+  prompt_path_ = config["prompt_path"].value<std::string>().value();
+  history_db_path_ = config["history_db_path"].value<std::string>().value();
+  PLUGIN_INFO(get_name(), "History DB path configured: {}", history_db_path_);
+
+  runtime_config_.max_reply_chars =
+      static_cast<int>(config["max_reply_chars"].value<int64_t>().value());
+  runtime_config_.history_limit =
+      static_cast<int>(config["history_limit"].value<int64_t>().value());
+  runtime_config_.history_ttl_days =
+      static_cast<int>(config["history_ttl_days"].value<int64_t>().value());
+  runtime_config_.collect_enabled =
+      config["collect_enabled"].value<bool>().value();
+  runtime_config_.collect_allowed_groups =
+      get_config_value<std::vector<std::string>>("collect_allowed_groups")
+          .value();
+  runtime_config_.cleanup_interval = std::chrono::milliseconds(
+      config["cleanup_interval_ms"].value<int64_t>().value());
+  max_tool_steps_ =
+      static_cast<int>(config["max_tool_steps"].value<int64_t>().value());
+
+  // Proactive chat settings
+  runtime_config_.proactive_enabled =
+      config["proactive_enabled"].value<bool>().value();
+  runtime_config_.proactive_interval = std::chrono::milliseconds(
+      config["proactive_interval_ms"].value<int64_t>().value());
+  runtime_config_.proactive_groups =
+      get_config_value<std::vector<std::string>>("proactive_groups").value();
+
+  PLUGIN_INFO(get_name(),
+              "Final config: collect_enabled={}, history_limit={}, "
+              "max_reply_chars={}, history_ttl_days={}, max_tool_steps={}, "
+              "proactive_enabled={}, proactive_interval_ms={}",
+              runtime_config_.collect_enabled, runtime_config_.history_limit,
+              runtime_config_.max_reply_chars,
+              runtime_config_.history_ttl_days, max_tool_steps_,
+              runtime_config_.proactive_enabled,
+              runtime_config_.proactive_interval.count());
+  PLUGIN_INFO(get_name(), "Configuration loaded successfully");
+  return true;
 }
 
 auto ChatLLMPlugin::load_system_prompt() -> bool {
-  try {
-    std::filesystem::path prompt_full_path;
-    if (std::filesystem::path(prompt_path_).is_absolute()) {
-      prompt_full_path = prompt_path_;
-    } else {
-      prompt_full_path = std::filesystem::path(base_dir_) / prompt_path_;
-    }
+  auto prompt_full_path = std::filesystem::path(base_dir_) / prompt_path_;
 
-    PLUGIN_INFO(get_name(), "Loading system prompt from: {}",
-                prompt_full_path.string());
+  PLUGIN_INFO(get_name(), "Loading system prompt from: {}",
+              prompt_full_path.string());
 
-    if (!std::filesystem::exists(prompt_full_path)) {
-      PLUGIN_ERROR(get_name(), "System prompt file not found: {}",
-                   prompt_full_path.string());
-      return false;
-    }
-
-    std::ifstream file(prompt_full_path);
-    if (!file.is_open()) {
-      PLUGIN_ERROR(get_name(), "Failed to open system prompt file: {}",
-                   prompt_full_path.string());
-      return false;
-    }
-
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    system_prompt_ = buffer.str();
-
-    if (system_prompt_.empty()) {
-      PLUGIN_WARN(get_name(), "System prompt file is empty");
-    } else {
-      PLUGIN_INFO(get_name(), "Loaded system prompt ({} chars)",
-                  system_prompt_.size());
-    }
-
-    return true;
-  } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Failed to load system prompt: {}", e.what());
+  if (!std::filesystem::exists(prompt_full_path)) {
+    PLUGIN_ERROR(get_name(), "System prompt file not found: {}",
+                 prompt_full_path.string());
     return false;
   }
+
+  std::ifstream file(prompt_full_path);
+  if (!file.is_open()) {
+    PLUGIN_ERROR(get_name(), "Failed to open system prompt file: {}",
+                 prompt_full_path.string());
+    return false;
+  }
+
+  std::stringstream buffer;
+  buffer << file.rdbuf();
+  system_prompt_ = buffer.str();
+
+  PLUGIN_INFO(get_name(), "Loaded system prompt ({} chars)",
+              system_prompt_.size());
+
+  return true;
 }
 
 auto ChatLLMPlugin::parse_url(const std::string &url) -> bool {
-  try {
-    std::regex url_regex(R"(^(https?)://([^/:]+)(?::(\d+))?(/.*)?$)",
-                         std::regex::icase);
-    std::smatch match;
+  std::regex url_regex(R"(^(https?)://([^/:]+)(?::(\d+))?(/.*)$)",
+                       std::regex::icase);
+  std::smatch match;
 
-    if (!std::regex_match(url, match, url_regex)) {
-      PLUGIN_ERROR(get_name(), "Invalid URL format: {}", url);
-      return false;
-    }
-
-    std::string scheme = match[1].str();
-    url_host_ = match[2].str();
-    std::string port_str = match[3].str();
-    url_path_ = match[4].str();
-
-    url_use_ssl_ = (scheme == "https" || scheme == "HTTPS");
-
-    if (!port_str.empty()) {
-      url_port_ = static_cast<uint16_t>(std::stoi(port_str));
-    } else {
-      url_port_ = url_use_ssl_ ? 443 : 80;
-    }
-
-    if (url_path_.empty()) {
-      url_path_ = "/";
-    }
-
-    PLUGIN_DEBUG(get_name(),
-                 "Parsed URL - host: {}, port: {}, path: {}, ssl: {}",
-                 url_host_, url_port_, url_path_, url_use_ssl_);
-
-    return true;
-  } catch (const std::exception &e) {
-    PLUGIN_ERROR(get_name(), "Failed to parse URL: {}", e.what());
+  if (!std::regex_match(url, match, url_regex)) {
+    PLUGIN_ERROR(get_name(), "Invalid URL format: {}", url);
     return false;
   }
+
+  std::string scheme = match[1].str();
+  url_host_ = match[2].str();
+  std::string port_str = match[3].str();
+  url_path_ = match[4].str();
+
+  url_use_ssl_ = (scheme == "https" || scheme == "HTTPS");
+
+  if (!port_str.empty()) {
+    url_port_ = static_cast<uint16_t>(std::stoi(port_str));
+  } else {
+    url_port_ = url_use_ssl_ ? 443 : 80;
+  }
+
+  PLUGIN_DEBUG(get_name(),
+               "Parsed URL - host: {}, port: {}, path: {}, ssl: {}",
+               url_host_, url_port_, url_path_, url_use_ssl_);
+
+  return true;
 }
 
 auto ChatLLMPlugin::get_llm_tools() const -> nlohmann::json {
@@ -312,7 +245,7 @@ auto ChatLLMPlugin::get_llm_tools() const -> nlohmann::json {
       {"name", "send_message"},
       {"description",
        "Send a message to the current group immediately. Use this when you "
-       "need to reply before your final answer."},
+       "need to send a message."},
       {"parameters",
        {
            {"type", "object"},
@@ -354,6 +287,12 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
     -> boost::asio::awaitable<void> {
   auto rt = ensure_runtime(bot);
   const auto &rt_config = rt->get_config();
+
+  // Cache bot's self_id from the first message event we see
+  if (!event.self_id.empty()) {
+    std::lock_guard<std::mutex> lock(runtimes_mutex_);
+    bot_self_ids_[&bot] = event.self_id;
+  }
 
   // Only process group messages
   if (event.message_type != "group" || !event.group_id.has_value()) {
@@ -408,11 +347,7 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
     record.user_id = user_id;
     record.content = text_content;
     record.timestamp_ms = timestamp_ms;
-    record.is_bot = false;
-    if (event.data.contains("from") &&
-        event.data["from"].contains("is_bot")) {
-      record.is_bot = event.data["from"]["is_bot"].get<bool>();
-    }
+    record.is_bot = event.data["from"]["is_bot"].get<bool>();
     record.is_command = false;
 
     co_await bot.run_heavy_task([this, record, &rt_config]() {
@@ -466,10 +401,7 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
   cmd_record.user_id = user_id;
   cmd_record.content = cmd.text;
   cmd_record.timestamp_ms = cmd_timestamp_ms;
-  cmd_record.is_bot = false;
-  if (event.data.contains("from") && event.data["from"].contains("is_bot")) {
-    cmd_record.is_bot = event.data["from"]["is_bot"].get<bool>();
-  }
+  cmd_record.is_bot = event.data["from"]["is_bot"].get<bool>();
   cmd_record.is_command = true;
 
   co_await bot.run_heavy_task([this, cmd_record, &rt_config]() {
@@ -573,8 +505,7 @@ auto ChatLLMPlugin::process_message(obcx::core::IBot &bot,
     bool sent_this_round = false;
     for (const auto &call : llm_response.tool_calls) {
       const auto tool_result = co_await execute_tool_call(bot, cmd, call);
-      if (tool_result.contains("sent") && tool_result["sent"].is_boolean() &&
-          tool_result["sent"].get<bool>()) {
+      if (tool_result["sent"].get<bool>()) {
         sent_via_tool = true;
         sent_this_round = true;
       }
@@ -635,7 +566,7 @@ auto ChatLLMPlugin::send_response(obcx::core::IBot &bot,
     bot_rec.platform = cmd.platform;
     bot_rec.group_id = cmd.group_id;
     bot_rec.message_id = message_id;
-    bot_rec.user_id = cmd.user_id; // Use self_id ideally
+    bot_rec.user_id = cmd.self_id;
     bot_rec.content = text;
     bot_rec.timestamp_ms = timestamp_ms;
     bot_rec.is_bot = true;
@@ -646,6 +577,184 @@ auto ChatLLMPlugin::send_response(obcx::core::IBot &bot,
       return repo_->append_message(bot_rec, rt_config.collect_enabled,
                                    rt_config.collect_allowed_groups);
     });
+}
+
+auto ChatLLMPlugin::send_proactive_message(obcx::core::IBot &bot,
+                                           const std::string &platform,
+                                           const std::string &group_id,
+                                           const std::string &text)
+    -> boost::asio::awaitable<void> {
+  auto rt = ensure_runtime(bot);
+
+  obcx::common::Message message;
+  obcx::common::MessageSegment text_segment;
+  text_segment.type = "text";
+  text_segment.data["text"] = text;
+  message.push_back(text_segment);
+
+  co_await bot.send_group_message(group_id, message);
+
+  // Save bot's proactive reply to database
+  int64_t timestamp_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch())
+          .count();
+  std::string message_id =
+      "local-bot-proactive-" + std::to_string(timestamp_ms) + "-" + group_id;
+
+  // Look up cached self_id for this bot
+  std::string self_id;
+  {
+    std::lock_guard<std::mutex> lock(runtimes_mutex_);
+    self_id = bot_self_ids_.at(&bot);
+  }
+
+  chat_llm::MessageRecord bot_rec;
+  bot_rec.platform = platform;
+  bot_rec.group_id = group_id;
+  bot_rec.message_id = message_id;
+  bot_rec.user_id = self_id;
+  bot_rec.content = text;
+  bot_rec.timestamp_ms = timestamp_ms;
+  bot_rec.is_bot = true;
+  bot_rec.is_command = false;
+
+  const auto &rt_config = rt->get_config();
+  co_await bot.run_heavy_task([this, bot_rec, &rt_config]() {
+    return repo_->append_message(bot_rec, rt_config.collect_enabled,
+                                 rt_config.collect_allowed_groups);
+  });
+}
+
+auto ChatLLMPlugin::run_proactive_for_group(obcx::core::IBot &bot,
+                                            const std::string &platform,
+                                            const std::string &group_id)
+    -> boost::asio::awaitable<void> {
+  auto rt = ensure_runtime(bot);
+  const auto &rt_config = rt->get_config();
+
+  PLUGIN_INFO(get_name(), "Proactive check for group {} (platform={})",
+              group_id, platform);
+
+  // Step 1: Fetch recent history for this group
+  int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::system_clock::now().time_since_epoch())
+                       .count();
+
+  chat_llm::ContextQuery ctx_query;
+  ctx_query.platform = platform;
+  ctx_query.group_id = group_id;
+  ctx_query.before_timestamp_ms = now_ms;
+  ctx_query.limit = rt_config.history_limit;
+
+  auto history = co_await bot.run_heavy_task(
+      [this, ctx_query]() { return repo_->fetch_context(ctx_query); });
+
+  // Skip if no recent messages to analyze
+  if (history.empty()) {
+    PLUGIN_INFO(get_name(),
+                "Proactive: no history for group {}, skipping", group_id);
+    co_return;
+  }
+
+  // Skip LLM call if no new messages since last proactive check.
+  // This avoids repeatedly calling the LLM with the same history, which
+  // wastes API quota and can cause the model to produce irritated responses.
+  int64_t latest_ts = history.back().timestamp_ms;
+  int64_t last_checked_ts = rt->get_last_proactive_ts(group_id);
+  if (latest_ts > 0 && latest_ts <= last_checked_ts) {
+    PLUGIN_DEBUG(get_name(),
+                 "Proactive: no new messages in group {} since last check "
+                 "(latest_ts={}, last_checked={}), skipping LLM call",
+                 group_id, latest_ts, last_checked_ts);
+    co_return;
+  }
+  // Record the latest timestamp for next check
+  rt->set_last_proactive_ts(group_id, latest_ts);
+
+  PLUGIN_INFO(get_name(),
+              "Proactive: fetched {} history messages for group {}",
+              history.size(), group_id);
+
+  // Step 2: Build proactive prompt (no user message, just history + decision instruction)
+  auto openai_messages = prompt_builder_->build_proactive(history, "");
+  std::vector<nlohmann::json> llm_messages;
+  llm_messages.reserve(openai_messages.size());
+  for (const auto &msg : openai_messages) {
+    nlohmann::json m;
+    m["role"] = (msg.role == chat_llm::MessageRole::system)
+                    ? "system"
+                    : (msg.role == chat_llm::MessageRole::user) ? "user"
+                                                                 : "assistant";
+    m["content"] = msg.content;
+    llm_messages.push_back(std::move(m));
+  }
+
+  // Step 3: Call LLM with tool_choice="auto" (NOT forced)
+  // The LLM decides whether to call send_message or stay silent.
+  const auto tools = get_llm_tools();
+
+  auto llm_response = co_await bot.run_heavy_task(
+      [this, llm_messages, tools]() {
+        boost::asio::io_context ioc;
+        chat_llm::OpenAiCompatClient::Config client_config;
+        client_config.model_name = model_name_;
+        client_config.api_key = api_key_;
+        client_config.host = url_host_;
+        client_config.port = url_port_;
+        client_config.path = url_path_;
+        client_config.use_ssl = url_use_ssl_;
+        client_config.timeout = std::chrono::milliseconds(120000);
+
+        chat_llm::OpenAiCompatClient client(ioc, client_config);
+        // force_tool=false → tool_choice="auto"
+        return client.chat_completion(llm_messages, tools, false);
+      });
+
+  if (!llm_response.success) {
+    PLUGIN_ERROR(get_name(), "Proactive LLM request failed for group {}: {}",
+                 group_id, llm_response.error_message);
+    co_return;
+  }
+
+  // Log full LLM response for debugging
+  PLUGIN_INFO(get_name(),
+              "Proactive: LLM response for group {} — "
+              "content=\"{}\" tool_calls={} response_size={}",
+              group_id,
+              llm_response.content.empty() ? "(empty)" : llm_response.content,
+              llm_response.tool_calls.size(),
+              llm_response.response_size);
+
+  // Step 4: If LLM chose NOT to call any tool, it means it decided to stay silent
+  if (llm_response.tool_calls.empty()) {
+    PLUGIN_INFO(get_name(),
+                "Proactive: LLM decided NOT to speak in group {} — "
+                "reason: \"{}\"",
+                group_id,
+                llm_response.content.empty()
+                    ? "(no content returned)"
+                    : llm_response.content);
+    co_return;
+  }
+
+  // Step 5: Execute tool calls (only send_message)
+  for (const auto &call : llm_response.tool_calls) {
+    if (call.name != "send_message") {
+      PLUGIN_WARN(get_name(),
+                  "Proactive: unexpected tool call '{}' in group {}, skipping",
+                  call.name, group_id);
+      continue;
+    }
+
+    auto args = nlohmann::json::parse(call.arguments);
+    const auto text = args["text"].get<std::string>();
+
+    PLUGIN_INFO(get_name(),
+                "Proactive: sending message to group {} (len={})",
+                group_id, text.size());
+    co_await send_proactive_message(bot, platform, group_id, text);
+  }
 }
 
 auto ChatLLMPlugin::ensure_runtime(obcx::core::IBot &bot)
@@ -668,6 +777,51 @@ auto ChatLLMPlugin::ensure_runtime(obcx::core::IBot &bot)
     }
     repo_->cleanup_ttl(runtime_config_.history_ttl_days);
   });
+
+  // Schedule proactive chat task if enabled
+  if (runtime_config_.proactive_enabled &&
+      !runtime_config_.proactive_groups.empty()) {
+    PLUGIN_INFO(get_name(),
+                "Scheduling proactive chat timer (interval={}ms, groups={})",
+                runtime_config_.proactive_interval.count(),
+                runtime_config_.proactive_groups.size());
+
+    runtime->schedule_proactive_task(
+        [this, &bot, weak_rt = std::weak_ptr(runtime)]() {
+          auto rt = weak_rt.lock();
+          if (!rt || rt->is_stopping()) {
+            return;
+          }
+
+          // Detect platform from bot type
+          std::string platform =
+              (dynamic_cast<obcx::core::QQBot *>(&bot) != nullptr) ? "qq"
+                                                                    : "telegram";
+
+          const auto &proactive_groups = rt->get_config().proactive_groups;
+
+          // Spawn a coroutine for the proactive check
+          boost::asio::co_spawn(
+              rt->get_executor(),
+              [this, &bot, platform, proactive_groups,
+               weak_rt2 = std::weak_ptr(rt)]()
+                  -> boost::asio::awaitable<void> {
+                auto rt2 = weak_rt2.lock();
+                if (!rt2 || rt2->is_stopping()) {
+                  co_return;
+                }
+
+                for (const auto &group_id : proactive_groups) {
+                  if (rt2->is_stopping()) {
+                    co_return;
+                  }
+
+                  co_await run_proactive_for_group(bot, platform, group_id);
+                }
+              },
+              boost::asio::detached);
+        });
+  }
 
   runtimes_[&bot] = runtime;
   return runtime;
