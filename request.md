@@ -1,0 +1,1 @@
+现在我想新建一个插件实现/chat命令：这个插件的配置文件中将会有bot的nickname，类openai格式的model-url，model-name与api，用以提供llm的调用接口。当有人调用此命令时，bot会检索历史50条字数在100以内的消息，不足50条则全部检索, 作为llm历史上下文。同时，给llm的system prompt在prompt.txt中提供。之后，bot会将llm的输出发送到群聊中。

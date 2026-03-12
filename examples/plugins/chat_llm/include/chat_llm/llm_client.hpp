@@ -1,0 +1,109 @@
+#pragma once
+
+#include <boost/asio.hpp>
+#include <chrono>
+#include <cstdint>
+#include <map>
+#include <nlohmann/json.hpp>
+#include <string>
+#include <vector>
+
+namespace plugins::chat_llm {
+
+/**
+ * @brief Response from LLM API
+ */
+struct LlmResponse {
+  bool success = false;
+  std::string content;
+  struct ToolCall {
+    std::string id;
+    std::string name;
+    std::string arguments;
+  };
+  std::vector<ToolCall> tool_calls;
+  std::string error_message;
+  unsigned int status_code = 0;
+  size_t response_size = 0;
+};
+
+/**
+ * @brief Interface for LLM API clients
+ */
+class LlmClient {
+public:
+  virtual ~LlmClient() = default;
+
+  /**
+   * @brief Send chat completion request
+   * @param messages OpenAI-formatted messages array
+   * @param tools Tool definitions array
+   * @param force_tool If true, force specific tool via tool_choice; if false,
+   *                   use "auto" so LLM decides whether to call tools
+   * @return Response from LLM API
+   */
+  [[nodiscard]] virtual auto chat_completion(
+      const std::vector<nlohmann::json> &messages,
+      const nlohmann::json &tools = nlohmann::json::array(),
+      bool force_tool = true) -> LlmResponse {
+    throw std::runtime_error("chat_completion not implemented");
+  }
+};
+
+/**
+ * @brief OpenAI-compatible LLM client
+ *
+ * Uses HttpClient for HTTP requests.
+ * Supports timeout and basic error handling.
+ * Does NOT add vendor-specific fields by default.
+ */
+class OpenAiCompatClient : public LlmClient {
+public:
+  /**
+   * @brief Configuration for OpenAI-compatible client
+   */
+  struct Config {
+    std::string model_name;
+    std::string api_key;
+    std::string host;
+    uint16_t port = 443;
+    std::string path;
+    bool use_ssl = true;
+    std::chrono::milliseconds timeout = std::chrono::milliseconds{120000};
+  };
+
+  explicit OpenAiCompatClient(boost::asio::io_context &ioc, Config config);
+
+  /**
+   * @brief Send chat completion request (synchronous, called from thread pool)
+   * @param messages OpenAI-formatted messages array
+   * @param tools Tool definitions array
+   * @param force_tool If true, force specific tool via tool_choice; if false,
+   *                   use "auto" so LLM decides whether to call tools
+   */
+  [[nodiscard]] auto chat_completion(
+      const std::vector<nlohmann::json> &messages,
+      const nlohmann::json &tools = nlohmann::json::array(),
+      bool force_tool = true)
+      -> LlmResponse override;
+
+  /**
+   * @brief Set request timeout
+   */
+  void set_timeout(std::chrono::milliseconds timeout) { timeout_ = timeout; }
+
+private:
+  boost::asio::io_context &ioc_;
+  Config config_;
+  std::chrono::milliseconds timeout_;
+
+  /**
+   * @brief Build JSON request body
+   */
+  [[nodiscard]] auto build_request_body(
+      const std::vector<nlohmann::json> &messages,
+      const nlohmann::json &tools,
+      bool force_tool) -> std::string;
+};
+
+} // namespace plugins::chat_llm

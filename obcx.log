@@ -1,0 +1,63 @@
+[2026-01-24 22:11:52.867] [obcx] [info] Logger initialized successfully
+[2026-01-24 22:11:52.867] [obcx] [info] Config loaded successfully from: config.toml
+[2026-01-24 22:11:52.867] [obcx] [info] Log locale set to: en_US.UTF-8
+[2026-01-24 22:11:52.867] [obcx] [info] OBCX Robot Framework starting...
+[2026-01-24 22:11:52.867] [obcx] [info] Configuration loaded from: config.toml
+[2026-01-24 22:11:52.867] [obcx] [info] Added plugin directory: ./build/plugins
+[2026-01-24 22:11:52.867] [obcx] [warning] Plugin directory does not exist: ./plugins
+[2026-01-24 22:11:52.868] [obcx] [info] TaskScheduler created with thread pool size: 24
+[2026-01-24 22:11:52.868] [obcx] [info] Created shared TaskScheduler with 24 threads
+[2026-01-24 22:11:52.868] [obcx] [info] TelegramBot instance created, all core components initialized
+[2026-01-24 22:11:52.868] [obcx] [info] Plugin initialization order: chat_llm
+[2026-01-24 22:11:52.869] [obcx] [info] Plugin chat_llm loaded successfully from ./build/plugins/chat_llm.so
+[2026-01-24 22:11:52.869] [chat_llm] [info] Initializing Chat LLM Plugin...
+[2026-01-24 22:11:52.869] [chat_llm] [info] Base directory: 
+[2026-01-24 22:11:52.869] [chat_llm] [info] History DB path configured: mock.db
+[2026-01-24 22:11:52.869] [chat_llm] [info] Configuration loaded successfully
+[2026-01-24 22:11:52.870] [chat_llm] [info] Loading system prompt from: prompt.txt
+[2026-01-24 22:11:52.870] [chat_llm] [info] Loaded system prompt (975 chars)
+[2026-01-24 22:11:52.870] [chat_llm] [info] Initializing database: mock.db
+[2026-01-24 22:11:52.876] [chat_llm] [info] Database initialized successfully
+[2026-01-24 22:11:52.876] [chat_llm] [info] Registered Telegram message callback
+[2026-01-24 22:11:52.876] [chat_llm] [info] Chat LLM Plugin initialized successfully
+[2026-01-24 22:11:52.876] [chat_llm] [info]   Model: glm-4.7
+[2026-01-24 22:11:52.876] [chat_llm] [info]   URL: open.bigmodel.cn:443/api/coding/paas/v4/chat/completions
+[2026-01-24 22:11:52.876] [chat_llm] [info]   Max reply chars: 500
+[2026-01-24 22:11:52.876] [obcx] [info] Plugin chat_llm initialized successfully
+[2026-01-24 22:11:52.876] [obcx] [info] Proxy config - Host: '127.0.0.1', Port: 23450, Type: 'http'
+[2026-01-24 22:11:52.876] [obcx] [info] Connection established to TelegramConnectionManager:initialized
+[2026-01-24 22:11:52.879] [obcx] [info] HTTP Client initialized for api.telegram.org:443
+[2026-01-24 22:11:52.879] [obcx] [info] HTTP connection will be established through http proxy 127.0.0.1:23450 to api.telegram.org:443
+[2026-01-24 22:11:52.879] [obcx] [info] Start polling, interval: 1000ms
+[2026-01-24 22:11:52.879] [obcx] [info] Connecting to api.telegram.org:443 using Telegram_HTTP connection type
+[2026-01-24 22:11:52.879] [obcx] [info] Bot component setup completed successfully
+[2026-01-24 22:11:52.879] [obcx] [info] Starting bot component of type: telegram
+[2026-01-24 22:11:52.879] [obcx] [info] All components started successfully. OBCX Framework running...
+[2026-01-24 22:11:52.879] [obcx] [info] TelegramBot starting event loop...
+[2026-01-24 22:13:32.540] [obcx] [info] Received signal 15, shutting down gracefully...
+[2026-01-24 22:13:32.540] [obcx] [info] Shutting down OBCX Framework...
+[2026-01-24 22:13:32.540] [obcx] [info] Requesting TelegramBot to stop...
+[2026-01-24 22:13:32.540] [obcx] [info] Stop polling
+[2026-01-24 22:13:32.540] [obcx] [info] HTTP Client closed
+[2026-01-24 22:13:32.540] [obcx] [info] Connection closed
+[2026-01-24 22:13:32.540] [obcx] [info] Stopping TaskScheduler...
+[2026-01-24 22:13:32.541] [obcx] [info] TaskScheduler stopped
+[2026-01-24 22:13:32.541] [obcx] [info] Waiting for bot thread 0 to finish...
+[2026-01-24 22:13:36.584] [obcx] [info] TelegramBot event loop ended
+[2026-01-24 22:13:37.541] [chat_llm] [info] Shutting down Chat LLM Plugin...
+[2026-01-24 22:13:37.541] [chat_llm] [info] Chat LLM Plugin shutdown complete
+[2026-01-24 22:13:37.541] [obcx] [info] Plugin chat_llm shutdown successfully
+[2026-01-24 22:13:37.541] [obcx] [info] OBCX Framework shutdown complete
+[2026-01-24 22:13:37.542] [obcx] [info] TelegramBot instance destroyed.
+[2026-01-24 22:13:37.542] [obcx] [info] Stop polling
+[2026-01-24 22:13:37.542] [obcx] [info] Connection closed
+[2026-01-24 22:13:37.542] [obcx] [info] TaskScheduler destroyed
+[2026-01-24 22:13:37.552] [chat_llm] [info] Shutting down Chat LLM Plugin...
+[2026-01-24 22:13:37.552] [chat_llm] [info] Chat LLM Plugin shutdown complete
+[2026-01-24 22:13:37.552] [obcx] [info] Plugin chat_llm shutdown successfully
+[2026-01-24 22:13:37.552] [chat_llm] [info] Shutting down Chat LLM Plugin...
+[2026-01-24 22:13:37.552] [chat_llm] [info] Chat LLM Plugin shutdown complete
+[2026-01-24 22:13:37.552] [obcx] [info] Plugin chat_llm shutdown successfully
+[2026-01-24 22:13:37.552] [chat_llm] [info] Shutting down Chat LLM Plugin...
+[2026-01-24 22:13:37.552] [chat_llm] [info] Chat LLM Plugin shutdown complete
+[2026-01-24 22:13:37.553] [obcx] [info] All plugins unloaded

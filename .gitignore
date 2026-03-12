@@ -68,3 +68,11 @@ logs/
 
 vcpkg_installed/
 .direnv/
+
+# Local config
+config.toml
+AGENTS.md
+CLAUDE.md
+PROGRESS.md
+SOLVING.md
+TRIED.md
