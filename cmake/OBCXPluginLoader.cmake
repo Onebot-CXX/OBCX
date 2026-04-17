@@ -121,9 +121,9 @@ function(obcx_load_plugins MANIFEST_FILE)
                 GIT_SHALLOW TRUE
                 SOURCE_DIR ${CMAKE_BINARY_DIR}/_plugins/${_CMAKE_NAME})
 
-            FetchContent_MakeAvailable(plugin_${_CMAKE_NAME})
-
-            # Check plugin.toml for vcpkg_deps and warn about missing packages
+            # Print dependency hints before FetchContent_MakeAvailable
+            # so the message appears above any find_package errors.
+            # If source was already fetched (cached), read plugin.toml for specifics.
             set(_PLUGIN_TOML "${CMAKE_BINARY_DIR}/_plugins/${_CMAKE_NAME}/plugin.toml")
             if(EXISTS "${_PLUGIN_TOML}" AND PYTHON_EXEC)
                 execute_process(
@@ -136,31 +136,21 @@ function(obcx_load_plugins MANIFEST_FILE)
                     RESULT_VARIABLE _PARSE_RESULT)
 
                 if(_PARSE_RESULT EQUAL 0 AND _PLUGIN_VCPKG_DEPS)
-                    string(REPLACE "\n" ";" _DEP_LIST "${_PLUGIN_VCPKG_DEPS}")
-                    set(_MISSING_DEPS "")
-                    foreach(_DEP ${_DEP_LIST})
-                        string(REPLACE "-" "_" _DEP_UNDERSCORE "${_DEP}")
-                        # Check common find_package names
-                        set(_FOUND FALSE)
-                        foreach(_NAME ${_DEP} ${_DEP_UNDERSCORE})
-                            if(TARGET ${_NAME} OR TARGET ${_NAME}::${_NAME})
-                                set(_FOUND TRUE)
-                                break()
-                            endif()
-                        endforeach()
-                        if(NOT _FOUND)
-                            list(APPEND _MISSING_DEPS "${_DEP}")
-                        endif()
-                    endforeach()
-
-                    if(_MISSING_DEPS)
-                        list(JOIN _MISSING_DEPS ", " _MISSING_STR)
-                        message(WARNING "[OBCX Plugins] Remote plugin '${_REPO}' needs packages: ${_MISSING_STR}\n"
-                            "  If using vcpkg: re-run 'python3 cmake/gen_vcpkg_manifest.py plugins.toml' then reconfigure.\n"
-                            "  Otherwise: install these packages via your system package manager.")
-                    endif()
+                    string(REPLACE "\n" ", " _DEPS_STR "${_PLUGIN_VCPKG_DEPS}")
+                    message(STATUS "[OBCX Plugins] '${_REPO}' requires: ${_DEPS_STR}")
+                    message(STATUS "[OBCX Plugins] If packages are missing:")
+                    message(STATUS "[OBCX Plugins]   vcpkg: python3 cmake/gen_vcpkg_manifest.py plugins.toml && vcpkg install")
+                    message(STATUS "[OBCX Plugins]   system: install the packages above via your package manager")
+                    message(STATUS "[OBCX Plugins]   list all deps: python3 cmake/gen_vcpkg_manifest.py plugins.toml --list")
                 endif()
+            else()
+                message(STATUS "[OBCX Plugins] If configure fails due to missing packages:")
+                message(STATUS "[OBCX Plugins]   vcpkg: python3 cmake/gen_vcpkg_manifest.py plugins.toml && vcpkg install")
+                message(STATUS "[OBCX Plugins]   system: install the required packages via your package manager")
+                message(STATUS "[OBCX Plugins]   list all deps: python3 cmake/gen_vcpkg_manifest.py plugins.toml --list")
             endif()
+
+            FetchContent_MakeAvailable(plugin_${_CMAKE_NAME})
 
             list(APPEND REMOTE_PLUGINS "${_REPO}")
         endif()

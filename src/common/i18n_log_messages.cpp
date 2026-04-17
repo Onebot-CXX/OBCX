@@ -620,10 +620,6 @@ void I18nLogMessages::setup_message_keys() {
       "Plugin '{}' priority out of range [0-255], using default 0";
   message_keys_[LogMessageKey::PLUGIN_LOAD_ORDER_INFO] =
       "Plugin initialization order: {}";
-  message_keys_[LogMessageKey::PLUGIN_ABI_MISMATCH] =
-      "Plugin {} ABI version mismatch: plugin has ABI {}, expected {}";
-  message_keys_[LogMessageKey::PLUGIN_ABI_NOT_FOUND] =
-      "Plugin {} does not export obcx_get_abi_version, skipping ABI check";
 
   // Main / Framework
   message_keys_[LogMessageKey::SHUTDOWN_IN_PROGRESS] =
