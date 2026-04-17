@@ -1,0 +1,20 @@
+# plugins.toml — Edit this file to control which plugins are compiled
+# Local plugins: set enabled = false to skip compilation
+# Remote plugins: add "user/repo" strings to the array
+
+# ===== Local plugins (For example, in folder local_plugin) =====
+[local]
+plugins = [
+  # { name = "bridge_bot", path = "local_plugin/bridge_bot" },
+]
+
+# ===== Remote plugins (GitHub repos, just "user/repo") =====
+[remote]
+plugins = [
+  # "author/repo_name",
+]
+
+# Optional: pin specific versions for remote plugins
+# [remote.overrides."user/repo"]
+# tag = "v1.0.0"
+# branch = "main"

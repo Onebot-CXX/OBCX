@@ -73,6 +73,8 @@ vcpkg.json
 .direnv/
 
 # Local config
+local_plugin/
+plugin.toml
 config.toml
 AGENTS.md
 CLAUDE.md
