@@ -141,19 +141,9 @@ public:
     common::PluginManager plugin_manager;
     auto &component_manager = ComponentManager::instance();
 
-    // Add plugin directories
-    if (auto plugin_dirs = config_loader.get_section("plugin_directories")) {
-      for (const auto &[key, value] : *plugin_dirs) {
-        if (auto dir = value.value<std::string>()) {
-          plugin_manager.add_plugin_directory(*dir);
-        }
-      }
-    } else {
-      // Default plugin directories
-      plugin_manager.add_plugin_directory("./plugins");
-      plugin_manager.add_plugin_directory("./build/plugins");
-      plugin_manager.add_plugin_directory("/usr/local/lib/obcx/plugins");
-    }
+    // Plugin search directories (all plugins are built to build/plugins/)
+    plugin_manager.add_plugin_directory("./plugins");
+    plugin_manager.add_plugin_directory("./build/plugins");
 
     // Load bot configurations
     auto bot_configs = config_loader.get_bot_configs();

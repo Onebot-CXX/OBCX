@@ -134,10 +134,6 @@ ctest
 [global]
 locale = "zh_CN.UTF8"
 
-[plugin_directories]
-local = "./plugins"
-build = "./build/plugins"
-
 # QQ Bot 配置
 [bots.qq_bot]
 type = "qq"
