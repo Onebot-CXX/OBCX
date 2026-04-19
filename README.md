@@ -36,10 +36,8 @@ OBCX 是一个基于 C++26(或C++20 + C23) 的跨平台机器人框架，支持 
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
 
-# 引导安装
+# 安装
 ./bootstrap-vcpkg.sh  # Linux/macOS
-# 或
-.\bootstrap-vcpkg.bat  # Windows
 
 # 设置环境变量
 export VCPKG_ROOT=/path/to/vcpkg
@@ -63,17 +61,9 @@ python3 cmake/gen_vcpkg_manifest.py plugins.toml --list
 
 > **不使用 vcpkg？** 运行 `python3 cmake/gen_vcpkg_manifest.py plugins.toml --list` 查看需要安装的包列表，然后通过系统包管理器或 Nix 安装即可。
 
-### 3. 安装 LLOneBot（QQ 支持）
+### 3. 安装支持Onebot11 服务器端
 
-LLOneBot 是 QQ 的 OneBot 11 协议实现，用于连接 QQ。
-
-1. 安装 QQNT（QQ 新版本）
-2. 安装 LiteLoaderQQNT：<https://github.com/LiteLoaderQQNT/LiteLoaderQQNT>
-3. 安装 LLOneBot 插件：<https://github.com/LLOneBot/LLOneBot>
-
-配置 LLOneBot：
-
-- 启用正向 WebSocket，设置端口（如 3001）
+- 启用正向 WebSocket，设置端口
 - 或启用 HTTP 服务
 
 ### 4. 创建 Telegram Bot
