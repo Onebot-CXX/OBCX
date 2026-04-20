@@ -53,7 +53,8 @@ target_link_libraries(
         tomlplusplus::tomlplusplus
         ftxui::screen
         ftxui::dom
-        ftxui::component)
+        ftxui::component
+        re2::re2)
 
 target_compile_features(obcx_core PUBLIC cxx_std_20)
 

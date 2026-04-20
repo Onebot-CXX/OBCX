@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <mutex>
-#include <regex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -16,11 +15,6 @@
 namespace obcx::common {
 
 namespace {
-
-auto strip_ansi(const std::string &input) -> std::string {
-  static const std::regex ansi_re("\033\\[[0-9;]*m");
-  return std::regex_replace(input, ansi_re, "");
-}
 
 auto level_color(spdlog::level::level_enum level) -> ftxui::Color {
   switch (level) {
@@ -143,26 +137,44 @@ void TuiApp::run() {
   // Renderer
   int log_pane_size = 0; // Will be set by ResizableSplit
 
-  // Log pane: pure renderer, no event handling here
+  // Log pane: virtualized renderer — only renders visible rows
   auto log_pane = ftxui::Renderer([this] {
-    auto lines = tui_sink_->get_lines();
+    auto total = static_cast<int>(tui_sink_->line_count());
+
+    if (total == 0) {
+      return ftxui::text("(no log output yet)") | ftxui::dim |
+             ftxui::yflex_grow;
+    }
+
+    // Estimate visible rows from terminal height (log pane ~70%)
+    int visible_rows = std::max(ftxui::Terminal::Size().dimy * 7 / 10 - 2, 5);
+
+    // Clamp scroll offset
+    log_scroll_offset_ =
+        std::clamp(log_scroll_offset_, 0, std::max(0, total - visible_rows));
+
+    // Calculate the window of lines to render
+    // offset=0 means viewing the latest (bottom), higher = scrolled up
+    int end_idx = total - log_scroll_offset_;
+    int start_idx = std::max(0, end_idx - visible_rows);
+
+    // Fetch only the visible range
+    auto lines = tui_sink_->get_lines_range(
+        static_cast<std::size_t>(start_idx),
+        static_cast<std::size_t>(end_idx - start_idx));
+
     ftxui::Elements log_elements;
     log_elements.reserve(lines.size());
     for (const auto &line : lines) {
-      log_elements.push_back(ftxui::text(strip_ansi(line.text)) |
+      log_elements.push_back(ftxui::text(line.stripped_text) |
                              level_decorator(line.level));
     }
-    if (log_elements.empty()) {
-      log_elements.push_back(ftxui::text("(no log output yet)") | ftxui::dim);
-    }
 
-    auto total = static_cast<int>(log_elements.size());
-    log_scroll_offset_ = std::clamp(log_scroll_offset_, 0, total - 1);
-
-    // Compute scroll position: 0 offset = bottom (1.0), max offset = top (0.0)
-    float position = total > 1 ? 1.f - static_cast<float>(log_scroll_offset_) /
-                                           static_cast<float>(total - 1)
-                               : 1.f;
+    // Compute scroll indicator position
+    float position = total > visible_rows
+                         ? 1.f - static_cast<float>(log_scroll_offset_) /
+                                     static_cast<float>(total - visible_rows)
+                         : 1.f;
     position = std::clamp(position, 0.f, 1.f);
 
     return ftxui::vbox(std::move(log_elements)) |

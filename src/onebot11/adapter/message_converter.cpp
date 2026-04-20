@@ -1,7 +1,7 @@
 #include "onebot11/adapter/message_converter.hpp"
 
 #include <algorithm>
-#include <regex>
+#include <re2/re2.h>
 #include <sstream>
 
 namespace obcx::adapter::onebot11 {
@@ -87,24 +87,34 @@ auto MessageConverter::from_v11_string(const std::string &raw_message)
   }
 
   // 首先对整个字符串进行CQ码反转义处理
-  // 这样可以将 &#91;CQ:image&#93; 转换为 [CQ:image] 以便正则匹配
+  // 这样可以将 &#91;CQ:image&#93; 转换为 [CQ:image] 以便匹配
   std::string unescaped_message = cq_unescape(raw_message);
 
-  // 改进的正则表达式，更准确地匹配 CQ 码
-  // 支持类型名中的点号、数字、下划线等字符
-  const static std::regex cq_regex(
-      R"(\[CQ:([a-zA-Z0-9\-\._]+)(?:,([^\]]*))?\])");
+  // 使用 RE2 匹配 CQ 码: [CQ:type,key=value,...]
+  static const re2::RE2 cq_regex(R"(\[CQ:([a-zA-Z0-9\-\._]+)(?:,([^\]]*))?\])");
+  static const re2::RE2 param_regex(R"(([a-zA-Z0-9\-_]+)=([^,\]]*))");
 
-  auto it = std::sregex_iterator(unescaped_message.begin(),
-                                 unescaped_message.end(), cq_regex);
-  auto end = std::sregex_iterator();
+  re2::StringPiece input(unescaped_message);
+  re2::StringPiece remaining = input;
+  std::string type_match;
+  std::string params_match;
 
   size_t last_pos = 0;
 
-  for (; it != end; ++it) {
-    const std::smatch &match = *it;
-    size_t current_pos = match.position();
+  while (
+      RE2::FindAndConsume(&remaining, cq_regex, &type_match, &params_match)) {
+    // 计算当前匹配在原字符串中的位置
+    // remaining 指向匹配之后的位置
+    size_t match_end = unescaped_message.size() - remaining.size();
+    // 回推匹配的完整长度来算 match_start
+    // [CQ:type] 或 [CQ:type,params]
+    size_t match_len = 4 + type_match.size() + 1; // "[CQ:" + type + "]"
+    if (!params_match.empty()) {
+      match_len += 1 + params_match.size(); // "," + params
+    }
+    size_t current_pos = match_end - match_len;
 
+    // 添加匹配前的纯文本
     if (current_pos > last_pos) {
       std::string text =
           unescaped_message.substr(last_pos, current_pos - last_pos);
@@ -113,44 +123,25 @@ auto MessageConverter::from_v11_string(const std::string &raw_message)
       }
     }
 
-    std::string type = match[1].str();
     nlohmann::json data;
 
-    /*
-     * \if CHINESE
-     * 匹配CQ码内部的 key=value 对
-     * 改进的正则表达式，支持更复杂的参数值
-     * \endif
-     * \if ENGLISH
-     * Match key=value pairs inside CQ code
-     * Improved regex with support for more complex parameter values
-     * \endif
-     */
-    if (match[2].matched && !match[2].str().empty()) {
-      std::string params_str = match[2].str();
-
-      // 改进的参数解析正则表达式
-      const static std::regex param_regex(R"(([a-zA-Z0-9\-_]+)=([^,\]]*))");
-      auto pit = std::sregex_iterator(params_str.begin(), params_str.end(),
-                                      param_regex);
-      auto pend = std::sregex_iterator();
-
-      for (; pit != pend; ++pit) {
-        const std::smatch &param_match = *pit;
-        std::string key = param_match[1].str();
-        std::string value = param_match[2].str();
-
+    // 解析参数 key=value 对
+    if (!params_match.empty()) {
+      re2::StringPiece params_input(params_match);
+      std::string key;
+      std::string value;
+      while (RE2::FindAndConsume(&params_input, param_regex, &key, &value)) {
         if (!key.empty()) {
-          data[key] = value; // 不需要再次反转义，因为整个字符串已经处理过了
+          data[key] = value;
         }
       }
     }
 
-    if (!type.empty()) {
-      message.push_back({type, data});
+    if (!type_match.empty()) {
+      message.push_back({type_match, data});
     }
 
-    last_pos = current_pos + match.length();
+    last_pos = match_end;
   }
 
   /*
@@ -161,10 +152,10 @@ auto MessageConverter::from_v11_string(const std::string &raw_message)
    * 3. Add remaining plain text after last CQ code
    * \endif
    */
-  if (last_pos < raw_message.length()) {
-    std::string remaining_text = raw_message.substr(last_pos);
+  if (last_pos < unescaped_message.length()) {
+    std::string remaining_text = unescaped_message.substr(last_pos);
     if (!remaining_text.empty()) {
-      message.push_back({"text", {{"text", cq_unescape(remaining_text)}}});
+      message.push_back({"text", {{"text", remaining_text}}});
     }
   }
 

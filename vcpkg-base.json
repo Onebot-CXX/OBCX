@@ -10,6 +10,7 @@
     "brotli",
     "zstd",
     "fmt",
+    "re2",
     "ftxui",
     "gtest",
     "nlohmann-json",

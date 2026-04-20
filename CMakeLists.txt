@@ -162,6 +162,7 @@ endif()
 
 find_package(tomlplusplus CONFIG REQUIRED)
 find_package(ftxui CONFIG REQUIRED)
+find_package(re2 CONFIG REQUIRED)
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/generated)
