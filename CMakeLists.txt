@@ -167,7 +167,12 @@ find_package(re2 CONFIG REQUIRED)
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/generated)
 
-enable_testing()
+option(OBCX_BUILD_TESTS "Build tests" OFF)
+
+if(OBCX_BUILD_TESTS)
+  enable_testing()
+endif()
+
 
 # Compile i18n .po files to .mo files
 find_program(GETTEXT_MSGFMT_EXECUTABLE msgfmt)
@@ -198,11 +203,14 @@ else()
 endif()
 
 add_subdirectory(src)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 include(cmake/OBCXPluginLoader.cmake)
+
 if(EXISTS ${CMAKE_SOURCE_DIR}/plugins.toml)
     obcx_load_plugins(${CMAKE_SOURCE_DIR}/plugins.toml)
-else()
-    add_subdirectory(examples)
 endif()
-add_subdirectory(tests)
+
+if(OBCX_BUILD_TESTS)
+  add_subdirectory(tests)
+endif()

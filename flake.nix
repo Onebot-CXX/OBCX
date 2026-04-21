@@ -38,6 +38,7 @@
             tomlplusplus
             ftxui
             libxml2
+            re2
             zstd
             stdenv.cc.cc.lib
           ];
