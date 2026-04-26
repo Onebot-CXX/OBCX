@@ -51,6 +51,7 @@ _deps
 .cache/
 .tasks
 .claude/
+.codex
 
 # Build dir
 cmake-build*/

@@ -7,6 +7,41 @@
 
 ---
 
+## [Unreleased] (2026-04-21)
+
+### 新增
+
+- **Core TUI**: 新增基于 FTXUI 的终端界面，提供分屏日志与命令交互视图
+- **CLI**: 支持 `--no-tui` 参数，可在调试或非交互环境下回退到标准输出日志
+- **Plugin System**: 支持通过 `plugins.toml` / `plugin.toml` 管理本地与远程插件，并按启用插件生成 `vcpkg.json`
+- **Nix**: 新增 `flake.nix` 开发环境支持，便于在 Nix Shell 中构建项目
+
+### 修复
+
+- **HTTP Client**: 正确设置 Telegram 请求超时，修复长轮询超时配置不生效的问题
+- **Bridge Plugin**: 移除 PathManager 中的硬编码路径，修复媒体与资源路径解析问题
+- **Build**: 适配新版 Boost，移除对 `boost::system` 的依赖以修复编译问题
+
+### 重构
+
+- **Plugin Examples**: 将仓库内示例插件迁移到独立子仓库，主仓库聚焦核心框架与插件接口
+- **Plugin System**: 移除无用的二进制下载程序，简化插件获取与加载流程
+- **Plugin Config**: 插件路径无需再手动配置，简化启动与部署配置
+
+### 性能优化
+
+- **TUI**: 修复 3 个主要 CPU 热点，替换高开销 `std::regex` 并对日志渲染进行虚拟化
+
+### 文档
+
+- **README**: 更新构建、插件与依赖说明
+
+### 依赖
+
+- **Nix Flake**: 更新 `flake.nix`，同步开发环境配置
+
+---
+
 ## [Unreleased] (2026-01-25)
 
 ### 新增
