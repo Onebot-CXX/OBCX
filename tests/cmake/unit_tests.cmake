@@ -113,13 +113,12 @@ target_compile_definitions(
 
 add_dependencies(
   runtime_generation_test obcx_test_actor_v2 obcx_activation_failure_actor
-  obcx_private_actor_v1 obcx_private_actor_v2 obcx_schema_probe_1 obcx_schema_probe_999)
+  obcx_private_actor_v1 obcx_private_actor_v2 obcx_schema_probe_999)
 target_compile_definitions(
   runtime_generation_test
   PRIVATE
     OBCX_TEST_ACTOR_V2_LIBRARY="$<TARGET_FILE:obcx_test_actor_v2>"
     OBCX_ACTIVATION_FAILURE_ACTOR="$<TARGET_FILE:obcx_activation_failure_actor>"
-    OBCX_SCHEMA1_PROBE="$<TARGET_FILE:obcx_schema_probe_1>"
     OBCX_UNKNOWN_SCHEMA_PROBE="$<TARGET_FILE:obcx_schema_probe_999>"
     OBCX_PRIVATE_ACTOR_V1="$<TARGET_FILE:obcx_private_actor_v1>"
     OBCX_PRIVATE_ACTOR_V2="$<TARGET_FILE:obcx_private_actor_v2>")
@@ -143,8 +142,6 @@ add_dependencies(
   obcx_multiple_inheritance_actor
   obcx_invalid_actor
   obcx_test_actor_v2
-  obcx_legacy_v2_actor
-  obcx_frozen_schema1_actor
   obcx_missing_v2_factory_actor
   obcx_unsupported_actor
   obcx_contract_missing
@@ -179,8 +176,6 @@ target_compile_definitions(
     OBCX_TEST_MULTIPLE_INHERITANCE_ACTOR_LIBRARY="$<TARGET_FILE:obcx_multiple_inheritance_actor>"
     OBCX_TEST_INVALID_ACTOR_LIBRARY="$<TARGET_FILE:obcx_invalid_actor>"
     OBCX_TEST_ACTOR_V2_LIBRARY="$<TARGET_FILE:obcx_test_actor_v2>"
-    OBCX_TEST_LEGACY_V2_ACTOR_LIBRARY="$<TARGET_FILE:obcx_legacy_v2_actor>"
-    OBCX_TEST_FROZEN_SCHEMA1_LIBRARY="$<TARGET_FILE:obcx_frozen_schema1_actor>"
     OBCX_TEST_MISSING_V2_FACTORY_LIBRARY="$<TARGET_FILE:obcx_missing_v2_factory_actor>"
     OBCX_TEST_UNSUPPORTED_ACTOR_LIBRARY="$<TARGET_FILE:obcx_unsupported_actor>"
     OBCX_TEST_CONTRACT_MISSING_LIBRARY="$<TARGET_FILE:obcx_contract_missing>"

@@ -5,7 +5,7 @@ Status: actor cutover complete in the checked-out bridge repository
 
 ## Repository and entry point
 
-The bridge lives at `local_actor/obcx-actor-bridge` and builds one dynamic
+The bridge lives at `local_actor/obcx-message-bridge` and builds one dynamic
 entry point: the ABI 2 `bridge` actor. Its package identity, artifact,
 dependencies, compatibility range, and publication information are declared
 in `actor.toml`.
@@ -24,8 +24,8 @@ Core owns:
 - actor ABI, library loading, scheduling, cancellation, and pipeline dispatch;
 - `DbManager`, process-owned bot installations/dispatcher, and installed SDK
   exports;
-- installed SDK surface validation, generation-scoped configuration audit,
-  and the clean cross-repository harness.
+- installed SDK surface validation and generation-scoped configuration tests
+  implemented with root-owned generic fixtures.
 
 The bridge package owns:
 
@@ -56,11 +56,7 @@ per conversation while unrelated conversations can run concurrently.
 
 ## Verification
 
-```bash
-ctest --test-dir build -R '^standalone_actor_v2_repositories$' \
-  --output-on-failure
-```
-
-The harness installs a fresh SDK, configures the bridge against that prefix,
-builds and installs its actor/metadata pair, and runs the repository test
-suite. It also validates the bridge registry entry and artifact resolution.
+Message Bridge owns its standalone build, installation, behavior, reload, and
+integration tests. Run that repository's suite against an installed matching
+OBCX SDK. Root CTest does not inspect or build the external bridge checkout;
+its SDK and runtime contracts use root-owned generic fixtures.

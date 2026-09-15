@@ -42,11 +42,11 @@ cmake --install build/actor-dev --prefix "$HOME/.local/obcx"
 schema_version = 1
 
 [[actors]]
-path = "local_actor/obcx-actor-message-store"
+path = "local_actor/obcx-message-store"
 enabled = true
 
 [[actors]]
-path = "local_actor/obcx-actor-bridge"
+path = "local_actor/obcx-message-bridge"
 enabled = true
 ```
 
@@ -216,7 +216,7 @@ provider、actor contract 与依赖，以及 pipeline source、stage 依赖和
 `RuntimeGenerationBuilder` 完成 DSO contract、配置和 generation preparation 校验。
 
 Bridge 的 bot、媒体与群组映射选项可参考
-[actor-config.example.toml](local_actor/obcx-actor-bridge/actor-config.example.toml)；
+[actor-config.example.toml](local_actor/obcx-message-bridge/actor-config.example.toml)；
 单账号部署可继续显式设置一组 `telegram_installation` 与
 `onebot11_installation`；多账号部署使用具名 `installation_pairs`，并让每个群组或
 Topic mapping 指向唯一 pair。Bridge schema v3 使用 installation、platform、
@@ -262,24 +262,14 @@ message type，配置再按 platform/bot scope 激活路由；平台适配器不
 和迁移约束见
 [Actor command routing](docs/architecture/actor-command-routing.md)。
 
-干净安装 SDK 的外部 package 验证：
+根仓库使用自有的通用 fixture 验证干净安装 SDK：
 
 ```bash
 ctest --preset actor-dev -R '^actor_sdk_v2_smoke$'
-sh packaging/actors/restore-sources.sh
-cmake --preset actor-conformance
-cmake --build --preset actor-conformance --parallel
-ctest --preset actor-conformance -R '^standalone_actor_v2_repositories$'
 ```
 
-第二项会从干净 SDK 分别构建、安装并测试三个 standalone package；随后通过
-`ActorManager` 动态加载安装后的 message-store 与
-bridge 产物，执行 `obcx::core::events::RawMessageEvent ->
-obcx::message_store::events::MessageStored ->
-bridge::events::MessageForwarded` 管线并核对
-数据库副作用和关闭流程；同时还会在保持同一组运行中 bot 实例的前提下修改
-bridge 群组映射并执行 reload，验证切换后的消息只使用新映射，同时进程级
-`BotInstallation` 和 transport 保持运行。
+独立 actor 仓库各自负责其 standalone build、安装、业务测试和跨 actor 集成；
+根测试不会遍历或构建 `local_actor/` 下的外部仓库。
 
 ## Actor registry
 

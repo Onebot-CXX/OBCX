@@ -1,4 +1,4 @@
-// Deliberately no legacy umbrella, platform DTO or runtime dependency.
+// Deliberately limited to the modular common contract surface.
 #include "core/bot/messaging_client.hpp"
 #include "support/sdk_gateway_fixture.hpp"
 

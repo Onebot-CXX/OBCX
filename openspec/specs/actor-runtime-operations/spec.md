@@ -86,7 +86,7 @@ built, it SHALL contain no secondary engine for runtime rollback.
 - **THEN** the actor-only cutover remains incomplete and the removal phase is not eligible for release
 
 #### Scenario: Native runtime passes every cutover threshold
-- **WHEN** all recorded gates and standalone actor integration tests pass
+- **WHEN** all recorded root-owned gates and generic installed-SDK actor integration tests pass
 - **THEN** the removal phase may complete and the native scheduler becomes the only shipped engine
 
 #### Scenario: Released runtime needs operational rollback

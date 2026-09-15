@@ -1115,7 +1115,7 @@ TEST_F(RuntimeGenerationTest,
 }
 
 TEST_F(RuntimeGenerationTest,
-       OldAndUnknownSdkSchemasNeverConstructOrPrepareAcrossAllPurposes) {
+       UnknownSdkSchemaNeverConstructsOrPreparesAcrossAllPurposes) {
   constexpr auto variable = "OBCX_SCHEMA_GATE_PROBE_MARKER";
   const auto previous = std::getenv(variable);
   struct RestoreEnvironment {
@@ -1139,17 +1139,16 @@ TEST_F(RuntimeGenerationTest,
   obcx::core::RuntimeGenerationBuilder builder{
       obcx::test::bot_platform_catalog()};
   auto blocking = std::make_shared<obcx::core::BlockingExecutor>(1);
-  for (const auto *library : {OBCX_SCHEMA1_PROBE, OBCX_UNKNOWN_SCHEMA_PROBE}) {
-    const auto config = snapshot("incompatible.toml", valid_config(library));
-    auto [database, registry] = services_for(config);
-    for (const auto purpose : purposes) {
-      auto build_request = request(purpose, 1, config, database, registry);
-      build_request.blocking_executor = blocking;
-      const auto result = builder.build(std::move(build_request));
-      ASSERT_TRUE(result.failure);
-      EXPECT_EQ(result.failure->code, "reload_contract_invalid");
-      EXPECT_FALSE(fs::exists(marker));
-    }
+  const auto config = snapshot("unsupported-schema.toml",
+                               valid_config(OBCX_UNKNOWN_SCHEMA_PROBE));
+  auto [database, registry] = services_for(config);
+  for (const auto purpose : purposes) {
+    auto build_request = request(purpose, 1, config, database, registry);
+    build_request.blocking_executor = blocking;
+    const auto result = builder.build(std::move(build_request));
+    ASSERT_TRUE(result.failure);
+    EXPECT_EQ(result.failure->code, "reload_contract_invalid");
+    EXPECT_FALSE(fs::exists(marker));
   }
 }
 

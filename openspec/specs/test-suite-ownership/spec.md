@@ -37,20 +37,20 @@ Each standalone actor repository SHALL own the sources, fixtures, expected contr
 - **WHEN** a test asserts Message Store schema, deduplication, identity, or emitted stored-message behavior
 - **THEN** the test resides in the Message Store repository
 
-### Requirement: Test execution has explicit tiers
-The project SHALL expose fast, full, and conformance test tiers through stable CTest labels or presets. The fast tier SHALL run deterministic root tests; the full tier SHALL add compile contracts, architecture/package checks, CLI validation, and installed-SDK smoke; the conformance tier SHALL additionally perform clean standalone actor and registry verification against the installed SDK.
+### Requirement: Test execution has explicit root-owned tiers
+The project SHALL expose fast and full test tiers through stable CTest labels or presets. The fast tier SHALL run deterministic root tests; the full tier SHALL add compile contracts, root architecture/package checks, CLI validation, and installed-SDK smoke. Neither tier SHALL inspect, build, or execute an independent repository under `local_actor/`.
 
 #### Scenario: Developer requests fast verification
 - **WHEN** the fast tier is selected
-- **THEN** it excludes clean cross-repository builds while retaining deterministic root network and runtime correctness coverage
+- **THEN** it retains deterministic root network and runtime correctness coverage without cross-repository work
 
 #### Scenario: Normal CI validates a change
 - **WHEN** the normal supported-platform CI gate runs
-- **THEN** it executes the full tier, including deterministic WebSocket reliability tests
+- **THEN** it executes the full root-owned tier, including deterministic WebSocket reliability tests
 
-#### Scenario: Coordinated actor release is checked
-- **WHEN** the conformance tier runs
-- **THEN** it builds and tests each required standalone repository against the installed SDK without first duplicating those actor behavior cases in the root inventory
+#### Scenario: Standalone actor requires verification
+- **WHEN** a standalone actor changes or consumes a new installed SDK
+- **THEN** its owning repository runs that actor's build, installation, behavior, and integration tests outside the root CTest inventory
 
 ### Requirement: Test trees contain reproducible source inputs
 Tracked test trees SHALL contain only reproducible source, fixtures, scripts, metadata, and documentation required by an automated gate. Generated interpreter caches, credentials, local bot environments, build outputs, and deleted-test residue MUST remain untracked, and test-layout documentation SHALL match the current directory structure.

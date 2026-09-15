@@ -147,8 +147,8 @@ mode = "await"
 
 ## Verification and recovery
 
-Use `actor_sdk_v2_smoke`, `actor_architecture_test`, and the standalone
-repository conformance test before deployment. Operational rollback means
+Use the complete root suite and `actor_sdk_v2_smoke` before deployment.
+Standalone actor repositories run their own release gates. Operational rollback means
 deploying the preceding OBCX release together with its matching configuration
 and extension binaries; it does not mean switching the actor-only executable
 to another runtime path.

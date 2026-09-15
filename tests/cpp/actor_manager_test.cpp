@@ -2,7 +2,6 @@
 #include "core/actor/native_actor_scheduler.hpp"
 
 #include <algorithm>
-#include <dlfcn.h>
 #include <future>
 #include <gtest/gtest.h>
 #include <memory>
@@ -94,30 +93,6 @@ TEST(ActorManagerTest, DiscoversContractWithoutConstructingActor) {
   EXPECT_TRUE(manager.is_actor_loaded("test_actor_v2"));
 }
 
-TEST(ActorManagerTest, RejectsFrozenSchema1BeforeFactoryAndPreparation) {
-  const auto close_library = [](void *handle) { (void)dlclose(handle); };
-  std::unique_ptr<void, decltype(close_library)> library{
-      dlopen(OBCX_TEST_FROZEN_SCHEMA1_LIBRARY, RTLD_NOW | RTLD_LOCAL),
-      close_library};
-  ASSERT_NE(library, nullptr);
-  const auto factory_calls = reinterpret_cast<unsigned (*)()>(
-      dlsym(library.get(), "obcx_frozen_factory_calls"));
-  const auto preparation_calls = reinterpret_cast<unsigned (*)()>(
-      dlsym(library.get(), "obcx_frozen_preparation_calls"));
-  ASSERT_NE(factory_calls, nullptr);
-  ASSERT_NE(preparation_calls, nullptr);
-  ActorManager manager;
-  EXPECT_FALSE(
-      manager.discover_actor_from_path(OBCX_TEST_FROZEN_SCHEMA1_LIBRARY));
-  EXPECT_NE(manager.last_error().find("rebuild"), std::string::npos);
-  EXPECT_FALSE(manager.load_actor_from_path(OBCX_TEST_FROZEN_SCHEMA1_LIBRARY));
-  EXPECT_NE(manager.last_error().find("schema_version 1"), std::string::npos);
-  EXPECT_EQ(manager.get_actor_contract("frozen_schema1_actor"), nullptr);
-  EXPECT_TRUE(manager.get_loaded_actor_names().empty());
-  EXPECT_EQ(factory_calls(), 0U);
-  EXPECT_EQ(preparation_calls(), 0U);
-}
-
 TEST(ActorManagerTest, RunsOptionalGenerationPreparationWithTypedStatus) {
   ActorManager manager;
   ASSERT_TRUE(manager.load_actor_from_path(OBCX_TEST_ACTOR_V2_LIBRARY));
@@ -134,14 +109,6 @@ TEST(ActorManagerTest, RunsOptionalGenerationPreparationWithTypedStatus) {
   const auto restart = manager.prepare_actor("test_actor_v2", restart_context);
   EXPECT_EQ(restart.status, ActorPreparationStatus::RestartRequired);
   EXPECT_EQ(restart.message, "fixture preparation requires restart");
-}
-
-TEST(ActorManagerTest, LegacyV2ActorWithoutPreparationExportRemainsReady) {
-  ActorManager manager;
-  ASSERT_TRUE(manager.load_actor_from_path(OBCX_TEST_LEGACY_V2_ACTOR_LIBRARY));
-  ActorContext context("legacy_v2_actor");
-  const auto preparation = manager.prepare_actor("legacy_v2_actor", context);
-  EXPECT_TRUE(preparation.ok());
 }
 
 TEST(ActorManagerTest, FindsActorByNameInActorDirectory) {

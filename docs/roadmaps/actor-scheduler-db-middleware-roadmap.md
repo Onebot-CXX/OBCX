@@ -169,7 +169,7 @@ Default DB policy:
 | ActorScheduler sharded mailbox implemented | DONE | [x] | Runtime | `ActorSchedulerTest` ordering/concurrency/shard/backpressure tests pass |
 | Orchestrator enqueues actor tasks instead of executing actors directly | DONE | [x] | Runtime | `OrchestratorTest` scheduler/routing/terminal async tests pass |
 | Config parses `[db.instances]` and actor DB binding | DONE | [x] | Config | `ActorConfigTest` DB parsing and validation tests pass |
-| message_store moved to standalone actor repo | DONE | [x] | Storage | `local_plugin/obcx-actor-message-store` builds against installed SDK and `message_store_smoke` passes |
+| message_store moved to standalone actor repo | DONE | [x] | Storage | `local_plugin/obcx-message-store` builds against installed SDK and `message_store_smoke` passes |
 | bridge stores mappings in bridge-owned DB tables | DONE | [x] | Bridge | Bridge repository tests cover its actor and database schema |
 | bridge message retry manager uses bridge-owned DB state | DONE | [x] | Bridge | `RetryQueueManagerTest` restores persisted retries and removes successful retries |
 | legacy bridge handlers use bridge state repository for mapping behavior | DONE | [x] | Bridge | `BridgeHandlerRepositoryTest` and bridge plugin build prove reply mapping lookup uses `BridgeStateRepository`; QQ/TG handlers are wired to repository for mapping, media-group, reply, and recall paths |
@@ -283,7 +283,7 @@ Exit criteria:
 Status: DONE
 
 - [x] Move `message_store` into its own actor repo:
-  `local_plugin/obcx-actor-message-store`.
+  `local_plugin/obcx-message-store`.
 - [x] Store received platform messages only.
 - [x] Use per-platform or namespaced tables such as:
   - `message_store_qq_messages`
@@ -387,7 +387,7 @@ integration belongs in an explicit external integration harness.
 - [x] Prove the standalone `message_store` actor repo builds against the
   installed OBCX actor SDK.
 - [x] Keep `message_store` implementation and persistence smoke coverage in
-  `local_plugin/obcx-actor-message-store`.
+  `local_plugin/obcx-message-store`.
 - [x] Keep bridge actor and mapping persistence coverage in the bridge
   repository.
 

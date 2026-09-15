@@ -7,11 +7,11 @@
         "files": {
           "linux-arm64": {
             "filename": "message_store-linux-arm64.so",
-            "url": "https://github.com/Onebot-CXX/obcx-actor-message-store/releases/download/v0.1.0/message_store-linux-arm64.so"
+            "url": "https://github.com/Onebot-CXX/obcx-message-store/releases/download/v0.1.0/message_store-linux-arm64.so"
           },
           "linux-x86_64": {
             "filename": "message_store-linux-x86_64.so",
-            "url": "https://github.com/Onebot-CXX/obcx-actor-message-store/releases/download/v0.1.0/message_store-linux-x86_64.so"
+            "url": "https://github.com/Onebot-CXX/obcx-message-store/releases/download/v0.1.0/message_store-linux-x86_64.so"
           }
         },
         "install_directory": "lib/obcx/actors",
@@ -40,14 +40,14 @@
       "id": "onebot-cxx.message-store",
       "metadata": {
         "path": "entries/onebot-cxx.message-store/actor.toml",
-        "sha256": "2353241e292cb607b418b2dd07a7eafbc22e4f21e31645299aaa731bc83d18ff"
+        "sha256": "4aa47a58782f0b7d175caba19ec9d0f05386b6e193190d0173ed1889eddc2833"
       },
       "name": "message_store",
       "publication": {
         "description": "Persistent received-message actor for OBCX pipelines",
-        "homepage": "https://github.com/Onebot-CXX/obcx-actor-message-store",
+        "homepage": "https://github.com/Onebot-CXX/obcx-message-store",
         "license": "MIT",
-        "repository": "https://github.com/Onebot-CXX/obcx-actor-message-store"
+        "repository": "https://github.com/Onebot-CXX/obcx-message-store"
       },
       "version": "0.1.0"
     },
@@ -58,11 +58,11 @@
         "files": {
           "linux-arm64": {
             "filename": "bridge-linux-arm64.so",
-            "url": "https://github.com/vollate/obcx-actor-bridge/releases/download/v0.1.0/bridge-linux-arm64.so"
+            "url": "https://github.com/vollate/obcx-message-bridge/releases/download/v0.1.0/bridge-linux-arm64.so"
           },
           "linux-x86_64": {
             "filename": "bridge-linux-x86_64.so",
-            "url": "https://github.com/vollate/obcx-actor-bridge/releases/download/v0.1.0/bridge-linux-x86_64.so"
+            "url": "https://github.com/vollate/obcx-message-bridge/releases/download/v0.1.0/bridge-linux-x86_64.so"
           }
         },
         "install_directory": "lib/obcx/actors",
@@ -96,13 +96,13 @@
       "id": "vollate.bridge",
       "metadata": {
         "path": "entries/vollate.bridge/actor.toml",
-        "sha256": "b63470ac3246987825b9e4da925681761e9161a4b3fcf3d146e68200346db05e"
+        "sha256": "ffed69b62b2c7b876b6630535c4f1585152e1d964a003ea0f0b75c387396aabd"
       },
       "name": "bridge",
       "publication": {
         "description": "QQ and Telegram bidirectional bridge actor for OBCX",
         "license": "MIT",
-        "repository": "https://github.com/vollate/obcx-actor-bridge"
+        "repository": "https://github.com/vollate/obcx-message-bridge"
       },
       "version": "0.1.0"
     }

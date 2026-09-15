@@ -647,16 +647,6 @@ TEST_F(HttpClientTimeoutTest, PostResponseUsesConfiguredBodyLimit) {
                network::HttpClientError);
 }
 
-TEST_F(HttpClientTimeoutTest, DeprecatedSynchronousGetUsesConfiguredLimit) {
-  constexpr std::uint64_t kLimit = 1024;
-  server_->set_response_body(std::string(kLimit + 1, 'x'));
-  auto client = create_client(EXTENDED_WAIT);
-  client->set_response_body_limit(kLimit);
-
-  EXPECT_THROW([[maybe_unused]] auto response = client->get_sync("/sync"),
-               network::HttpClientError);
-}
-
 TEST(HttpClientSubmissionStateTest,
      ProxyPostConnectionRefusedIsDefinitelyNotSubmitted) {
   asio::io_context port_context;

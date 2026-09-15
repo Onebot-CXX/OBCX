@@ -27,7 +27,7 @@ reflection_macro = 202506
 input_contract_schema = 2
 
 [publication]
-repository = "https://github.com/Onebot-CXX/obcx-actor-message-store"
-homepage = "https://github.com/Onebot-CXX/obcx-actor-message-store"
+repository = "https://github.com/Onebot-CXX/obcx-message-store"
+homepage = "https://github.com/Onebot-CXX/obcx-message-store"
 license = "MIT"
 description = "Persistent received-message actor for OBCX pipelines"

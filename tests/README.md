@@ -12,34 +12,18 @@ Compose 和包含凭据的本地配置位于 `dev/onebot/`，不属于测试门�
   configuration、OneBot/Telegram protocol/transport/ingress/operation 组件；
 - CLI、数据库、metadata、registry、packaging、安装后 SDK 与通用 fixture actor。
 
-根测试不得包含生产 actor 的私有头文件、实现源码或业务断言。对应测试归属如下：
-
-| 行为 | 所有者 |
-| --- | --- |
-| Bridge 转发、mapping、媒体、重试、真实 Message Store → Bridge pipeline、bot-facing reload | `local_actor/obcx-actor-bridge/tests/` |
-| Message Store schema、持久化、identity、deduplication、MessageStored emission | `local_actor/obcx-actor-message-store/tests/` |
-| Bot component DAG、recipe、严格配置、ingress 与 operation endpoint | 根 `tests/cpp/`、`tests/python/` 与 `tests/fixtures/` |
-| 通用 ABI、same-SONAME staging、dependency isolation、generation cutover | 根 `tests/fixtures/` 与 `tests/cpp/` |
-| 跨仓库安装与构建协调 | 根 conformance CMake 脚本；actor 仓库拥有业务测试源码和 CTest 注册 |
-
-本次迁移清单：
-
-- 根 `standalone_actor_pipeline_smoke.cpp` 与
-  `standalone_actor_reload_smoke.cpp` 已迁至 Bridge tests；
-- real Message Store/Bridge unmatched-slash regression 已由 Bridge installed
-  reload smoke 覆盖；
-- root reload 的 rebuilt Message Store fixture 已替换为通用 rebuilt actor；
-- Bridge/Message Store 嵌入根构建时只生成 DSO，不注册 actor-owned tests。
-
-Bridge 使用 `OBCX_BRIDGE_BUILD_TESTS`，Message Store 使用
-`OBCX_MESSAGE_STORE_BUILD_TESTS`。两者在 standalone top-level build 中跟随
-`BUILD_TESTING` 默认开启，作为子目录嵌入时默认关闭；特殊 consumer 可显式覆盖。
+根测试不得包含生产 actor 的私有头文件、实现源码或业务断言，也不得遍历、
+构建或校验 `local_actor/` 下的独立仓库。Bot component DAG、recipe、严格配置、
+ingress、operation endpoint、通用 ABI、same-SONAME staging、dependency
+isolation 和 generation cutover 使用根仓库自有源码与通用 fixture 验证。每个
+独立 actor 仓库自行拥有并执行其 standalone build、安装、业务测试和跨 actor
+集成测试。
 
 ## 目录职责
 
 - `cpp/`：GoogleTest 单元与小型集成测试。
-- `python/`：Python `unittest` metadata、packaging、bot 配置 inventory 与架构约束。
-- `cmake/`：由 CTest 调用的 SDK、CLI、inventory 与跨仓库协调脚本。
+- `python/`：Python `unittest` metadata、packaging 与根仓库模块化约束。
+- `cmake/`：由 CTest 调用的 SDK、CLI 与根仓库集成脚本。
 - `compile/`：C++ 正向与负向反射编译契约。
 - `fixtures/`：根 runtime 专用的通用 actor DSO 与 standalone SDK consumer。
 - `support/`：多个根测试共享的辅助代码。
@@ -54,7 +38,7 @@ Bridge 使用 `OBCX_BRIDGE_BUILD_TESTS`，Message Store 使用
 
 ## 测试层级
 
-快速根测试，不执行 compile/package/conformance 门禁：
+快速根测试，不执行 compile/package 门禁：
 
 ```bash
 cmake --preset actor-dev
@@ -62,18 +46,10 @@ cmake --build --preset actor-dev --parallel
 ctest --preset actor-fast
 ```
 
-完整根测试，包括反射编译、Python 架构/package、CLI 与 installed-SDK：
+完整根测试，包括反射编译、Python package、CLI 与 installed-SDK：
 
 ```bash
 ctest --preset actor-full
-```
-
-干净安装 SDK 后构建并测试各 standalone actor 与 registry：
-
-```bash
-cmake --preset actor-conformance
-cmake --build --preset actor-conformance --parallel
-ctest --preset actor-conformance
 ```
 
 标签仍可用于进一步缩小范围：
@@ -81,7 +57,6 @@ ctest --preset actor-conformance
 ```bash
 ctest --preset actor-dev -L actor-runtime
 ctest --preset actor-dev -L network
-ctest --preset actor-conformance -L conformance
 ```
 
 ## 确定性 WebSocket 测试

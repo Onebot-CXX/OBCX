@@ -150,21 +150,13 @@ Run the standard checks with:
 ```bash
 ctest --test-dir build --output-on-failure
 ctest --test-dir build -L actor-runtime --output-on-failure
-ctest --test-dir build -R '^standalone_actor_v2_repositories$' \
-  --output-on-failure
+ctest --test-dir build -R '^actor_sdk_v2_smoke$' --output-on-failure
 ```
 
-The generation-scoped actor configuration audit is `actor_architecture_test`;
-the clean external SDK and installed-surface check is `actor_sdk_v2_smoke`.
-The standalone-repository check
-also dynamically loads the installed bridge and message-store artifacts and
-runs a persisted `obcx::core::events::RawMessageEvent ->
-obcx::message_store::events::MessageStored ->
-bridge::events::MessageForwarded`
-pipeline before shutting down the native runtime. It then rewrites a bridge
-group mapping, reloads both installed actors, verifies all post-cutover
-messages use the new destination, and proves the original live bot instances
-were neither stopped nor reconnected.
+The clean external SDK and installed-surface check is `actor_sdk_v2_smoke`.
+Root verification uses only root-owned source and generic actor fixtures;
+standalone actor repositories own and run their separate release and
+integration suites.
 
 Run the isolated release install and continuous pipeline soak from an empty
 build/install root with:

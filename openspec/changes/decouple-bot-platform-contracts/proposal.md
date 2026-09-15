@@ -36,6 +36,6 @@
 
 - 核心 SDK/runtime：`include/core/bot/`、`src/core/bot/`、`include/common/config_loader.hpp`、`src/common/config_loader.cpp`、`src/core/command/`、`src/core/runtime/`、`src/app/` 及 actor contract 生成/加载。
 - 平台模块：`include/onebot11/`、`include/telegram/`、`src/onebot11/`、`src/telegram/`；复用现有协议和传输实现，不增加第三个平台或 provider API。
-- 消费者：`local_actor/obcx-actor-bridge`、`chat_llm`、Message Store、template、独立 SDK fixtures、mock gateway、架构测试和 benchmarks。
+- 消费者：`local_actor/obcx-message-bridge`、`chat_llm`、Message Store、template、独立 SDK fixtures、mock gateway、架构测试和 benchmarks。
 - 发布链路：CMake 安装/export、SDK 元数据、actor registry、offline bundles/patches/pins、CI 和 migration 文档必须配套更新；原 actor 调度 ABI 2 和业务事件格式保持不变，但旧二进制不兼容。
 - 不新增数据库表、不迁移当前 Bridge schema 3、不改变 Message Store 事件/存储、命令路由配置、provider token、网络行为或超时/重试策略。

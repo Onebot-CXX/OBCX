@@ -4,11 +4,11 @@
 schema_version = 1
 
 [[actors]]
-path = "local_actor/obcx-actor-message-store"
+path = "local_actor/obcx-message-store"
 enabled = true
 
 [[actors]]
-path = "local_actor/obcx-actor-bridge"
+path = "local_actor/obcx-message-bridge"
 enabled = true
 
 # Remote actor packages must pin an explicit revision.

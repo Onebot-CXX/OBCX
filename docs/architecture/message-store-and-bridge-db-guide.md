@@ -4,8 +4,8 @@ Status: current actor pipeline and persistence guide (2026-07-13)
 
 The participating packages are:
 
-- `local_actor/obcx-actor-message-store`
-- `local_actor/obcx-actor-bridge`
+- `local_actor/obcx-message-store`
+- `local_actor/obcx-message-bridge`
 - `local_actor/obcx-exhentai-fetch`
 
 Both build against the installed SDK and declare their contract in
@@ -80,14 +80,9 @@ changes and acquires its namespace migration lock only for schema work.
 
 ## Verification
 
-The clean conformance test is:
-
-```bash
-ctest --test-dir build -R '^standalone_actor_v2_repositories$' \
-  --output-on-failure
-```
-
-It installs core into an empty prefix, builds both packages from empty build
-directories, installs their libraries and metadata, and runs their smoke/test
-suites. Core unit tests separately validate pipeline references, DB routing,
-mailbox behavior, and shutdown.
+Message Store and Message Bridge each own their standalone build, schema,
+behavior, and integration tests; run those suites from their respective
+repositories against an installed matching OBCX SDK. Root tests do not inspect
+or build either external repository. Core unit tests separately validate
+pipeline references, DB routing, mailbox behavior, and shutdown using generic
+root-owned fixtures.

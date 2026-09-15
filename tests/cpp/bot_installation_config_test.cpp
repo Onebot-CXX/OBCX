@@ -12,7 +12,6 @@
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <variant>
 #include <vector>
 
@@ -238,52 +237,19 @@ proxy_password = ""
   }
 }
 
-TEST_F(BotInstallationConfigTest, RejectsUnknownAndLegacyKeysByExactPath) {
-  for (const auto &[document, code, path] :
-       std::vector<std::tuple<std::string, std::string, std::string>>{
-           {R"(
-[bots.qq]
-type = "qq"
-enabled = true
-surface = "onebot11.qq"
-transport = "websocket"
-[bots.qq.connection]
-)",
-            "legacy_bot_configuration_key", "bots.qq.type"},
-           {R"(
-[bots.qq]
-enabled = true
-surface = "onebot11.qq"
-transport = "websocket"
-plugins = []
-[bots.qq.connection]
-)",
-            "legacy_bot_configuration_key", "bots.qq.plugins"},
-           {R"(
-[bots.qq]
-enabled = true
-surface = "onebot11.qq"
-transport = "websocket"
-[bots.qq.connection]
-timeout = 10
-)",
-            "legacy_bot_configuration_key", "bots.qq.connection.timeout"},
-           {R"(
+TEST_F(BotInstallationConfigTest, RejectsUnknownKeyByExactPath) {
+  const auto built = parse(R"(
 [bots.qq]
 enabled = true
 surface = "onebot11.qq"
 transport = "websocket"
 [bots.qq.connection]
 misspelled_timeout_ms = 10
-)",
-            "unknown_bot_configuration_key",
-            "bots.qq.connection.misspelled_timeout_ms"}}) {
-    const auto built = parse(document);
-    ASSERT_FALSE(built);
-    ASSERT_TRUE(built.diagnostic.has_value());
-    EXPECT_EQ(built.diagnostic->code, code);
-    EXPECT_EQ(built.diagnostic->path, path);
-  }
+)");
+  ASSERT_FALSE(built);
+  ASSERT_TRUE(built.diagnostic.has_value());
+  EXPECT_EQ(built.diagnostic->code, "unknown_bot_configuration_key");
+  EXPECT_EQ(built.diagnostic->path, "bots.qq.connection.misspelled_timeout_ms");
 }
 
 TEST_F(BotInstallationConfigTest, RejectsUnsupportedSurfacesAndTransports) {

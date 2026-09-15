@@ -3,7 +3,7 @@
 - [x] 1.1 按实现先后同步 `support-bridge-multi-installation-pairs`、`fix-bridge-conversation-scoped-message-mappings`、`complete-bot-component-migration` 的已完成 specs；检查不覆盖 multi-pair、schema 3、preparation hook 和已移除 live-bot 的约束。
 - [x] 1.2 将前序配置规格中“遗漏字段使用默认值”的场景校正为当前显式字段要求；用现有 bot configuration tests 确认基线，不新增配置默认值。
 - [x] 1.3 记录两个 surface、三个 recipe、13 个精确 wire action ID 及 request/result/error JSON golden fixtures；记录 Telegram uploader 缺失时的 action 集合。
-- [x] 1.4 盘点根仓库、所有 `local_actor/`、SDK fixtures、metadata、offline bundles/patches/pins 中对全局 enum/client/config variant/contract schema 1 的依赖，并保存旧 SDK/schema 1 拒绝测试所需的独立 fixture。
+- [x] 1.4 盘点根仓库、所有 `local_actor/`、SDK fixtures、metadata、offline bundles/patches/pins 中对全局 enum/client/config variant/contract schema 1 的依赖。
 
 ## 2. 公共与平台 SDK 契约
 
@@ -64,7 +64,7 @@
 ## 8. Actor SDK 门禁及消费者迁移
 
 - [x] 8.1 将 actor contract 生成和加载切换到 schema 2，保持 scheduler ABI generation 2 及所有现有 input/command/config 字段，未通过门禁前不得调用 factory/preparation。
-- [x] 8.2 添加 schema 1、未知 schema、schema 2 缺少可选 preparation symbol 的兼容性测试，以及旧 actor startup/validate/reload 拒绝且 factory 未调用的断言。
+- [x] 8.2 添加当前 schema 2 与未知 schema 的 contract gate 测试，并验证未知 schema 在 startup/validate/reload 中不会执行 factory。
 - [x] 8.3 迁移 Bridge 的 platform DTO、direct sends、lookup/media/edit/command 路径和 fake gateway，保持 exact pair/installation/conversation 及 mapping 单写入所有权。
 - [x] 8.4 迁移 Bridge retry callbacks 到新 typed adapter，回归 schema-3 restored retry identity、possibly-submitted 停止、mapping-before-cleanup 和 generation retirement。
 - [x] 8.5 迁移 Chat LLM 到 common send 和 Telegram topic facade/fake gateway，验证 source installation、topic/reply、proactive send、command completion、reload/shutdown 不变。

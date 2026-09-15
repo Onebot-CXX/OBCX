@@ -1,20 +1,79 @@
-From 180c8ac5bc9faf0a262aec3f3f2f7d4ee1390165 Mon Sep 17 00:00:00 2001
+From 986c40978111360e31e314cb9e25d5b641fab8a4 Mon Sep 17 00:00:00 2001
 From: Vollate <uint44t@gmail.com>
-Date: Wed, 15 Jul 2026 18:59:46 +0800
-Subject: [PATCH 1/2] feat: require C++26 reflected actor packages
+Date: Tue, 15 Sep 2026 17:00:00 +0800
+Subject: [PATCH] chore: synchronize pinned actor source
 
 ---
- entries/onebot-cxx.message-store/actor.toml |  6 +++-
- entries/vollate.bridge/actor.toml           |  6 +++-
- generate_actor_index.py                     |  4 ---
- index/actors.json                           | 30 ++++++++++++----
- schemas/actor-registry-entry.schema.json    | 20 ++++++-----
- scripts/actor_metadata.py                   | 38 ++++++++++++++++++---
- tests/test_actor_registry.py                |  7 ++--
- 7 files changed, 83 insertions(+), 28 deletions(-)
+ README.md                                   | 42 ++++++++++++++++++---
+ entries/onebot-cxx.message-store/actor.toml | 10 +++--
+ entries/vollate.bridge/actor.toml           |  8 +++-
+ generate_actor_index.py                     |  4 --
+ index/actors.json                           | 40 ++++++++++++++------
+ schemas/actor-registry-entry.schema.json    | 20 +++++-----
+ scripts/actor_metadata.py                   | 38 ++++++++++++++++---
+ tests/test_actor_registry.py                |  7 +++-
+ 8 files changed, 127 insertions(+), 42 deletions(-)
 
+diff --git a/README.md b/README.md
+index f7df867..d7752d7 100644
+--- a/README.md
++++ b/README.md
+@@ -3,8 +3,17 @@
+ This repository is the independent actor-only publication registry for OBCX
+ ABI 2 packages. A submission is a canonical
+ `entries/<actor-id>/actor.toml`; no second metadata dialect is accepted.
++Process-local BotInstallation components and capabilities are part of the OBCX
++runtime and are not published as actor packages.
+ 
+-Validate entries and confirm that the checked-in index is current:
++The checked-in entries are:
++
++- `onebot-cxx.message-store`
++- `vollate.bridge`
++
++## Validate And Generate
++
++Run all commands from the repository root:
+ 
+ ```bash
+ python3 -m unittest discover -s tests -v
+@@ -25,8 +34,29 @@ python3 generate_actor_index.py resolve \
+   --id vollate.bridge --version 0.1.0 --platform linux-x86_64
+ ```
+ 
+-`artifact.platforms` is authoritative. The generator publishes only declared
+-OS/architecture assets and gives every raw shared library a platform-qualified
+-name. `scripts/actor_metadata.py` is the canonical OBCX metadata validator
+-vendored for standalone registry CI; coordinated OBCX conformance verifies
+-that the vendored copy remains byte-identical to the SDK validator.
++## Metadata And Publication Rules
++
++Validation rejects unknown fields, boolean schema or integer fields,
++non-canonical dependency names containing unsafe separators, unsupported ABI
++or toolchain ranges, and artifact platforms outside the supported set. Actor
++dependencies must use semantic-version ranges and cannot be duplicated or
++self-referential.
++
++Index generation is deterministic. `artifact.platforms` is authoritative: the
++generator publishes only declared OS/architecture assets and gives every raw
++shared library a platform-qualified name. It never invents an asset for an
++undeclared platform.
++
++`scripts/actor_metadata.py` is the canonical OBCX metadata validator vendored
++for standalone registry CI. The OBCX conformance matrix binds this repository
++to the core, bridge, message-store, and actor-template revisions; coordinated
++conformance also verifies that the vendored validator remains byte-identical
++to the SDK copy.
++
++Registry metadata describes package and ABI compatibility; it does not publish
++runtime scheduling services, BotInstallation components, transports, or
++compatibility shims. Actors targeting the current ABI 2 SDK use the
++process-owned `BlockingExecutor` through `ActorContext::run_blocking()` (or its
++tracked nested-Asio operation) for synchronous blocking work and the data-only
++`BotOperationGateway` for supported bot egress. No actor entry may depend on a
++process component registry, transport, or bot-owned scheduler API.
 diff --git a/entries/onebot-cxx.message-store/actor.toml b/entries/onebot-cxx.message-store/actor.toml
-index 3f10e742c3576d085798c2c4845e3328b782f59d..ea2af2edac6974629c6ac3c91accfc720ea6afd7 100644
+index 3f10e74..874158f 100644
 --- a/entries/onebot-cxx.message-store/actor.toml
 +++ b/entries/onebot-cxx.message-store/actor.toml
 @@ -11,7 +11,7 @@ name = "message_store"
@@ -26,19 +85,24 @@ index 3f10e742c3576d085798c2c4845e3328b782f59d..ea2af2edac6974629c6ac3c91accfc72
  
  [dependencies]
  packages = ["sqlite3"]
-@@ -21,6 +21,10 @@ actors = []
+@@ -21,9 +21,13 @@ actors = []
  obcx = ">=1.1.0,<2.0.0"
  actor_abi_min = 2
  actor_abi_max = 2
 +cpp_standard = 26
 +compiler = "gcc>=16.1"
 +reflection_macro = 202506
-+input_contract_schema = 1
++input_contract_schema = 2
  
  [publication]
- repository = "https://github.com/Onebot-CXX/obcx-actor-message-store"
+-repository = "https://github.com/Onebot-CXX/obcx-actor-message-store"
+-homepage = "https://github.com/Onebot-CXX/obcx-actor-message-store"
++repository = "https://github.com/Onebot-CXX/obcx-message-store"
++homepage = "https://github.com/Onebot-CXX/obcx-message-store"
+ license = "MIT"
+ description = "Persistent received-message actor for OBCX pipelines"
 diff --git a/entries/vollate.bridge/actor.toml b/entries/vollate.bridge/actor.toml
-index b37ddb32c934553850fb00e869c655b6f9c45dab..6eb7b61db68ad255bf3084a4bb71a471ce015fe3 100644
+index b37ddb3..fc69be6 100644
 --- a/entries/vollate.bridge/actor.toml
 +++ b/entries/vollate.bridge/actor.toml
 @@ -11,7 +11,7 @@ name = "bridge"
@@ -50,19 +114,22 @@ index b37ddb32c934553850fb00e869c655b6f9c45dab..6eb7b61db68ad255bf3084a4bb71a471
  
  [dependencies]
  packages = ["tomlplusplus"]
-@@ -21,6 +21,10 @@ actors = [{ id = "onebot-cxx.message-store", version = ">=0.1.0,<1.0.0" }]
+@@ -21,8 +21,12 @@ actors = [{ id = "onebot-cxx.message-store", version = ">=0.1.0,<1.0.0" }]
  obcx = ">=1.1.0,<2.0.0"
  actor_abi_min = 2
  actor_abi_max = 2
 +cpp_standard = 26
 +compiler = "gcc>=16.1"
 +reflection_macro = 202506
-+input_contract_schema = 1
++input_contract_schema = 2
  
  [publication]
- repository = "https://github.com/vollate/obcx-actor-bridge"
+-repository = "https://github.com/vollate/obcx-actor-bridge"
++repository = "https://github.com/vollate/obcx-message-bridge"
+ license = "MIT"
+ description = "QQ and Telegram bidirectional bridge actor for OBCX"
 diff --git a/generate_actor_index.py b/generate_actor_index.py
-index 27adeab8d6e19e43f797693a3822cc7712244a2d..e0ab2a1ac6ff649c08a35527be8028d5ef1ec631 100644
+index 27adeab..e0ab2a1 100644
 --- a/generate_actor_index.py
 +++ b/generate_actor_index.py
 @@ -24,10 +24,6 @@ SPEC.loader.exec_module(metadata)
@@ -77,21 +144,24 @@ index 27adeab8d6e19e43f797693a3822cc7712244a2d..e0ab2a1ac6ff649c08a35527be8028d5
  
  
 diff --git a/index/actors.json b/index/actors.json
-index a79bf9110d58aa31e1c0f5419f6f52079c3110a3..2d9fef43e01173d12f6f4ec8c389333fe5e85f4b 100644
+index a79bf91..5c7db62 100644
 --- a/index/actors.json
 +++ b/index/actors.json
-@@ -5,6 +5,10 @@
+@@ -5,22 +5,31 @@
        "artifact": {
          "entrypoint": "obcx_create_actor_v2",
          "files": {
 +          "linux-arm64": {
 +            "filename": "message_store-linux-arm64.so",
-+            "url": "https://github.com/Onebot-CXX/obcx-actor-message-store/releases/download/v0.1.0/message_store-linux-arm64.so"
++            "url": "https://github.com/Onebot-CXX/obcx-message-store/releases/download/v0.1.0/message_store-linux-arm64.so"
 +          },
            "linux-x86_64": {
              "filename": "message_store-linux-x86_64.so",
-             "url": "https://github.com/Onebot-CXX/obcx-actor-message-store/releases/download/v0.1.0/message_store-linux-x86_64.so"
-@@ -14,13 +18,18 @@
+-            "url": "https://github.com/Onebot-CXX/obcx-actor-message-store/releases/download/v0.1.0/message_store-linux-x86_64.so"
++            "url": "https://github.com/Onebot-CXX/obcx-message-store/releases/download/v0.1.0/message_store-linux-x86_64.so"
+           }
+         },
+         "install_directory": "lib/obcx/actors",
          "kind": "shared-library",
          "name": "message_store",
          "platforms": [
@@ -106,33 +176,45 @@ index a79bf9110d58aa31e1c0f5419f6f52079c3110a3..2d9fef43e01173d12f6f4ec8c389333f
 -        "obcx": ">=1.1.0,<2.0.0"
 +        "compiler": "gcc>=16.1",
 +        "cpp_standard": 26,
-+        "input_contract_schema": 1,
++        "input_contract_schema": 2,
 +        "obcx": ">=1.1.0,<2.0.0",
 +        "reflection_macro": 202506
        },
        "dependencies": {
          "actors": [],
-@@ -31,7 +40,7 @@
+@@ -31,14 +40,14 @@
        "id": "onebot-cxx.message-store",
        "metadata": {
          "path": "entries/onebot-cxx.message-store/actor.toml",
 -        "sha256": "77ab18d191a45b5fe6b51328558237c9ede74126745683cff38d59afe91af506"
-+        "sha256": "2f94560fc501e2c628a13145caeb06e056180818236addaf2eb8d904a67b42f2"
++        "sha256": "4aa47a58782f0b7d175caba19ec9d0f05386b6e193190d0173ed1889eddc2833"
        },
        "name": "message_store",
        "publication": {
-@@ -47,6 +56,10 @@
+         "description": "Persistent received-message actor for OBCX pipelines",
+-        "homepage": "https://github.com/Onebot-CXX/obcx-actor-message-store",
++        "homepage": "https://github.com/Onebot-CXX/obcx-message-store",
+         "license": "MIT",
+-        "repository": "https://github.com/Onebot-CXX/obcx-actor-message-store"
++        "repository": "https://github.com/Onebot-CXX/obcx-message-store"
+       },
+       "version": "0.1.0"
+     },
+@@ -47,22 +56,31 @@
        "artifact": {
          "entrypoint": "obcx_create_actor_v2",
          "files": {
 +          "linux-arm64": {
 +            "filename": "bridge-linux-arm64.so",
-+            "url": "https://github.com/vollate/obcx-actor-bridge/releases/download/v0.1.0/bridge-linux-arm64.so"
++            "url": "https://github.com/vollate/obcx-message-bridge/releases/download/v0.1.0/bridge-linux-arm64.so"
 +          },
            "linux-x86_64": {
              "filename": "bridge-linux-x86_64.so",
-             "url": "https://github.com/vollate/obcx-actor-bridge/releases/download/v0.1.0/bridge-linux-x86_64.so"
-@@ -56,13 +69,18 @@
+-            "url": "https://github.com/vollate/obcx-actor-bridge/releases/download/v0.1.0/bridge-linux-x86_64.so"
++            "url": "https://github.com/vollate/obcx-message-bridge/releases/download/v0.1.0/bridge-linux-x86_64.so"
+           }
+         },
+         "install_directory": "lib/obcx/actors",
          "kind": "shared-library",
          "name": "bridge",
          "platforms": [
@@ -147,23 +229,30 @@ index a79bf9110d58aa31e1c0f5419f6f52079c3110a3..2d9fef43e01173d12f6f4ec8c389333f
 -        "obcx": ">=1.1.0,<2.0.0"
 +        "compiler": "gcc>=16.1",
 +        "cpp_standard": 26,
-+        "input_contract_schema": 1,
++        "input_contract_schema": 2,
 +        "obcx": ">=1.1.0,<2.0.0",
 +        "reflection_macro": 202506
        },
        "dependencies": {
          "actors": [
-@@ -78,7 +96,7 @@
+@@ -78,13 +96,13 @@
        "id": "vollate.bridge",
        "metadata": {
          "path": "entries/vollate.bridge/actor.toml",
 -        "sha256": "e2bd036288aebf8641d35c33844aaf5996d66918565370b326b2f223829bdff9"
-+        "sha256": "b8f8423afda92ea95a830008cd35174d3fd0081ffb76b68d825754ee683996a6"
++        "sha256": "ffed69b62b2c7b876b6630535c4f1585152e1d964a003ea0f0b75c387396aabd"
        },
        "name": "bridge",
        "publication": {
+         "description": "QQ and Telegram bidirectional bridge actor for OBCX",
+         "license": "MIT",
+-        "repository": "https://github.com/vollate/obcx-actor-bridge"
++        "repository": "https://github.com/vollate/obcx-message-bridge"
+       },
+       "version": "0.1.0"
+     }
 diff --git a/schemas/actor-registry-entry.schema.json b/schemas/actor-registry-entry.schema.json
-index 2563f01d3a15d5e2d07e6c0a12529478923cfcb7..d72e90a4d5cae7afd013f7b56942888d09462615 100644
+index 2563f01..6f24051 100644
 --- a/schemas/actor-registry-entry.schema.json
 +++ b/schemas/actor-registry-entry.schema.json
 @@ -34,11 +34,7 @@
@@ -196,7 +285,7 @@ index 2563f01d3a15d5e2d07e6c0a12529478923cfcb7..d72e90a4d5cae7afd013f7b56942888d
 +        "cpp_standard": {"const": 26},
 +        "compiler": {"const": "gcc>=16.1"},
 +        "reflection_macro": {"const": 202506},
-+        "input_contract_schema": {"const": 1}
++        "input_contract_schema": {"const": 2}
        },
        "additionalProperties": false
      },
@@ -211,7 +300,7 @@ index 2563f01d3a15d5e2d07e6c0a12529478923cfcb7..d72e90a4d5cae7afd013f7b56942888d
      },
      "file": {
 diff --git a/scripts/actor_metadata.py b/scripts/actor_metadata.py
-index c3fb40ddc880aa0e9205951f6994094a12277292..c11c2a1ec4b1e9b4b422346e10ec080e5dd0ae67 100644
+index c3fb40d..e5030bd 100644
 --- a/scripts/actor_metadata.py
 +++ b/scripts/actor_metadata.py
 @@ -26,7 +26,15 @@ SECTION_FIELDS = {
@@ -266,15 +355,15 @@ index c3fb40ddc880aa0e9205951f6994094a12277292..c11c2a1ec4b1e9b4b422346e10ec080e
 +    input_contract_schema = _required_integer(
 +        compatibility, "compatibility", "input_contract_schema", errors
 +    )
-+    if input_contract_schema is not None and input_contract_schema != 1:
++    if input_contract_schema is not None and input_contract_schema != 2:
 +        errors.append(
-+            "[compatibility].input_contract_schema must equal 1"
++            "[compatibility].input_contract_schema must equal 2"
 +        )
  
      repository = _required_string(
          publication, "publication", "repository", errors
 diff --git a/tests/test_actor_registry.py b/tests/test_actor_registry.py
-index b171f551440fa8c7a234ae054dab1ef77f1fc159..836e87b5f2ea9d654727214d254b1c2b2234d85a 100644
+index b171f55..836e87b 100644
 --- a/tests/test_actor_registry.py
 +++ b/tests/test_actor_registry.py
 @@ -29,7 +29,10 @@ class ActorRegistryTest(unittest.TestCase):
@@ -298,66 +387,6 @@ index b171f551440fa8c7a234ae054dab1ef77f1fc159..836e87b5f2ea9d654727214d254b1c2b
              )
              (actor_dir / "actor.toml").write_text(content, encoding="utf-8")
              with self.assertRaises(registry.metadata.ActorMetadataError) as error:
--- 
-2.54.0
-
-
-From ff8a4fecdabd91b2b5e930c39454389bb72109eb Mon Sep 17 00:00:00 2001
-From: Vollate <uint44t@gmail.com>
-Date: Sun, 19 Jul 2026 20:00:21 +0800
-Subject: [PATCH 2/2] docs: refresh actor registry contract
-
----
- README.md | 32 ++++++++++++++++++++++++++------
- 1 file changed, 26 insertions(+), 6 deletions(-)
-
-diff --git a/README.md b/README.md
-index f7df86754181895b2abec3d46bf8ad873d402c6e..5ec655cdae63f1557cc45b184cc19153f4aa2251 100644
---- a/README.md
-+++ b/README.md
-@@ -4,7 +4,14 @@ This repository is the independent actor-only publication registry for OBCX
- ABI 2 packages. A submission is a canonical
- `entries/<actor-id>/actor.toml`; no second metadata dialect is accepted.
- 
--Validate entries and confirm that the checked-in index is current:
-+The checked-in entries are:
-+
-+- `onebot-cxx.message-store`
-+- `vollate.bridge`
-+
-+## Validate And Generate
-+
-+Run all commands from the repository root:
- 
- ```bash
- python3 -m unittest discover -s tests -v
-@@ -25,8 +32,21 @@ python3 generate_actor_index.py resolve \
-   --id vollate.bridge --version 0.1.0 --platform linux-x86_64
- ```
- 
--`artifact.platforms` is authoritative. The generator publishes only declared
--OS/architecture assets and gives every raw shared library a platform-qualified
--name. `scripts/actor_metadata.py` is the canonical OBCX metadata validator
--vendored for standalone registry CI; coordinated OBCX conformance verifies
--that the vendored copy remains byte-identical to the SDK validator.
-+## Metadata And Publication Rules
-+
-+Validation rejects unknown fields, boolean schema or integer fields,
-+non-canonical dependency names containing unsafe separators, unsupported ABI
-+or toolchain ranges, and artifact platforms outside the supported set. Actor
-+dependencies must use semantic-version ranges and cannot be duplicated or
-+self-referential.
-+
-+Index generation is deterministic. `artifact.platforms` is authoritative: the
-+generator publishes only declared OS/architecture assets and gives every raw
-+shared library a platform-qualified name. It never invents an asset for an
-+undeclared platform.
-+
-+`scripts/actor_metadata.py` is the canonical OBCX metadata validator vendored
-+for standalone registry CI. The OBCX conformance matrix binds this repository
-+to the core, bridge, message-store, and actor-template revisions; coordinated
-+conformance also verifies that the vendored validator remains byte-identical
-+to the SDK copy.
 -- 
 2.54.0
 

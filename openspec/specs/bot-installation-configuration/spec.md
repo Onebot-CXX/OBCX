@@ -98,8 +98,8 @@ Validation-only SHALL parse typed configurations, select recipes, and validate c
 - **THEN** candidate validation fails before activation
 
 ### Requirement: Repository configuration and migration documentation are complete
-All tracked examples, development fixtures, packaging smoke configurations, and tests SHALL use the canonical schema with placeholder credentials. Documentation SHALL provide an old-to-new key mapping and SHALL state that binary rollback requires restoring the prior configuration format.
+All root-owned tracked examples, development fixtures, packaging smoke configurations, and tests SHALL use the canonical schema with placeholder credentials. Documentation SHALL provide an old-to-new key mapping and SHALL state that binary rollback requires restoring the prior configuration format. Root validation MUST NOT inspect configuration files owned by independent `local_actor/` repositories.
 
-#### Scenario: Repository configuration inventory is checked
-- **WHEN** conformance scans tracked TOML files used by OBCX tests or examples
+#### Scenario: Root configuration examples are checked
+- **WHEN** validation scans tracked TOML files owned by the root repository
 - **THEN** no legacy bot schema, ignored bot key, or credential-shaped production value remains

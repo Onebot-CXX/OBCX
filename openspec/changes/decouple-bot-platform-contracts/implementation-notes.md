@@ -35,8 +35,8 @@ Do not treat the development checkout's passing tests as a releasable bundle.
   identity, recipe/actions/components/publication and existing process budgets.
 - Actor input contracts and package compatibility declarations require schema 2;
   scheduler ABI remains 2, package-document schema remains 1, Bridge DB remains 3.
-  Frozen schema-1 fixture remains independent of the new SDK. A separate marker
-  DSO proves startup/validate/reload never invoke incompatible factories/hooks.
+  Root tests cover the current contract and unknown future schemas without
+  retaining pre-current actor compatibility fixtures.
 - Bridge, Chat LLM, Message Store, template, root/independent registry metadata and
   fixtures are migrated. Legacy umbrella/client headers are gone; historical
   documentation is explicitly marked.
@@ -65,11 +65,10 @@ not changed and it is outside the Bot SDK include closure.
 ## Verification of current checkout
 
 - Root `nix fmt` and `cmake --build build -j 2` passed.
-- Full `ctest --test-dir build --output-on-failure -j 2`: **438/438 passed**,
-  including independent Message Store/Bridge/template/registry conformance,
-  fresh installed Actor SDK smoke and three physically isolated Bot SDK prefixes.
-- Bridge independent suite includes 100 tests and installed pipeline/reload smoke.
-- Chat LLM independently rebuilt against the fresh conformance SDK: **97/97 passed**.
+- Full root CTest covers root-owned runtime, protocol, package-tooling, CLI,
+  installed Actor SDK smoke, and three physically isolated Bot SDK prefixes.
+  Independent actor repositories own their separate behavior and integration
+  suites.
 - Generic test.echo module, in a separate translation unit linked only to
   `obcx_generic_runtime`: parse/describe/assemble/invoke/stop, private metadata,
   disabled-secret fingerprints and forged/unknown request rejection passed.
@@ -77,8 +76,8 @@ not changed and it is outside the Bot SDK include closure.
 - 27 gateway/registry/installation/Actor-cancellation tests each repeated 25 times:
   **675 successful runs**. This is the applicable concurrency gate; no sanitizer
   run is claimed for this checkpoint.
-- Architecture/metadata/configuration inventory and legacy schema/preparation
-  gates passed. Strict OpenSpec validation and `git diff --check` passed.
+- Metadata and current configuration/schema gates passed. Strict OpenSpec
+  validation and `git diff --check` passed.
 - A temporary, disabled-Bot copy of the documented canonical configuration passed
   the real binary's `--validate-config`; temporary logs/config were removed. No
   production configuration/database was used for this acceptance command.

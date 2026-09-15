@@ -30,7 +30,7 @@ Bridge can dispatch bot operations by exact installation, but the actor still pe
 ## Impact
 
 - Root SDK/runtime: `ActorInputContract`, contract parsing, actor-aware configuration validation, validation-only/reload diagnostics, and fixture tests.
-- `local_actor/obcx-actor-bridge`: configuration model and examples, route indexes, bot-operation selection, forwarding outcomes, commands/notices/media, retry callbacks, storage models/repository, schema migration, diagnostics, and standalone/conformance tests.
+- `local_actor/obcx-message-bridge`: configuration model and examples, route indexes, bot-operation selection, forwarding outcomes, commands/notices/media, retry callbacks, storage models/repository, schema migration, diagnostics, and standalone/conformance tests.
 - Bridge SQLite data: message mappings, retry queue, media-group mappings, users, sticker caches, QQ-to-Telegram sticker mappings, and heartbeats gain installation-scoped identities under a schema version.
 - Message Store continues to use its existing `source_bot` and `conversation_id` columns; Bridge queries them explicitly but requires no Message Store schema or event-type migration.
 - Operators keep current single-pair configuration unchanged, or opt into named pairs and provide the legacy-pair migration selector when an existing non-empty Bridge database cannot infer it from a sole pair.

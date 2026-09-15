@@ -37,7 +37,7 @@ bridge-owned mapping plan, see
 | ConfigLoader parses and validates `[actors]` / `[pipelines]` | DONE | [x] | Config | `actor_config_test` and `plugin_topology_test` pass |
 | Actor build helper added | DONE | [x] | Build | `OBCXActor.cmake` adds `obcx_add_actor(...)` |
 | message_store actor stores received platform messages only | DONE | [x] | Storage | Standalone `message_store_smoke` proves DbManager-backed platform tables and no bridge mappings |
-| message_store standalone actor repo builds against SDK | DONE | [x] | Storage | `local_plugin/obcx-actor-message-store` builds with `obcx-sdk` and passes smoke test |
+| message_store standalone actor repo builds against SDK | DONE | [x] | Storage | `local_plugin/obcx-message-store` builds with `obcx-sdk` and passes smoke test |
 | bridge consumes `obcx::message_store::events::MessageStored` instead of raw callbacks | DONE | [x] | Bridge | `BridgeActorTest`, `BridgeMessageEventAdapterTest`, and `BridgeHandlerRepositoryTest` cover actor-mode forwarding runtime ingestion and legacy raw callback gating |
 | Legacy plugin path still works | DONE | [x] | Compatibility | `obcx` builds and `plugin_topology_test` passes |
 | Documentation updated for actor-first model | DONE | [x] | Docs | README/config examples present actor runtime as the primary model |
@@ -175,7 +175,7 @@ The received-message actor now exists as a standalone actor repository. The
 OBCX repository contains only the actor framework and dispatch tests.
 
 - [x] Move `message_store` into a standalone actor repository:
-  `local_plugin/obcx-actor-message-store`.
+  `local_plugin/obcx-message-store`.
 - [x] Store received platform messages only.
 - [x] Use `DbManager` middleware instead of owning raw SQLite directly.
 - [x] Use actor-owned tables such as `message_store_qq_messages` and
@@ -294,7 +294,7 @@ Exit criteria:
 | A. Core actor API | DONE | [x] | `IActor`, envelope, actor manager | `include/core`, `src/common`, `tests/*actor*` |
 | B. Orchestrator runtime | DONE | [x] | pipeline execution, mailbox, partition | `include/core`, `src/core`, `tests/*orchestrator*` |
 | C. Config/build naming | DONE | [x] | `[actors]`, `[pipelines]`, CMake actor helper | `include/common`, `src/common`, `cmake` |
-| D. message_store actor | DONE | [x] | standalone received-message actor and tests | `local_plugin/obcx-actor-message-store` |
+| D. message_store actor | DONE | [x] | standalone received-message actor and tests | `local_plugin/obcx-message-store` |
 | E. bridge actor migration | DOING | [ ] | actor-mode ingestion and mapping persistence done; full QQ/TG forwarding behavior tests remain | separate `local_plugin/obcx-plugin-bridge` repository |
 | F. Docs/examples | DONE | [x] | actor-first docs and examples | `README.md`, example config docs |
 

@@ -27,15 +27,6 @@
         "OBCX_BUILD_TESTS": "ON",
         "OBCX_BUILD_BENCHMARKS": "ON"
       }
-    },
-    {
-      "name": "actor-conformance",
-      "displayName": "Actor package cross-repository conformance",
-      "inherits": "actor-release",
-      "binaryDir": "${sourceDir}/build/actor-conformance",
-      "cacheVariables": {
-        "OBCX_ENABLE_CROSS_REPO_ACTOR_TESTS": "ON"
-      }
     }
   ],
   "buildPresets": [
@@ -46,10 +37,6 @@
     {
       "name": "actor-release",
       "configurePreset": "actor-release"
-    },
-    {
-      "name": "actor-conformance",
-      "configurePreset": "actor-conformance"
     }
   ],
   "testPresets": [
@@ -58,7 +45,7 @@
       "configurePreset": "actor-dev",
       "filter": {
         "exclude": {
-          "label": "(compile-contract|contract|architecture|installed-sdk|conformance|slow)"
+          "label": "(compile-contract|contract|architecture|installed-sdk|slow)"
         }
       },
       "output": {
@@ -70,7 +57,7 @@
       "configurePreset": "actor-dev",
       "filter": {
         "exclude": {
-          "label": "(conformance|slow)"
+          "label": "slow"
         }
       },
       "output": {
@@ -80,13 +67,6 @@
     {
       "name": "actor-dev",
       "inherits": "actor-full"
-    },
-    {
-      "name": "actor-conformance",
-      "configurePreset": "actor-conformance",
-      "output": {
-        "outputOnFailure": true
-      }
     }
   ]
 }

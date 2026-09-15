@@ -30,7 +30,7 @@ Bridge schema version 2 scopes message mappings by bot installation but not by c
 ## Impact
 
 - Core actor runtime/SDK: additive optional generation preparation, typed failed/restart-required results, and pre-ingress invocation during generation construction; the V2 interface and existing actor libraries remain compatible.
-- `local_actor/obcx-actor-bridge`: storage models, forwarding outcomes, state repository APIs/schema/migration, generation preparation, handlers, commands, retry queue, media-group persistence, diagnostics, configuration for migration route history/archive policy, and standalone tests.
+- `local_actor/obcx-message-bridge`: storage models, forwarding outcomes, state repository APIs/schema/migration, generation preparation, handlers, commands, retry queue, media-group persistence, diagnostics, configuration for migration route history/archive policy, and standalone tests.
 - Bridge SQLite state: `bridge_message_mappings`, `bridge_message_retry_queue`, and `bridge_media_group_mappings` advance to conversation-scoped version 3; unresolved historical mappings require explicit operator handling.
 - Existing Message Store tables are read during migration preflight through their current `source_platform`, `source_bot`, `conversation_id`, and `message_id` fields but are not altered.
 - Operations remain within the existing 13-action QQ/Telegram contract and exact configured installation pairs.
