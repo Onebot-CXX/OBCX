@@ -70,6 +70,8 @@ extern "C" auto obcx_get_actor_contract() -> const char * {
   return R"({"schema_version":2,"actor":"contract_fixture","accepted_inputs":["test::Message"],"configuration":{"bot_installation_collections":{"pairs":{"minimum_items":1,"identity":"id","bot_installations":{"target":"qq"},"unique_fields":["missing"]}}}})";
 #elif OBCX_CONTRACT_CASE == 23
   return R"({"schema_version":2,"actor":"contract_fixture","accepted_inputs":["test::Message"],"configuration":{"bot_installation_collections":{"pairs":{"minimum_items":1,"identity":"id","bot_installations":{"target":"qq"}}},"collection_identity_references":[{"source_key":"pair","target_collection":"missing","target_identity":"id"}]}})";
+#elif OBCX_CONTRACT_CASE == 24
+  return R"({"schema_version":2,"actor":"contract_fixture","accepted_inputs":["test::Message"],"commands":[{"name":"help","description":"Reserved","request_type":"test::Message"}]})";
 #else
   return R"({"schema_version":2,"actor":"contract_fixture","accepted_inputs":["test::Message"]})";
 #endif

@@ -24,45 +24,53 @@ The process SHALL register one native operation endpoint capability for each ena
 - **THEN** no operation registration API accepts `IBot`, `IQQBot`, `ITelegramBot`, a concrete bot, or a live-bot registry entry
 
 ### Requirement: Supported actions match the closed implementation matrix
-Each operation endpoint capability SHALL publish a data-only supported-action set containing only operations implemented by its installed components and listed in `qq-telegram-bot-contract`. Optional Telegram multipart media-group upload MUST be advertised only when the same installation publishes its uploader capability. Static support reporting MUST NOT infer actions from class inheritance, RTTI, method presence, or another installation.
+Each operation endpoint capability SHALL publish a data-only supported-action set containing only operations implemented by its installed components and listed in `qq-telegram-bot-contract`, including `message.send_private` when private messaging is installed. Optional Telegram multipart media-group upload MUST be advertised only when the same installation publishes its uploader capability. Static support reporting MUST NOT infer actions from class inheritance, RTTI, method presence, or another installation.
 
 #### Scenario: Telegram endpoint is inspected
 - **WHEN** a caller queries a composed Telegram installation
-- **THEN** it sees only the listed common and `telegram.*` actions provided by that installation's components
+- **THEN** it sees the listed common group/private actions and `telegram.*` actions provided by that installation's components
 
 #### Scenario: OneBot endpoint is inspected
 - **WHEN** a caller queries a composed OneBot installation
-- **THEN** it sees only common send/delete and the listed `onebot11.*` actions and never sees Telegram or official-QQ actions
+- **THEN** it sees common group/private send and delete plus the listed `onebot11.*` actions and never sees Telegram or official-QQ actions
 
 #### Scenario: Multipart uploader capability is absent
 - **WHEN** a Telegram test recipe omits the optional uploader capability
 - **THEN** `telegram.media.send_group_uploads` is absent and an attempted call fails before provider I/O
 
 ### Requirement: Actors call one data-only operation client
-The runtime SHALL expose `BotOperationClient` as an actor service that accepts only the finite request values and returns typed results. The client SHALL delegate to the process wrapper and MUST NOT expose `BotRegistry`, `IBot`, provider interfaces, concrete bots, connection managers, credentials, or provider executors through its public API.
+The runtime SHALL expose `BotOperationClient` as an actor service and SHALL reuse the same process-owned gateway for generation-owned command services. The operation boundary accepts only finite request values and returns typed results. It MUST NOT expose `BotRegistry`, `IBot`, provider interfaces, concrete bots, connection managers, credentials, or provider executors through its public API.
 
 #### Scenario: Actor sends to a configured group
 - **WHEN** an actor submits a valid request with exact installation and group target
 - **THEN** the matching process wrapper performs the call and the actor receives a typed result without resolving a bot
+
+#### Scenario: Command service replies to a private user
+- **WHEN** generation-owned `/help` processing submits a valid private-message request with an exact installation/user target
+- **THEN** the matching process wrapper performs the call through the shared gateway without exposing a provider object to command runtime
 
 #### Scenario: Request supplies only a platform
 - **WHEN** a caller omits the installation id or supplies only `qq`, `telegram`, or a surface
 - **THEN** dispatch returns a definitely-not-submitted validation error and selects no bot
 
 #### Scenario: Target belongs to another installation
-- **WHEN** a request combines one installation with a group or message reference scoped to another
+- **WHEN** a request combines one installation with a group, user, or message reference scoped to another
 - **THEN** dispatch rejects it before invoking the wrapper
 
 ### Requirement: Wrappers parse current provider responses conservatively
-The Telegram operation component SHALL parse current `{ok,result}` success and Telegram error envelopes. The OneBot operation component SHALL parse current `status/retcode/data/echo` envelopes. Successful side-effect results MUST contain required scoped message ids or typed mutation status; empty, malformed, and synthetic responses MUST NOT be reported as success. Side-effect exceptions after invocation begins SHALL use conservative submission safety. Parsing SHALL remain process-side behind the operation endpoint capability.
+The Telegram operation component SHALL parse current `{ok,result}` success and Telegram error envelopes. The OneBot operation component SHALL parse current `status/retcode/data/echo` envelopes. Successful group/private side-effect results MUST contain required scoped message ids; empty, malformed, and synthetic responses MUST NOT be reported as success. Side-effect exceptions after invocation begins SHALL use conservative submission safety. Parsing SHALL remain process-side behind the operation endpoint capability.
 
-#### Scenario: Telegram group or topic send succeeds
+#### Scenario: Telegram group, topic, or private send succeeds
 - **WHEN** the Telegram operation and transport components receive a valid result message
-- **THEN** the endpoint returns its scoped chat/message reference
+- **THEN** the endpoint returns its correctly typed scoped chat/user and message reference
 
 #### Scenario: OneBot group send succeeds
-- **WHEN** the OneBot operation and transport components receive successful data with `message_id`
+- **WHEN** the OneBot group operation and transport components receive successful data with `message_id`
 - **THEN** the endpoint returns its scoped group/message reference
+
+#### Scenario: OneBot private send succeeds
+- **WHEN** the OneBot private operation and transport components receive successful data with `message_id`
+- **THEN** the endpoint returns its scoped user/message reference
 
 #### Scenario: Provider response is malformed
 - **WHEN** a side-effecting provider call returns an empty body, invalid JSON, or nominal success without required fields
@@ -70,7 +78,7 @@ The Telegram operation component SHALL parse current `{ok,result}` success and T
 
 #### Scenario: Provider explicitly rejects the action
 - **WHEN** a valid provider error envelope is returned
-- **THEN** the endpoint preserves only redacted code/message/retry metadata needed by current actors
+- **THEN** the endpoint preserves only redacted code/message/retry metadata needed by current callers
 
 ### Requirement: Bot-owned media and lookup calls stay behind wrappers
 Telegram authenticated file resolution/download and Telegram media sends SHALL execute inside Telegram installation components. Current OneBot member, forwarded-message, file-resolution, and poke calls SHALL execute inside OneBot installation components. The endpoint capabilities MUST enforce existing configured byte bounds and MUST NOT expose Telegram tokenized URLs, provider clients, transports, or component-registry objects to actors.

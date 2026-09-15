@@ -1,5 +1,8 @@
 #include "telegram/bot/command_adapter.hpp"
+#include "core/bot/gateway_codec.hpp"
+#include "core/bot/messaging.hpp"
 #include "core/command/command_detection.hpp"
+#include "telegram/bot/operations.hpp"
 #include <utility>
 
 namespace obcx::telegram::bot {
@@ -7,6 +10,7 @@ namespace {
 using core::CommandCatalogEntry;
 using core::CommandCatalogPublisher;
 using core::CommandCatalogPublishResult;
+using core::CommandReplyBuildResult;
 using core::DetectedCommand;
 using core::ICommandPlatformAdapter;
 using core::MessageEnvelope;
@@ -73,6 +77,85 @@ public:
   [[nodiscard]] auto supports_catalog_publication() const noexcept
       -> bool override {
     return true;
+  }
+
+  [[nodiscard]] auto build_text_reply(const MessageEnvelope &event,
+                                      std::string text) const
+      -> CommandReplyBuildResult override {
+    const auto failure = [](std::string code) {
+      return CommandReplyBuildResult{
+          .code = std::move(code),
+          .message = "Telegram command reply identity is invalid"};
+    };
+    if (event.source_platform != platform() || event.source_bot.empty() ||
+        !event.payload.is_object() || text.empty()) {
+      return failure("command_reply_scope_invalid");
+    }
+    const auto string_field = [&event](const std::string_view key) {
+      const auto field = event.payload.find(key);
+      return field != event.payload.end() && field->is_string()
+                 ? field->get<std::string>()
+                 : std::string{};
+    };
+    const auto sender = string_field("sender");
+    const auto group = string_field("group_id");
+    const auto chat = string_field("chat_id");
+    const auto kind = string_field("message_type");
+    const obcx::bot::BotInstallationRef installation{
+        .installation_id = event.source_bot,
+        .surface = obcx::bot::SurfaceId{"telegram.bot_api"}};
+    const common::Message message = {
+        {.type = "text", .data = {{"text", std::move(text)}}}};
+
+    try {
+      if (kind == "private" && !sender.empty() && group.empty() &&
+          (chat.empty() || chat == sender) &&
+          (event.conversation_id == "private:" + sender ||
+           event.conversation_id == "chat:" + sender)) {
+        obcx::bot::SendPrivateMessageRequest request{
+            .target = {.installation = installation, .native_user_id = sender},
+            .message = message};
+        return {
+            .operation = obcx::bot::OperationEnvelope{
+                .installation = installation,
+                .action = decltype(request)::action,
+                .payload = obcx::bot::GatewayCodec<decltype(request)>::encode(
+                    request)}};
+      }
+      if (kind != "group" || sender.empty() || group.empty() ||
+          (!chat.empty() && chat != group) ||
+          (event.conversation_id != "chat:" + group &&
+           event.conversation_id != "group:" + group)) {
+        return failure("command_reply_scope_invalid");
+      }
+      if (event.payload.contains("topic_id")) {
+        const auto &topic = event.payload.at("topic_id");
+        if (!topic.is_number_integer() || topic.get<std::int64_t>() <= 0) {
+          return failure("command_reply_topic_invalid");
+        }
+        obcx::telegram::bot::SendTelegramTopicMessageRequest request{
+            .target = {.group = {.installation = installation,
+                                 .native_group_id = group},
+                       .topic_id = topic.get<std::int64_t>()},
+            .message = message};
+        return {
+            .operation = obcx::bot::OperationEnvelope{
+                .installation = installation,
+                .action = decltype(request)::action,
+                .payload = obcx::bot::GatewayCodec<decltype(request)>::encode(
+                    request)}};
+      }
+      obcx::bot::SendGroupMessageRequest request{
+          .target = {.installation = installation, .native_group_id = group},
+          .message = message};
+      return {.operation = obcx::bot::OperationEnvelope{
+                  .installation = installation,
+                  .action = decltype(request)::action,
+                  .payload = obcx::bot::GatewayCodec<decltype(request)>::encode(
+                      request)}};
+    } catch (...) {
+      return failure("command_reply_encoding_failed");
+    }
   }
 
   auto publish_catalog(CommandCatalogPublisher *catalog,

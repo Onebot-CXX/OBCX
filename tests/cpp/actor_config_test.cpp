@@ -235,6 +235,18 @@ TEST_F(ActorConfigTest, ParsesExplicitCommandRuntimeRoutes) {
 [command_runtime]
 timeout_ms = 6000
 
+[command_runtime.help]
+page_bytes = 3500
+maximum_pages = 10
+
+[command_runtime.access.groups]
+mode = "unrestricted"
+entries = []
+
+[command_runtime.access.users]
+mode = "unrestricted"
+entries = []
+
 [[command_runtime.routes]]
 actor = "chat_llm"
 commands = ["chat", "toggle_think"]
@@ -259,10 +271,159 @@ timeout_ms = 1500
   EXPECT_TRUE(built.snapshot->validate_actor_runtime_config().empty());
 }
 
+TEST_F(ActorConfigTest, ParsesExplicitAccessPoliciesAndOverrides) {
+  const auto built = ActorConfigSnapshotBuilder::build(
+      toml::parse(R"(
+[command_runtime]
+timeout_ms = 6000
+
+[command_runtime.help]
+page_bytes = 2048
+maximum_pages = 4
+
+[command_runtime.access.groups]
+mode = "allowlist"
+entries = [
+  { platform = "telegram", bot = "primary", native_group_id = "-1001" },
+]
+
+[command_runtime.access.users]
+mode = "denylist"
+entries = [
+  { platform = "telegram", bot = "primary", native_user_id = "7" },
+]
+
+[[command_runtime.access.overrides]]
+command = "help"
+groups = { mode = "unrestricted", entries = [] }
+users = { mode = "allowlist", entries = [{ platform = "telegram", bot = "primary", native_user_id = "8" }] }
+
+[[command_runtime.routes]]
+actor = "chat_llm"
+commands = ["chat"]
+platforms = ["telegram"]
+bots = ["primary"]
+fallback = "consume"
+)"),
+      {{.installation_id = "primary",
+        .enabled = true,
+        .surface = obcx::bot::SurfaceId{"telegram.bot_api"},
+        .transport = "http",
+        .ingress_platform = "telegram",
+        .command_target = "fixture_bot"}},
+      "access-fixture.toml");
+  ASSERT_TRUE(built);
+  EXPECT_TRUE(built.snapshot->validate_actor_runtime_config().empty());
+  const auto runtime = built.snapshot->get_command_runtime_config();
+  ASSERT_EQ(runtime.help.page_bytes, 2048U);
+  ASSERT_EQ(runtime.help.maximum_pages, 4U);
+  ASSERT_EQ(runtime.access.groups.mode, CommandAccessMode::Allowlist);
+  ASSERT_EQ(runtime.access.groups.entries.size(), 1U);
+  EXPECT_EQ(runtime.access.groups.entries.front().native_group_id, "-1001");
+  ASSERT_EQ(runtime.access.users.mode, CommandAccessMode::Denylist);
+  ASSERT_EQ(runtime.access.overrides.size(), 1U);
+  EXPECT_EQ(runtime.access.overrides.front().command, "help");
+  EXPECT_EQ(runtime.access.overrides.front().users.mode,
+            CommandAccessMode::Allowlist);
+}
+
+TEST_F(ActorConfigTest, RejectsMissingMalformedAndUnsafeAccessConfiguration) {
+  const std::vector<BotInstallationMetadata> bots = {
+      {.installation_id = "primary",
+       .enabled = true,
+       .surface = obcx::bot::SurfaceId{"onebot11.qq"},
+       .transport = "http",
+       .ingress_platform = "qq",
+       .command_target = {}},
+  };
+  const auto validate = [&bots](const std::string &document) {
+    auto built = ActorConfigSnapshotBuilder::build(
+        toml::parse(document), bots, "invalid-access-fixture.toml");
+    EXPECT_TRUE(built);
+    return built.snapshot->validate_actor_runtime_config();
+  };
+  const auto contains = [](const auto &errors, const std::string_view code) {
+    return std::ranges::any_of(
+        errors, [code](const auto &error) { return error.code == code; });
+  };
+
+  auto errors = validate(R"(
+[command_runtime]
+timeout_ms = 5000
+[[command_runtime.routes]]
+actor = "actor"
+commands = ["test"]
+platforms = ["qq"]
+bots = ["primary"]
+fallback = "consume"
+)");
+  EXPECT_TRUE(contains(errors, "missing_command_help_configuration"));
+  EXPECT_TRUE(contains(errors, "missing_command_access_configuration"));
+
+  errors = validate(R"(
+[command_runtime]
+timeout_ms = 5000
+unknown = "secret-value-must-not-appear"
+[command_runtime.help]
+page_bytes = 0
+maximum_pages = 101
+extra = true
+[command_runtime.access]
+extra = true
+[command_runtime.access.groups]
+mode = "unrestricted"
+entries = [{ platform = "qq", bot = "primary", native_group_id = "42" }]
+[command_runtime.access.users]
+mode = "allowlist"
+entries = [
+  { platform = "telegram", bot = "primary", native_user_id = "7" },
+  { platform = "telegram", bot = "primary", native_user_id = "7" },
+]
+[[command_runtime.access.overrides]]
+command = "help"
+groups = { mode = "invalid", entries = [] }
+users = { mode = "unrestricted", entries = [], native_user_id = "bad" }
+[[command_runtime.access.overrides]]
+command = "help"
+groups = { mode = "unrestricted", entries = [] }
+users = { mode = "unrestricted", entries = [] }
+[[command_runtime.routes]]
+actor = "actor"
+commands = ["test"]
+platforms = ["qq"]
+bots = ["primary"]
+fallback = "consume"
+unknown = "field"
+)");
+  EXPECT_TRUE(contains(errors, "unknown_command_runtime_field"));
+  EXPECT_TRUE(contains(errors, "invalid_command_help_bound"));
+  EXPECT_TRUE(contains(errors, "unrestricted_command_access_has_entries"));
+  EXPECT_TRUE(contains(errors, "command_access_installation_mismatch"));
+  EXPECT_TRUE(contains(errors, "duplicate_command_access_identity"));
+  EXPECT_TRUE(contains(errors, "invalid_command_access_mode"));
+  EXPECT_TRUE(contains(errors, "duplicate_command_access_override"));
+  for (const auto &error : errors) {
+    EXPECT_EQ(error.message.find("secret-value-must-not-appear"),
+              std::string::npos);
+  }
+}
+
 TEST_F(ActorConfigTest, RejectsMalformedCommandRuntimeRoutes) {
   const auto config_path = write_test_config("invalid-commands.toml", R"(
 [command_runtime]
 timeout_ms = 1
+
+[command_runtime.help]
+page_bytes = 3500
+maximum_pages = 10
+
+[command_runtime.access.groups]
+mode = "unrestricted"
+entries = []
+
+[command_runtime.access.users]
+mode = "unrestricted"
+entries = []
 
 [[command_runtime.routes]]
 actor = ""

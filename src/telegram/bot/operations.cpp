@@ -173,6 +173,33 @@ public:
              {.group = request.target, .native_message_id = *message_id}}});
   }
 
+  auto execute(const bot::SendPrivateMessageRequest &request)
+      -> boost::asio::awaitable<
+          bot::BotOperationResult<bot::SendPrivateMessageResult>> {
+    const auto echo = next_echo();
+    const auto response = co_await transport().send_action(
+        protocol().serialize_send_message_request(request.target.native_user_id,
+                                                  request.message, echo),
+        echo);
+    const auto parsed = parse_telegram_operation_response(response, true);
+    if (!parsed.ok()) {
+      co_return provider_failure<bot::SendPrivateMessageResult>(parsed);
+    }
+    const auto &value = parsed_value(parsed);
+    const auto message_id = provider_id(value, "message_id");
+    const auto chat_id = value.is_object() && value.contains("chat") &&
+                                 value.at("chat").is_object()
+                             ? provider_id(value.at("chat"), "id")
+                             : std::nullopt;
+    if (!message_id || !chat_id || *chat_id != request.target.native_user_id) {
+      co_return malformed_side_effect<bot::SendPrivateMessageResult>(
+          "Telegram private-send response has invalid target or message_id");
+    }
+    co_return bot::BotOperationResult<bot::SendPrivateMessageResult>::success(
+        {.messages = {
+             {.target = request.target, .native_message_id = *message_id}}});
+  }
+
   auto execute(const bot::DeleteMessageRequest &request)
       -> boost::asio::awaitable<
           bot::BotOperationResult<bot::DeleteMessageResult>> {

@@ -23,6 +23,9 @@ inline constexpr std::string_view transaction_header =
 inline constexpr std::string_view generation_header = "obcx.command.generation";
 inline constexpr std::string_view reply_header = "obcx.command.reply";
 inline constexpr std::string_view outcome_header = "obcx.command.outcome";
+inline constexpr std::string_view help_name = "help";
+inline constexpr std::string_view help_description =
+    "List commands available to you";
 
 enum class Propagation : std::uint8_t {
   Continue,

@@ -1,6 +1,8 @@
 #ifndef OBCX_INCLUDE_CORE_COMMAND_PLATFORM_ADAPTER_HPP_
 #define OBCX_INCLUDE_CORE_COMMAND_PLATFORM_ADAPTER_HPP_
 
+#include "core/bot/operation_gateway.hpp"
+
 #include <boost/asio/awaitable.hpp>
 #include <memory>
 #include <optional>
@@ -29,6 +31,14 @@ struct CommandCatalogPublishResult {
   bool succeeded = false;
   std::string code;
   std::string message;
+};
+
+struct CommandReplyBuildResult {
+  std::optional<bot::OperationEnvelope> operation;
+  std::string code;
+  std::string message;
+
+  explicit operator bool() const noexcept { return operation.has_value(); }
 };
 
 class CommandCatalogPublisher {
@@ -65,6 +75,9 @@ public:
       -> std::optional<std::string> = 0;
   [[nodiscard]] virtual auto supports_catalog_publication() const noexcept
       -> bool = 0;
+  [[nodiscard]] virtual auto build_text_reply(const MessageEnvelope &event,
+                                              std::string text) const
+      -> CommandReplyBuildResult = 0;
   virtual auto publish_catalog(CommandCatalogPublisher *catalog,
                                const std::vector<CommandCatalogEntry> &entries)
       -> boost::asio::awaitable<CommandCatalogPublishResult> = 0;

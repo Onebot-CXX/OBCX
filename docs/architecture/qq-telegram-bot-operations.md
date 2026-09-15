@@ -9,6 +9,7 @@ implemented. OneBot support never implies `qq.official`.
 | Action | Telegram | OneBot 11 | Current caller |
 | --- | --- | --- | --- |
 | `message.send_group` | yes | yes | Bridge, `chat_llm` |
+| `message.send_private` | yes | yes | Built-in command help |
 | `message.delete` | yes | yes | Bridge |
 | `telegram.message.send_topic` | yes | no | Bridge, `chat_llm` |
 | `telegram.message.edit_text` | yes | no | Bridge |
@@ -31,13 +32,14 @@ Use independently exported `obcx::bot_common_sdk`, `obcx::bot_onebot11_sdk`,
 and `obcx::bot_telegram_sdk` targets. The platform targets depend only on common;
 none links the combined process library merely to encode/call SDK operations.
 
-- `core/bot/messaging_client.hpp`: existing common group-send/delete.
+- `core/bot/messaging_client.hpp`: common group/private-send and delete.
 - `onebot11/bot/client.hpp`: OneBot member/forward/file/poke contracts.
 - `telegram/bot/client.hpp`: Telegram topic/edit/entity/media contracts.
 - `core/bot/operation_gateway.hpp`: the fixed, platform-neutral service.
 
-Every request retains exact installation/group/message identity. `SurfaceId`
-and `ActionId` own explicit strings of 1–128 lowercase ASCII letters, digits,
+Every request retains exact installation/group/private-user/message identity.
+`GroupTarget` and `PrivateTarget` are distinct values and cannot substitute for
+each other. `SurfaceId` and `ActionId` own explicit strings of 1–128 lowercase ASCII letters, digits,
 `.`, `_`, or `-`; they have no default identity, enum ordinal, case conversion,
 or platform aliases. Valid syntax does not imply registered support:
 `SurfaceId{"test.echo"}` is valid data but unavailable in the production catalog.
@@ -76,10 +78,12 @@ Each example needs only its own platform SDK. `obcx::bot::invoke(gateway,
 request)` is the equivalent typed helper and pairs Request/Result at compile
 time. Actor handlers enter Asio through their existing
 `ActorContext::await_asio(executor, callback)` lifecycle, retaining gateway and
-request values across suspension. Do not detach work. A thread id alone does
-not make a Telegram event a forum topic.
+request values across suspension. Generation-owned core services use the same
+process-owned data-only gateway directly. Do not detach work. A thread id alone
+does not make a Telegram event a forum topic.
 
-Public DTO JSON stays unchanged. Internal Telegram upload/fetch gateway codecs
+Existing public DTO JSON stays unchanged; the private-send values use the same
+strict deterministic codec rules. Internal Telegram upload/fetch gateway codecs
 move bounded byte buffers through `Json::binary`, not per-byte JSON numbers;
 that representation is not a dump/parse persistence or network protocol.
 
@@ -169,7 +173,6 @@ both the old binary and pre-migration database snapshot.
 
 This change does not add typed ingress, Telegram checkpoint changes, a Message
 Store migration, an ingress journal, a generic outbox or reconciliation,
-provider message lookup, rate governance, a blob gateway, private send,
-history, contacts, moderation, reactions, polls, or adapters for unsupported
+provider message lookup, rate governance, a blob gateway, history, contacts, moderation, reactions, polls, or adapters for unsupported
 platforms. It also does not reconcile content that was already sent with a
 wrong reply reference; that message must be explicitly removed and resent.

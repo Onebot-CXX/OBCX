@@ -229,6 +229,14 @@ public:
         });
   }
 
+  void run_transaction_task(
+      std::function<void(obcx::core::IDbConnection &)> work) override {
+    delegate_->run_transaction_task(
+        [this, work = std::move(work)](obcx::core::IDbConnection &) mutable {
+          work(*this);
+        });
+  }
+
   void with_migration_lock(
       const std::string &namespace_name,
       std::function<void(obcx::core::IDbConnection &)> work) override {

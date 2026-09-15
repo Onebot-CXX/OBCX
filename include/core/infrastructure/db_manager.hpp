@@ -35,6 +35,8 @@ public:
                                    const DbParams &params = {})
       -> std::vector<DbRow> = 0;
   virtual void run_write_task(std::function<void(IDbConnection &)> work) = 0;
+  virtual void run_transaction_task(
+      std::function<void(IDbConnection &)> work) = 0;
   virtual void with_migration_lock(
       const std::string &namespace_name,
       std::function<void(IDbConnection &)> work) = 0;
@@ -113,6 +115,23 @@ public:
       if (exception) {
         std::rethrow_exception(exception);
       }
+      return std::move(*result);
+    }
+  }
+
+  template <typename Result, typename Work>
+  auto run_transaction(const std::string &instance_name, Work &&work) const
+      -> Result {
+    auto db = connection(instance_name);
+    if constexpr (std::is_void_v<Result>) {
+      db->run_transaction_task([&](IDbConnection &connection) {
+        std::invoke(std::forward<Work>(work), connection);
+      });
+    } else {
+      std::optional<Result> result;
+      db->run_transaction_task([&](IDbConnection &connection) {
+        result = std::invoke(std::forward<Work>(work), connection);
+      });
       return std::move(*result);
     }
   }

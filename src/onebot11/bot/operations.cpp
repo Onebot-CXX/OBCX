@@ -66,6 +66,28 @@ public:
              {.group = request.target, .native_message_id = *message_id}}});
   }
 
+  auto execute(const bot::SendPrivateMessageRequest &request)
+      -> boost::asio::awaitable<
+          bot::BotOperationResult<bot::SendPrivateMessageResult>> {
+    const auto echo = next_echo();
+    const auto response = co_await transport().send_action(
+        protocol().serialize_send_private_message_request(
+            request.target.native_user_id, request.message, echo),
+        echo);
+    const auto parsed = parse_onebot11_operation_response(response, true);
+    if (!parsed.ok()) {
+      co_return provider_failure<bot::SendPrivateMessageResult>(parsed);
+    }
+    const auto message_id = provider_id(parsed_value(parsed), "message_id");
+    if (!message_id) {
+      co_return malformed_side_effect<bot::SendPrivateMessageResult>(
+          "OneBot private-send response is missing message_id");
+    }
+    co_return bot::BotOperationResult<bot::SendPrivateMessageResult>::success(
+        {.messages = {
+             {.target = request.target, .native_message_id = *message_id}}});
+  }
+
   auto execute(const bot::DeleteMessageRequest &request)
       -> boost::asio::awaitable<
           bot::BotOperationResult<bot::DeleteMessageResult>> {

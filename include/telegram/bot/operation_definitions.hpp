@@ -14,6 +14,8 @@ void for_each_operation(bool include_upload, Visitor visit) {
                                               "telegram.transport"};
   visit(core::OperationDefinition<obcx::bot::SendGroupMessageRequest>{
       dependencies});
+  visit(core::OperationDefinition<obcx::bot::SendPrivateMessageRequest>{
+      dependencies});
   visit(
       core::OperationDefinition<obcx::bot::DeleteMessageRequest>{dependencies});
   visit(

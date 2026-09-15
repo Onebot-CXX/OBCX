@@ -1,4 +1,5 @@
 #include "common/config_snapshot.hpp"
+#include "core/actor/actor_generation_lifecycle.hpp"
 #include "core/actor/actor_manager.hpp"
 #include "core/actor/native_actor_scheduler.hpp"
 #include "core/bot/bot_operation_dispatcher.hpp"
@@ -191,6 +192,15 @@ protected:
     if (with_command) {
       document += "\n[command_runtime]\n"
                   "timeout_ms = 5000\n\n"
+                  "[command_runtime.help]\n"
+                  "page_bytes = 3500\n"
+                  "maximum_pages = 10\n\n"
+                  "[command_runtime.access.groups]\n"
+                  "mode = \"unrestricted\"\n"
+                  "entries = []\n\n"
+                  "[command_runtime.access.users]\n"
+                  "mode = \"unrestricted\"\n"
+                  "entries = []\n\n"
                   "[[command_runtime.routes]]\n"
                   "actor = \"reload_lifecycle_actor\"\n"
                   "commands = [\"reload_probe\"]\n"
@@ -383,8 +393,12 @@ protected:
     envelope.type = "obcx::core::events::RawMessageEvent";
     envelope.source_platform = "qq";
     envelope.source_bot = "primary";
-    envelope.conversation_id = "command-route";
-    envelope.payload = {{"sender", "7"},
+    envelope.conversation_id = "group:42";
+    envelope.payload = {{"source_bot_configured", true},
+                        {"sender", "7"},
+                        {"group_id", "42"},
+                        {"chat_id", ""},
+                        {"message_type", "group"},
                         {"gate_path", gate.string()},
                         {"completion_path", completion.string()},
                         {"sink_path", sink.string()}};
@@ -418,6 +432,109 @@ protected:
           [](const obcx::bot::SurfaceId &) { return false; });
   std::shared_ptr<obcx::core::ActorRuntimeReloadController> controller_;
 };
+
+struct BackgroundProbe {
+  std::atomic_int starts{0};
+  std::atomic_int stops{0};
+  std::atomic<obcx::core::ActorGenerationLifecycle::TokenPtr> token;
+};
+
+auto observe_background(
+    const std::shared_ptr<obcx::core::RuntimeGeneration> &generation)
+    -> std::shared_ptr<BackgroundProbe> {
+  auto probe = std::make_shared<BackgroundProbe>();
+  auto lifecycle = generation->services()
+                       ->get_service<obcx::core::ActorGenerationLifecycle>();
+  lifecycle->subscribe(
+      [probe](obcx::core::ActorGenerationLifecycle::TokenPtr token) noexcept {
+        probe->token.store(std::move(token));
+        ++probe->starts;
+      },
+      [probe]() noexcept { ++probe->stops; });
+  return probe;
+}
+
+TEST_F(RuntimeReloadControllerTest,
+       ActorOwnedWorkIsCancelledAndDrainedBeforeCandidateStarts) {
+  auto old = build_generation("old", "await", 1);
+  ASSERT_TRUE(old);
+  auto candidate = build_generation("new", "await", 2, old);
+  ASSERT_TRUE(candidate);
+  auto old_probe = observe_background(old);
+  auto new_probe = observe_background(candidate);
+  EXPECT_EQ(old_probe->starts.load(), 0);
+  EXPECT_EQ(new_probe->starts.load(), 0);
+  controller_ = std::make_shared<obcx::core::ActorRuntimeReloadController>(old);
+  controller_->activate_command_catalogs();
+  EXPECT_EQ(old_probe->starts.load(), 1);
+  auto lifecycle =
+      old->services()->get_service<obcx::core::ActorGenerationLifecycle>();
+  const auto token = old_probe->token.load();
+  auto work = lifecycle->acquire_work(token);
+  ASSERT_TRUE(work);
+  EXPECT_EQ(old->in_flight_routes(), 1U);
+
+  auto cutover = reload(candidate, 2s);
+  EXPECT_TRUE(wait_until([&] { return old_probe->stops.load() == 1; }));
+  EXPECT_FALSE(token->valid());
+  EXPECT_FALSE(lifecycle->acquire_work(token));
+  EXPECT_EQ(new_probe->starts.load(), 0);
+  EXPECT_EQ(cutover.wait_for(20ms), std::future_status::timeout);
+  work.reset(); // Cancellation completion has now retired.
+  EXPECT_TRUE(cutover.get().succeeded());
+  EXPECT_EQ(new_probe->starts.load(), 1);
+  controller_->begin_shutdown();
+  EXPECT_FALSE(new_probe->token.load()->valid());
+  EXPECT_EQ(new_probe->stops.load(), 1);
+}
+
+TEST_F(RuntimeReloadControllerTest,
+       BackgroundDrainTimeoutUsesFreshTokenWithoutStartingCandidate) {
+  auto old = build_generation("old", "await", 1);
+  ASSERT_TRUE(old);
+  auto candidate = build_generation("new", "await", 2, old);
+  ASSERT_TRUE(candidate);
+  auto old_probe = observe_background(old);
+  auto new_probe = observe_background(candidate);
+  controller_ = std::make_shared<obcx::core::ActorRuntimeReloadController>(old);
+  controller_->activate_command_catalogs();
+  auto lifecycle =
+      old->services()->get_service<obcx::core::ActorGenerationLifecycle>();
+  const auto old_token = old_probe->token.load();
+  auto work = lifecycle->acquire_work(old_token);
+  ASSERT_TRUE(work);
+  auto result = reload(candidate, 40ms).get();
+  ASSERT_TRUE(result.failure);
+  EXPECT_EQ(result.failure->code, "reload_drain_timeout");
+  EXPECT_EQ(old_probe->starts.load(), 2);
+  EXPECT_FALSE(old_token->valid());
+  EXPECT_FALSE(lifecycle->acquire_work(old_token));
+  EXPECT_NE(old_probe->token.load(), old_token);
+  EXPECT_TRUE(old_probe->token.load()->valid());
+  EXPECT_EQ(new_probe->starts.load(), 0);
+  EXPECT_EQ(new_probe->stops.load(), 0);
+  work.reset();
+}
+
+TEST_F(RuntimeReloadControllerTest,
+       DiscardedBackgroundCandidateNeverStartsAndRetirementIsTerminal) {
+  auto old = build_generation("old", "await", 1);
+  ASSERT_TRUE(old);
+  auto candidate = build_generation("new", "await", 2, old);
+  ASSERT_TRUE(candidate);
+  auto probe = observe_background(candidate);
+  auto lifecycle = candidate->services()
+                       ->get_service<obcx::core::ActorGenerationLifecycle>();
+  candidate->shutdown();
+  lifecycle->activate();
+  EXPECT_EQ(probe->starts.load(), 0);
+  EXPECT_EQ(probe->stops.load(), 0);
+  EXPECT_THROW(
+      lifecycle->subscribe(
+          [](obcx::core::ActorGenerationLifecycle::TokenPtr) noexcept {},
+          []() noexcept {}),
+      std::logic_error);
+}
 
 TEST_F(RuntimeReloadControllerTest,
        BeforeWaitingAndAfterBoundarySelectExactlyOneGeneration) {

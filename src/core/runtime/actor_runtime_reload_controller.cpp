@@ -497,6 +497,7 @@ auto ActorRuntimeReloadController::cutover(
              attempt_id, previous_id, candidate->id());
 
   const auto drain_started = std::chrono::steady_clock::now();
+  previous->invalidate_actor_background_work();
   const auto drained = co_await previous->async_wait_for_drain(
       std::chrono::steady_clock::now() + drain_timeout);
   const auto drain_ms = elapsed_ms(drain_started);
@@ -506,6 +507,7 @@ auto ActorRuntimeReloadController::cutover(
       std::scoped_lock lock(gate_state_->mutex);
       if (!gate_state_->shutting_down &&
           active_generation_.load(std::memory_order_acquire) == previous) {
+        previous->activate_actor_background_work();
         gate_state_->open = true;
         for (auto &entry : gate_state_->waiters) {
           if (auto waiter = entry.lock()) {
@@ -555,6 +557,7 @@ auto ActorRuntimeReloadController::cutover(
       result.drain_ms = drain_ms;
       co_return result;
     }
+    candidate->activate_actor_background_work();
     gate_state_->open = true;
     for (auto &entry : gate_state_->waiters) {
       if (auto waiter = entry.lock()) {
@@ -575,8 +578,12 @@ auto ActorRuntimeReloadController::cutover(
 }
 
 void ActorRuntimeReloadController::activate_command_catalogs() {
-  if (const auto active = active_generation()) {
-    active->activate_command_catalogs();
+  std::scoped_lock lock(gate_state_->mutex);
+  if (!gate_state_->shutting_down) {
+    if (const auto active = active_generation()) {
+      active->activate_actor_background_work();
+      active->activate_command_catalogs();
+    }
   }
 }
 
@@ -595,6 +602,9 @@ void ActorRuntimeReloadController::begin_shutdown() {
       }
     }
     gate_state_->waiters.clear();
+  }
+  if (const auto active = active_generation()) {
+    active->invalidate_actor_background_work();
   }
   cancel_waiters(waiters);
 }

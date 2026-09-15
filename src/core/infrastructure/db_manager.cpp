@@ -185,47 +185,50 @@ public:
     future.get();
   }
 
+  void run_transaction_task(
+      std::function<void(IDbConnection &)> work) override {
+    run_write_task(
+        [this, work = std::move(work)](IDbConnection &base_connection) mutable {
+          std::scoped_lock db_lock(mutex_);
+          bool transaction_started = false;
+          try {
+            execute("BEGIN IMMEDIATE;");
+            transaction_started = true;
+            work(base_connection);
+            execute("COMMIT;");
+            transaction_started = false;
+          } catch (...) {
+            if (transaction_started) {
+              try {
+                execute("ROLLBACK;");
+              } catch (...) {
+              }
+            }
+            throw;
+          }
+        });
+  }
+
   void with_migration_lock(const std::string &namespace_name,
                            std::function<void(IDbConnection &)> work) override {
     if (namespace_name.empty()) {
       throw std::invalid_argument("DB migration namespace cannot be empty");
     }
 
-    run_write_task([namespace_name, work = std::move(work)](
-                       IDbConnection &base_connection) mutable {
-      auto &connection = static_cast<SQLiteDbConnection &>(base_connection);
-      std::scoped_lock db_lock(connection.mutex_);
-
+    run_transaction_task([namespace_name, work = std::move(work)](
+                             IDbConnection &connection) mutable {
       connection.execute("CREATE TABLE IF NOT EXISTS obcx_migration_locks ("
                          "namespace TEXT PRIMARY KEY NOT NULL,"
                          "locked_at INTEGER NOT NULL"
                          ");");
 
-      bool transaction_started = false;
-      try {
-        connection.execute("BEGIN IMMEDIATE;");
-        transaction_started = true;
-
-        const auto now =
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch())
-                .count();
-        connection.execute("INSERT OR REPLACE INTO obcx_migration_locks "
-                           "(namespace, locked_at) VALUES (?, ?);",
-                           {namespace_name, static_cast<std::int64_t>(now)});
-
-        work(connection);
-        connection.execute("COMMIT;");
-        transaction_started = false;
-      } catch (...) {
-        if (transaction_started) {
-          try {
-            connection.execute("ROLLBACK;");
-          } catch (...) {
-          }
-        }
-        throw;
-      }
+      const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count();
+      connection.execute("INSERT OR REPLACE INTO obcx_migration_locks "
+                         "(namespace, locked_at) VALUES (?, ?);",
+                         {namespace_name, static_cast<std::int64_t>(now)});
+      work(connection);
     });
   }
 

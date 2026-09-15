@@ -50,6 +50,151 @@ auto command_timeout(const common::CommandRuntimeConfig &runtime,
                                                          : route.timeout_ms};
 }
 
+auto compile_group_policy(const common::CommandGroupPolicyConfig &configured)
+    -> std::optional<ActiveCommandAccessPolicy> {
+  if (!configured.mode || !configured.entries_present) {
+    return std::nullopt;
+  }
+  ActiveCommandAccessPolicy policy{.mode = *configured.mode};
+  for (const auto &entry : configured.entries) {
+    if (!policy.entries
+             .emplace(CommandAccessIdentity{.platform = entry.platform,
+                                            .bot = entry.bot,
+                                            .native_id = entry.native_group_id})
+             .second) {
+      return std::nullopt;
+    }
+  }
+  if (policy.mode == common::CommandAccessMode::Unrestricted &&
+      !policy.entries.empty()) {
+    return std::nullopt;
+  }
+  return policy;
+}
+
+auto compile_user_policy(const common::CommandUserPolicyConfig &configured)
+    -> std::optional<ActiveCommandAccessPolicy> {
+  if (!configured.mode || !configured.entries_present) {
+    return std::nullopt;
+  }
+  ActiveCommandAccessPolicy policy{.mode = *configured.mode};
+  for (const auto &entry : configured.entries) {
+    if (!policy.entries
+             .emplace(CommandAccessIdentity{.platform = entry.platform,
+                                            .bot = entry.bot,
+                                            .native_id = entry.native_user_id})
+             .second) {
+      return std::nullopt;
+    }
+  }
+  if (policy.mode == common::CommandAccessMode::Unrestricted &&
+      !policy.entries.empty()) {
+    return std::nullopt;
+  }
+  return policy;
+}
+
+auto compile_command_policy(const common::CommandGroupPolicyConfig &groups,
+                            const common::CommandUserPolicyConfig &users)
+    -> std::optional<ActiveCommandPolicy> {
+  auto group_policy = compile_group_policy(groups);
+  auto user_policy = compile_user_policy(users);
+  if (!group_policy || !user_policy) {
+    return std::nullopt;
+  }
+  return ActiveCommandPolicy{.groups = std::move(*group_policy),
+                             .users = std::move(*user_policy)};
+}
+
+auto valid_utf8(const std::string_view value) -> bool {
+  std::size_t index = 0;
+  while (index < value.size()) {
+    const auto lead = static_cast<unsigned char>(value[index]);
+    std::size_t trailing = 0;
+    std::uint32_t codepoint = 0;
+    if (lead <= 0x7FU) {
+      ++index;
+      continue;
+    }
+    if ((lead & 0xE0U) == 0xC0U) {
+      trailing = 1;
+      codepoint = lead & 0x1FU;
+      if (codepoint < 2U) {
+        return false;
+      }
+    } else if ((lead & 0xF0U) == 0xE0U) {
+      trailing = 2;
+      codepoint = lead & 0x0FU;
+    } else if ((lead & 0xF8U) == 0xF0U) {
+      trailing = 3;
+      codepoint = lead & 0x07U;
+    } else {
+      return false;
+    }
+    if (index + trailing >= value.size()) {
+      return false;
+    }
+    for (std::size_t offset = 1; offset <= trailing; ++offset) {
+      const auto byte = static_cast<unsigned char>(value[index + offset]);
+      if ((byte & 0xC0U) != 0x80U) {
+        return false;
+      }
+      codepoint = (codepoint << 6U) | (byte & 0x3FU);
+    }
+    if ((trailing == 2 && codepoint < 0x800U) ||
+        (trailing == 3 && codepoint < 0x10000U) ||
+        (codepoint >= 0xD800U && codepoint <= 0xDFFFU) ||
+        codepoint > 0x10FFFFU) {
+      return false;
+    }
+    index += trailing + 1;
+  }
+  return true;
+}
+
+auto valid_help_field(const std::string_view value) -> bool {
+  return valid_utf8(value) &&
+         std::ranges::all_of(value, [](const unsigned char byte) {
+           return byte >= 0x20U && byte != 0x7FU;
+         });
+}
+
+auto render_help_entries(const std::vector<CommandCatalogEntry> &catalog,
+                         const std::size_t page_bytes,
+                         const std::size_t maximum_pages)
+    -> CommandHelpRenderResult {
+  if (page_bytes == 0 || maximum_pages == 0) {
+    return {.code = "command_help_bounds_invalid",
+            .message = "command help bounds are invalid"};
+  }
+  CommandHelpRenderResult result;
+  std::string page;
+  for (const auto &entry : catalog) {
+    if (!valid_help_field(entry.name) || !valid_help_field(entry.description)) {
+      return {.code = "command_help_entry_invalid",
+              .message = "command help entry is not valid plain UTF-8"};
+    }
+    const auto formatted = "/" + entry.name + " - " + entry.description + "\n";
+    if (formatted.size() > page_bytes) {
+      return {.code = "command_help_entry_too_large",
+              .message = "command help entry exceeds the page bound"};
+    }
+    if (!page.empty() && page.size() + formatted.size() > page_bytes) {
+      result.pages.push_back(std::move(page));
+      page.clear();
+    }
+    page += formatted;
+  }
+  if (!page.empty()) {
+    result.pages.push_back(std::move(page));
+  }
+  if (result.pages.size() > maximum_pages) {
+    return {.code = "command_help_page_limit_exceeded",
+            .message = "command help catalog exceeds the page-count bound"};
+  }
+  return result;
+}
+
 auto json_string(const common::json &document, const std::string_view key)
     -> std::string {
   if (!document.is_object() || !document.contains(key) ||
@@ -57,6 +202,92 @@ auto json_string(const common::json &document, const std::string_view key)
     return {};
   }
   return document.at(key).get<std::string>();
+}
+
+auto valid_policy_value(const std::string_view value) -> bool {
+  return value.size() <= 1024U &&
+         std::ranges::all_of(value, [](const unsigned char byte) {
+           return byte >= 0x20U && byte != 0x7FU;
+         });
+}
+
+auto command_policy_subject(const MessageEnvelope &message,
+                            const ActiveCommandBot &bot)
+    -> std::optional<CommandPolicySubject> {
+  if (message.source_platform != bot.key.platform ||
+      message.source_bot != bot.key.bot || !message.payload.is_object()) {
+    return std::nullopt;
+  }
+  const auto configured_bot = message.payload.find("source_bot_configured");
+  if (configured_bot == message.payload.end() ||
+      !configured_bot->is_boolean() || !configured_bot->get<bool>()) {
+    return std::nullopt;
+  }
+  const auto field =
+      [&message](const std::string_view key) -> std::optional<std::string> {
+    const auto value = message.payload.find(key);
+    if (value == message.payload.end() || !value->is_string()) {
+      return std::nullopt;
+    }
+    auto result = value->get<std::string>();
+    return valid_policy_value(result) ? std::optional{std::move(result)}
+                                      : std::nullopt;
+  };
+  const auto kind = field("message_type");
+  const auto sender = field("sender");
+  const auto group = field("group_id");
+  if (!kind || !sender || !group || sender->empty()) {
+    return std::nullopt;
+  }
+  const auto chat = field("chat_id");
+  if (message.payload.contains("chat_id") && !chat) {
+    return std::nullopt;
+  }
+  const auto chat_id = chat.value_or(std::string{});
+
+  std::optional<std::int64_t> topic;
+  if (message.payload.contains("topic_id")) {
+    const auto &value = message.payload.at("topic_id");
+    if (bot.key.platform != "telegram" || !value.is_number_integer()) {
+      return std::nullopt;
+    }
+    topic = value.get<std::int64_t>();
+    if (*topic <= 0) {
+      return std::nullopt;
+    }
+  }
+
+  if (*kind == "group") {
+    if (group->empty() || (!chat_id.empty() && chat_id != *group) ||
+        (!group->empty() && message.conversation_id != "group:" + *group &&
+         !(bot.key.platform == "telegram" &&
+           message.conversation_id == "chat:" + *group))) {
+      return std::nullopt;
+    }
+    return CommandPolicySubject{.platform = bot.key.platform,
+                                .bot = bot.key.bot,
+                                .conversation = CommandConversationKind::Group,
+                                .group_id = *group,
+                                .user_id = *sender,
+                                .topic_id = topic};
+  }
+  if (*kind == "private") {
+    if (!group->empty() || topic.has_value() ||
+        (!chat_id.empty() && chat_id != *sender) ||
+        (!sender->empty() && message.conversation_id != "private:" + *sender &&
+         !(bot.key.platform == "telegram" &&
+           message.conversation_id == "chat:" + *sender))) {
+      return std::nullopt;
+    }
+    return CommandPolicySubject{
+        .platform = bot.key.platform,
+        .bot = bot.key.bot,
+        .conversation = CommandConversationKind::Private,
+        .group_id = {},
+        .user_id = *sender,
+    };
+  }
+  return std::nullopt;
 }
 
 auto message_field_value(const MessageEnvelope &message,
@@ -271,6 +502,19 @@ void add_command_match_failure(OrchestratorResult &result, std::string code,
   });
 }
 
+void add_core_command_failure(OrchestratorResult &result,
+                              const std::string_view command, std::string code,
+                              std::string message) {
+  result.failures.push_back(OrchestratorFailure{
+      .pipeline = "$command",
+      .stage = std::string{command},
+      .actor = {},
+      .failure = ActorFailure{.code = std::move(code),
+                              .message = std::move(message),
+                              .retryable = false},
+  });
+}
+
 struct CommandRouteMatch {
   const ActiveCommandRoute *route = nullptr;
   bool ambiguous = false;
@@ -371,6 +615,67 @@ auto CommandRoutingTable::bots() const noexcept
   return bots_;
 }
 
+auto CommandRoutingTable::policy_for(const std::string_view canonical_command)
+    const -> const ActiveCommandPolicy & {
+  const auto override_policy =
+      policy_overrides_.find(std::string{canonical_command});
+  if (override_policy != policy_overrides_.end()) {
+    return override_policy->second;
+  }
+  if (!global_policy_) {
+    throw std::logic_error("command routing table has no access policy");
+  }
+  return *global_policy_;
+}
+
+auto CommandRoutingTable::permits(const std::string_view canonical_command,
+                                  const CommandPolicySubject &subject) const
+    -> bool {
+  const auto &policy = policy_for(canonical_command);
+  const auto evaluate = [&subject](const ActiveCommandAccessPolicy &dimension,
+                                   const std::string &native_id) {
+    if (dimension.mode == common::CommandAccessMode::Unrestricted) {
+      return true;
+    }
+    if (native_id.empty()) {
+      return false;
+    }
+    const auto present = dimension.entries.contains(CommandAccessIdentity{
+        .platform = subject.platform,
+        .bot = subject.bot,
+        .native_id = native_id,
+    });
+    return dimension.mode == common::CommandAccessMode::Allowlist ? present
+                                                                  : !present;
+  };
+  const auto user_allowed = evaluate(policy.users, subject.user_id);
+  if (subject.conversation == CommandConversationKind::Private) {
+    return user_allowed;
+  }
+  return evaluate(policy.groups, subject.group_id) && user_allowed;
+}
+
+auto CommandRoutingTable::render_help(const ActiveCommandBot &bot,
+                                      const CommandPolicySubject &subject) const
+    -> CommandHelpRenderResult {
+  std::vector<CommandCatalogEntry> permitted;
+  permitted.reserve(bot.catalog.size());
+  for (const auto &entry : bot.catalog) {
+    if (permits(entry.name, subject)) {
+      permitted.push_back(entry);
+    }
+  }
+  return render_help_entries(permitted, help_page_bytes_, help_maximum_pages_);
+}
+
+auto CommandRoutingTable::help_page_bytes() const noexcept -> std::size_t {
+  return help_page_bytes_;
+}
+
+auto CommandRoutingTable::help_maximum_pages() const noexcept -> std::size_t {
+  return help_maximum_pages_;
+}
+
 auto build_command_routing_table(
     const common::RuntimeConfigSnapshot &snapshot,
     const std::unordered_map<std::string, ActorInputContract> &contracts)
@@ -379,6 +684,29 @@ auto build_command_routing_table(
   const auto runtime = snapshot.get_command_runtime_config();
   if (runtime.routes.empty()) {
     return {.table = std::move(table)};
+  }
+  if (!runtime.help.page_bytes || !runtime.help.maximum_pages) {
+    return command_failure(
+        "command_help_configuration_missing",
+        "active command routes require explicit help bounds");
+  }
+  table->help_page_bytes_ = *runtime.help.page_bytes;
+  table->help_maximum_pages_ = *runtime.help.maximum_pages;
+  table->global_policy_ =
+      compile_command_policy(runtime.access.groups, runtime.access.users);
+  if (!table->global_policy_) {
+    return command_failure(
+        "command_access_configuration_invalid",
+        "active command routes require complete explicit access policies");
+  }
+  for (const auto &[actor, contract] : contracts) {
+    (void)actor;
+    if (std::ranges::any_of(contract.commands, [](const auto &registration) {
+          return registration.name == command::help_name;
+        })) {
+      return command_failure("command_reserved_name",
+                             "actor command contract uses reserved name help");
+    }
   }
 
   std::unordered_map<std::string, common::ActorConfig> actors;
@@ -390,11 +718,14 @@ auto build_command_routing_table(
   std::unordered_map<std::string, common::BotInstallationMetadata> bots;
   std::unordered_map<std::string, std::shared_ptr<ICommandPlatformAdapter>>
       adapters;
+  std::unordered_map<std::string, std::vector<bot::ActionId>> bot_actions;
   for (const auto &plan : ProcessConfigAccess::plans(snapshot)) {
     const auto &bot = plan->metadata();
     if (bot.enabled) {
       bots.emplace(bot.installation_id, bot);
       adapters.emplace(bot.installation_id, plan->command_adapter());
+      bot_actions.emplace(bot.installation_id,
+                          plan->recipe().advertised_actions);
     }
   }
 
@@ -429,6 +760,10 @@ auto build_command_routing_table(
         return command_failure("command_route_scope_duplicate",
                                "command route repeats a command scope: " +
                                    command);
+      }
+      if (command == command::help_name) {
+        return command_failure("command_reserved_name",
+                               "command route uses reserved name help");
       }
       const auto *registration = find_registration(contract->second, command);
       if (registration == nullptr) {
@@ -472,6 +807,19 @@ auto build_command_routing_table(
         return command_failure(
             "command_platform_adapter_unavailable",
             "configured bot platform has no command adapter: " + platform);
+      }
+      const auto &actions = bot_actions.at(bot_name);
+      const auto supports = [&actions](const std::string_view action) {
+        return std::ranges::find(actions, bot::ActionId{std::string{action}}) !=
+               actions.end();
+      };
+      if (!supports("message.send_group") ||
+          !supports("message.send_private") ||
+          (platform == "telegram" &&
+           !supports("telegram.message.send_topic"))) {
+        return command_failure(
+            "command_reply_capability_unavailable",
+            "configured bot cannot provide every typed command reply action");
       }
       covered_platforms.emplace(platform);
 
@@ -555,8 +903,36 @@ auto build_command_routing_table(
     }
   }
 
+  std::set<std::string> active_commands{std::string{command::help_name}};
+  for (const auto &[key, route] : table->routes_) {
+    (void)key;
+    active_commands.insert(route.key.command);
+  }
+  for (const auto &configured : runtime.access.overrides) {
+    if (!active_commands.contains(configured.command)) {
+      return command_failure(
+          "command_access_override_inactive",
+          "command access override does not name an active canonical command");
+    }
+    auto policy = compile_command_policy(configured.groups, configured.users);
+    if (!policy) {
+      return command_failure("command_access_override_invalid",
+                             "command access override is incomplete");
+    }
+    if (!table->policy_overrides_
+             .emplace(configured.command, std::move(*policy))
+             .second) {
+      return command_failure("command_access_override_duplicate",
+                             "command access override names are not unique");
+    }
+  }
+
   for (auto &[key, bot] : table->bots_) {
     (void)key;
+    bot.catalog.push_back(CommandCatalogEntry{
+        .name = std::string{command::help_name},
+        .description = std::string{command::help_description},
+    });
     std::ranges::sort(bot.catalog, {}, &CommandCatalogEntry::name);
     const auto duplicate =
         std::ranges::adjacent_find(bot.catalog, {}, &CommandCatalogEntry::name);
@@ -567,6 +943,11 @@ auto build_command_routing_table(
     if (const auto error = bot.adapter->validate_catalog(bot.catalog)) {
       return command_failure("command_catalog_invalid", *error);
     }
+    const auto rendered = render_help_entries(
+        bot.catalog, table->help_page_bytes_, table->help_maximum_pages_);
+    if (!rendered) {
+      return command_failure(rendered.code, rendered.message);
+    }
     std::ranges::sort(bot.patterns, {}, &ActiveCommandPattern::command);
   }
   return {.table = std::move(table)};
@@ -576,12 +957,15 @@ CommandCoordinator::CommandCoordinator(
     const std::uint64_t generation_id,
     std::shared_ptr<const CommandRoutingTable> routing_table,
     std::shared_ptr<NativeActorScheduler> scheduler,
-    std::shared_ptr<Orchestrator> orchestrator)
+    std::shared_ptr<Orchestrator> orchestrator,
+    std::shared_ptr<bot::BotOperationGateway> operation_gateway)
     : generation_id_(generation_id), routing_table_(std::move(routing_table)),
-      scheduler_(std::move(scheduler)), orchestrator_(std::move(orchestrator)) {
-  if (!routing_table_ || !scheduler_ || !orchestrator_) {
+      scheduler_(std::move(scheduler)), orchestrator_(std::move(orchestrator)),
+      operation_gateway_(std::move(operation_gateway)) {
+  if (!routing_table_ || !scheduler_ || !orchestrator_ || !operation_gateway_) {
     throw std::invalid_argument(
-        "CommandCoordinator requires routing, scheduler, and orchestrator");
+        "CommandCoordinator requires routing, "
+        "scheduler, orchestrator, and operation gateway");
   }
 }
 
@@ -611,6 +995,66 @@ auto CommandCoordinator::process(MessageEnvelope message,
     co_return co_await orchestrator_->process(std::move(message),
                                               std::move(route_lifetime));
   }
+  const auto subject = command_policy_subject(message, *bot);
+  if (detected->name == command::help_name) {
+    OrchestratorResult result;
+    if (!subject || !routing_table_->permits(command::help_name, *subject)) {
+      add_core_command_failure(result, command::help_name,
+                               "command_access_denied",
+                               "command access was denied");
+      co_return result;
+    }
+    if (!detected->arguments.empty()) {
+      add_core_command_failure(result, command::help_name,
+                               "invalid_help_arguments",
+                               "help does not accept arguments");
+      co_return result;
+    }
+    const auto rendered = routing_table_->render_help(*bot, *subject);
+    if (!rendered) {
+      add_core_command_failure(result, command::help_name, rendered.code,
+                               rendered.message);
+      co_return result;
+    }
+    for (const auto &page : rendered.pages) {
+      if (shutdown_.load(std::memory_order_acquire)) {
+        add_core_command_failure(result, command::help_name,
+                                 "command_cancelled",
+                                 "help delivery was cancelled");
+        co_return result;
+      }
+      auto reply = bot->adapter->build_text_reply(message, page);
+      if (!reply) {
+        add_core_command_failure(result, command::help_name,
+                                 std::move(reply.code),
+                                 std::move(reply.message));
+        co_return result;
+      }
+      try {
+        auto delivered =
+            co_await operation_gateway_->invoke(std::move(*reply.operation));
+        delivered.validate();
+        if (!delivered.ok()) {
+          const auto uncertain = delivered.error->submission_safety ==
+                                 obcx::bot::SubmissionSafety::PossiblySubmitted;
+          add_core_command_failure(result, command::help_name,
+                                   uncertain ? "command_help_delivery_uncertain"
+                                             : "command_help_delivery_failed",
+                                   uncertain
+                                       ? "help delivery outcome is uncertain"
+                                       : "help delivery failed");
+          co_return result;
+        }
+      } catch (...) {
+        add_core_command_failure(result, command::help_name,
+                                 "command_help_delivery_uncertain",
+                                 "help delivery outcome is uncertain");
+        co_return result;
+      }
+    }
+    co_return result;
+  }
+
   const auto matched =
       match_command_route(*routing_table_, *bot, detected->name);
   if (matched.ambiguous) {
@@ -627,6 +1071,13 @@ auto CommandCoordinator::process(MessageEnvelope message,
   if (route == nullptr) {
     co_return co_await orchestrator_->process(std::move(message),
                                               std::move(route_lifetime));
+  }
+  if (!subject || !routing_table_->permits(route->key.command, *subject)) {
+    OrchestratorResult result;
+    add_core_command_failure(result, route->key.command,
+                             "command_access_denied",
+                             "command access was denied");
+    co_return result;
   }
 
   const auto transaction =

@@ -7,13 +7,12 @@ set(OBCX_GENERIC_RUNTIME_SOURCES
     common/message_type.cpp
     common/config_snapshot.cpp
     core/runtime/process_configuration.cpp
-    network/compression.cpp
+    network/curl_asio_multi.cpp
     network/http_client.cpp
     network/http_client_sync.cpp
     network/websocket_client.cpp
     network/websocket_write_queue.cpp
     network/proxy_http_client.cpp
-    network/proxy_tunnel.cpp
     core/actor/actor_manager.cpp
     core/actor/actor_package_stager.cpp
     core/actor/actor_work_stealing_executor.cpp
@@ -137,6 +136,9 @@ foreach(_runtime IN ITEMS obcx_generic_runtime_objects obcx_onebot11_runtime_obj
   endif()
 endforeach()
 
+target_link_libraries(obcx_core PRIVATE CURL::libcurl)
+target_link_libraries(obcx_generic_runtime_objects PRIVATE CURL::libcurl)
+target_link_libraries(obcx_generic_runtime PRIVATE CURL::libcurl)
 target_link_libraries(obcx_onebot11_runtime_objects PRIVATE obcx_generic_runtime)
 target_link_libraries(obcx_telegram_runtime_objects PRIVATE obcx_generic_runtime)
 
@@ -161,7 +163,9 @@ if(OBCX_ENABLE_IO_URING AND OBCX_IO_URING_TARGET)
 endif()
 
 # Enable position independent code for shared library compatibility
-set_target_properties(obcx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(
+  obcx_core PROPERTIES POSITION_INDEPENDENT_CODE ON
+                       INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Alias target for consistent usage (in-tree and installed)
 add_library(obcx::obcx_core ALIAS obcx_core)
@@ -208,6 +212,8 @@ install(FILES
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_asio.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/actor/actor_generation_lifecycle.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/actor/actor_restart_constraints.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_commands.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_manager.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_messages.hpp
@@ -253,6 +259,7 @@ install(FILES
 
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/network/http_client.hpp
+    ${CMAKE_SOURCE_DIR}/include/network/proxy_http_client.hpp
     ${CMAKE_SOURCE_DIR}/include/network/connection_config.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obcx/network)
 

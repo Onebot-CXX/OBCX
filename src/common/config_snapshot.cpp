@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <queue>
+#include <set>
+#include <tuple>
 #include <unordered_set>
 
 namespace obcx::common {
@@ -80,6 +82,222 @@ auto valid_command_name(const std::string &name) -> bool {
     return (character >= 'a' && character <= 'z') ||
            (character >= '0' && character <= '9') || character == '_';
   });
+}
+
+auto command_access_mode(const toml::table *policy)
+    -> std::optional<CommandAccessMode> {
+  if (policy == nullptr) {
+    return std::nullopt;
+  }
+  const auto value = (*policy)["mode"].value<std::string>();
+  if (value == "unrestricted") {
+    return CommandAccessMode::Unrestricted;
+  }
+  if (value == "allowlist") {
+    return CommandAccessMode::Allowlist;
+  }
+  if (value == "denylist") {
+    return CommandAccessMode::Denylist;
+  }
+  return std::nullopt;
+}
+
+auto parse_group_policy(const toml::table *policy) -> CommandGroupPolicyConfig {
+  CommandGroupPolicyConfig result;
+  result.mode = command_access_mode(policy);
+  if (policy == nullptr) {
+    return result;
+  }
+  const auto *entries_node = policy->get("entries");
+  result.entries_present = entries_node != nullptr;
+  const auto *entries =
+      entries_node == nullptr ? nullptr : entries_node->as_array();
+  if (entries == nullptr) {
+    return result;
+  }
+  for (const auto &node : *entries) {
+    const auto *entry = node.as_table();
+    if (entry == nullptr) {
+      continue;
+    }
+    result.entries.push_back(CommandGroupIdentityConfig{
+        .platform = get_string_value(*entry, "platform"),
+        .bot = get_string_value(*entry, "bot"),
+        .native_group_id = get_string_value(*entry, "native_group_id"),
+    });
+  }
+  return result;
+}
+
+auto parse_user_policy(const toml::table *policy) -> CommandUserPolicyConfig {
+  CommandUserPolicyConfig result;
+  result.mode = command_access_mode(policy);
+  if (policy == nullptr) {
+    return result;
+  }
+  const auto *entries_node = policy->get("entries");
+  result.entries_present = entries_node != nullptr;
+  const auto *entries =
+      entries_node == nullptr ? nullptr : entries_node->as_array();
+  if (entries == nullptr) {
+    return result;
+  }
+  for (const auto &node : *entries) {
+    const auto *entry = node.as_table();
+    if (entry == nullptr) {
+      continue;
+    }
+    result.entries.push_back(CommandUserIdentityConfig{
+        .platform = get_string_value(*entry, "platform"),
+        .bot = get_string_value(*entry, "bot"),
+        .native_user_id = get_string_value(*entry, "native_user_id"),
+    });
+  }
+  return result;
+}
+
+void append_unknown_key_errors(
+    const toml::table &table,
+    const std::initializer_list<std::string_view> allowed,
+    const std::string &path, std::vector<ConfigValidationError> &errors) {
+  for (const auto &[key, value] : table) {
+    (void)value;
+    const auto known = std::ranges::find(allowed, key.str()) != allowed.end();
+    if (!known) {
+      errors.push_back(ConfigValidationError{
+          .code = "unknown_command_runtime_field",
+          .message = "command runtime table contains an unknown field",
+          .dependency = path + "." + std::string{key.str()},
+      });
+    }
+  }
+}
+
+auto valid_policy_id(const std::string_view value,
+                     const std::size_t maximum = 1024U) -> bool {
+  if (value.empty() || value.size() > maximum) {
+    return false;
+  }
+  return std::ranges::all_of(value, [](const unsigned char byte) {
+    return byte >= 0x20U && byte != 0x7FU;
+  });
+}
+
+auto platform_matches_installation(
+    const std::vector<BotInstallationMetadata> &bots,
+    const std::string_view platform, const std::string_view installation)
+    -> bool {
+  const auto bot = std::ranges::find(bots, installation,
+                                     &BotInstallationMetadata::installation_id);
+  return bot != bots.end() && bot->enabled && bot->ingress_platform == platform;
+}
+
+void validate_command_policy(const toml::table *policy, const bool group,
+                             const std::string &path,
+                             const std::vector<BotInstallationMetadata> &bots,
+                             std::vector<ConfigValidationError> &errors) {
+  if (policy == nullptr) {
+    errors.push_back(ConfigValidationError{
+        .code = "missing_command_access_policy",
+        .message = "command access requires explicit group and user policies",
+        .dependency = path,
+    });
+    return;
+  }
+  append_unknown_key_errors(*policy, {"mode", "entries"}, path, errors);
+  const auto mode = (*policy)["mode"].value<std::string>();
+  if (!mode || (*mode != "unrestricted" && *mode != "allowlist" &&
+                *mode != "denylist")) {
+    errors.push_back(ConfigValidationError{
+        .code = "invalid_command_access_mode",
+        .message = "command access mode must be unrestricted, allowlist, or "
+                   "denylist",
+        .dependency = path + ".mode",
+    });
+  }
+  const auto *entries_node = policy->get("entries");
+  const auto *entries =
+      entries_node == nullptr ? nullptr : entries_node->as_array();
+  if (entries == nullptr) {
+    errors.push_back(ConfigValidationError{
+        .code = "invalid_command_access_entries",
+        .message = "command access entries must be an explicit array",
+        .dependency = path + ".entries",
+    });
+    return;
+  }
+  if (entries->size() > CommandRuntimeConfig::max_access_entries) {
+    errors.push_back(ConfigValidationError{
+        .code = "command_access_entries_exceed_limit",
+        .message = "command access entries exceed the supported bound",
+        .dependency = path + ".entries",
+    });
+  }
+  if (mode == "unrestricted" && !entries->empty()) {
+    errors.push_back(ConfigValidationError{
+        .code = "unrestricted_command_access_has_entries",
+        .message = "unrestricted command access requires an empty array",
+        .dependency = path + ".entries",
+    });
+  }
+
+  std::set<std::tuple<std::string, std::string, std::string>> identities;
+  std::size_t index = 0;
+  for (const auto &node : *entries) {
+    const auto entry_path = path + ".entries[" + std::to_string(index++) + "]";
+    const auto *entry = node.as_table();
+    if (entry == nullptr) {
+      errors.push_back(ConfigValidationError{
+          .code = "invalid_command_access_entry",
+          .message = "command access entry must be a table",
+          .dependency = entry_path,
+      });
+      continue;
+    }
+    const auto native_key = group ? "native_group_id" : "native_user_id";
+    append_unknown_key_errors(*entry, {"platform", "bot", native_key},
+                              entry_path, errors);
+    const auto platform = (*entry)["platform"].value<std::string>();
+    const auto bot = (*entry)["bot"].value<std::string>();
+    const auto native = (*entry)[native_key].value<std::string>();
+    if (!platform || (*platform != "telegram" && *platform != "qq")) {
+      errors.push_back(ConfigValidationError{
+          .code = "invalid_command_access_platform",
+          .message = "command access platform must be normalized and active",
+          .dependency = entry_path + ".platform",
+      });
+    }
+    if (!bot || !valid_policy_id(*bot, 256U)) {
+      errors.push_back(ConfigValidationError{
+          .code = "invalid_command_access_bot",
+          .message = "command access bot must be an exact installation ID",
+          .dependency = entry_path + ".bot",
+      });
+    }
+    if (!native || !valid_policy_id(*native)) {
+      errors.push_back(ConfigValidationError{
+          .code = "invalid_command_access_native_id",
+          .message = "command access native ID is invalid",
+          .dependency = entry_path + "." + native_key,
+      });
+    }
+    if (platform && bot &&
+        !platform_matches_installation(bots, *platform, *bot)) {
+      errors.push_back(ConfigValidationError{
+          .code = "command_access_installation_mismatch",
+          .message = "command access identity does not match an enabled bot",
+          .dependency = entry_path,
+      });
+    }
+    if (platform && bot && native &&
+        !identities.emplace(*platform, *bot, *native).second) {
+      errors.push_back(ConfigValidationError{
+          .code = "duplicate_command_access_identity",
+          .message = "command access policy contains a duplicate identity",
+          .dependency = entry_path,
+      });
+    }
+  }
 }
 
 auto has_stage_dependency_cycle(const PipelineConfig &pipeline) -> bool {
@@ -342,6 +560,39 @@ auto RuntimeConfigSnapshot::get_command_runtime_config() const
 
   config.timeout_ms = get_non_negative_size(
       *runtime, "timeout_ms", CommandRuntimeConfig::default_timeout_ms);
+  if (const auto *help = runtime->get_as<toml::table>("help")) {
+    if (const auto value = (*help)["page_bytes"].value<int64_t>();
+        value && *value >= 0) {
+      config.help.page_bytes = static_cast<size_t>(*value);
+    }
+    if (const auto value = (*help)["maximum_pages"].value<int64_t>();
+        value && *value >= 0) {
+      config.help.maximum_pages = static_cast<size_t>(*value);
+    }
+  }
+  if (const auto *access = runtime->get_as<toml::table>("access")) {
+    config.access.groups =
+        parse_group_policy(access->get_as<toml::table>("groups"));
+    config.access.users =
+        parse_user_policy(access->get_as<toml::table>("users"));
+    const auto *overrides_node = access->get("overrides");
+    config.access.overrides_present = overrides_node != nullptr;
+    if (const auto *overrides = access->get_as<toml::array>("overrides")) {
+      for (const auto &node : *overrides) {
+        const auto *override_table = node.as_table();
+        if (override_table == nullptr) {
+          continue;
+        }
+        config.access.overrides.push_back(CommandAccessOverrideConfig{
+            .command = get_string_value(*override_table, "command"),
+            .groups = parse_group_policy(
+                override_table->get_as<toml::table>("groups")),
+            .users =
+                parse_user_policy(override_table->get_as<toml::table>("users")),
+        });
+      }
+    }
+  }
   const auto *routes = runtime->get_as<toml::array>("routes");
   if (routes == nullptr) {
     return config;
@@ -444,6 +695,114 @@ auto RuntimeConfigSnapshot::validate_actor_runtime_config() const
   const auto *command_runtime =
       config_data_.get_as<toml::table>("command_runtime");
   if (command_runtime != nullptr) {
+    append_unknown_key_errors(*command_runtime,
+                              {"timeout_ms", "help", "access", "routes"},
+                              "command_runtime", errors);
+    const auto *routes = command_runtime->get_as<toml::array>("routes");
+    const auto routes_active = routes != nullptr && !routes->empty();
+
+    const auto *help = command_runtime->get_as<toml::table>("help");
+    if (routes_active && help == nullptr) {
+      errors.push_back(ConfigValidationError{
+          .code = "missing_command_help_configuration",
+          .message = "active command routes require explicit help bounds",
+          .dependency = "command_runtime.help",
+      });
+    }
+    if (help != nullptr) {
+      append_unknown_key_errors(*help, {"page_bytes", "maximum_pages"},
+                                "command_runtime.help", errors);
+      const auto validate_help_bound = [&](const std::string_view key,
+                                           const std::size_t maximum) {
+        const auto value = (*help)[key].value<int64_t>();
+        if (!value || *value <= 0 ||
+            static_cast<std::uint64_t>(*value) > maximum) {
+          errors.push_back(ConfigValidationError{
+              .code = "invalid_command_help_bound",
+              .message = "command help bounds must be finite positive "
+                         "integers within supported limits",
+              .dependency = "command_runtime.help." + std::string{key},
+          });
+        }
+      };
+      validate_help_bound("page_bytes",
+                          CommandRuntimeConfig::max_help_page_bytes);
+      validate_help_bound("maximum_pages",
+                          CommandRuntimeConfig::max_help_pages);
+    }
+
+    const auto *access = command_runtime->get_as<toml::table>("access");
+    if (routes_active && access == nullptr) {
+      errors.push_back(ConfigValidationError{
+          .code = "missing_command_access_configuration",
+          .message = "active command routes require explicit access policy",
+          .dependency = "command_runtime.access",
+      });
+    }
+    if (access != nullptr) {
+      append_unknown_key_errors(*access, {"groups", "users", "overrides"},
+                                "command_runtime.access", errors);
+      validate_command_policy(access->get_as<toml::table>("groups"), true,
+                              "command_runtime.access.groups", bots_, errors);
+      validate_command_policy(access->get_as<toml::table>("users"), false,
+                              "command_runtime.access.users", bots_, errors);
+      const auto *overrides_node = access->get("overrides");
+      const auto *overrides =
+          overrides_node == nullptr ? nullptr : overrides_node->as_array();
+      if (overrides_node != nullptr && overrides == nullptr) {
+        errors.push_back(ConfigValidationError{
+            .code = "invalid_command_access_overrides",
+            .message = "command access overrides must be an array of tables",
+            .dependency = "command_runtime.access.overrides",
+        });
+      }
+      if (overrides != nullptr) {
+        if (overrides->size() > CommandRuntimeConfig::max_access_overrides) {
+          errors.push_back(ConfigValidationError{
+              .code = "command_access_overrides_exceed_limit",
+              .message = "command access overrides exceed the supported bound",
+              .dependency = "command_runtime.access.overrides",
+          });
+        }
+        std::unordered_set<std::string> names;
+        std::size_t override_index = 0;
+        for (const auto &node : *overrides) {
+          const auto path = "command_runtime.access.overrides[" +
+                            std::to_string(override_index++) + "]";
+          const auto *override_table = node.as_table();
+          if (override_table == nullptr) {
+            errors.push_back(ConfigValidationError{
+                .code = "invalid_command_access_override",
+                .message = "command access override must be a table",
+                .dependency = path,
+            });
+            continue;
+          }
+          append_unknown_key_errors(
+              *override_table, {"command", "groups", "users"}, path, errors);
+          const auto command =
+              (*override_table)["command"].value<std::string>();
+          if (!command || !valid_command_name(*command)) {
+            errors.push_back(ConfigValidationError{
+                .code = "invalid_command_access_override_name",
+                .message = "command access override requires a canonical name",
+                .dependency = path + ".command",
+            });
+          } else if (!names.insert(*command).second) {
+            errors.push_back(ConfigValidationError{
+                .code = "duplicate_command_access_override",
+                .message = "command access override names must be unique",
+                .dependency = path + ".command",
+            });
+          }
+          validate_command_policy(override_table->get_as<toml::table>("groups"),
+                                  true, path + ".groups", bots_, errors);
+          validate_command_policy(override_table->get_as<toml::table>("users"),
+                                  false, path + ".users", bots_, errors);
+        }
+      }
+    }
+
     if (const auto *timeout = command_runtime->get("timeout_ms")) {
       const auto value = timeout->value<int64_t>();
       if (!value ||
@@ -481,6 +840,10 @@ auto RuntimeConfigSnapshot::validate_actor_runtime_config() const
           });
           continue;
         }
+        append_unknown_key_errors(*route,
+                                  {"actor", "commands", "platforms", "bots",
+                                   "fallback", "timeout_ms"},
+                                  route_path, errors);
         const auto actor = route->get("actor");
         if (actor == nullptr || !actor->is_string() ||
             actor->value_or<std::string>("").empty()) {

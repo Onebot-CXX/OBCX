@@ -3,6 +3,7 @@
 
 #include "common/config_snapshot.hpp"
 #include "core/actor/actor_package_stager.hpp"
+#include "core/actor/actor_restart_constraints.hpp"
 #include "core/actor/blocking_executor.hpp"
 #include "core/actor/native_actor_scheduler.hpp"
 #include "core/bot/typed_operation.hpp"
@@ -93,6 +94,8 @@ public:
   [[nodiscard]] auto command_routing_table() const noexcept
       -> const std::shared_ptr<const CommandRoutingTable> &;
   void activate_command_catalogs();
+  void activate_actor_background_work();
+  void invalidate_actor_background_work() noexcept;
   [[nodiscard]] auto command_catalog_status() const
       -> std::vector<CommandCatalogStatus>;
   [[nodiscard]] auto staging_root() const noexcept
@@ -210,6 +213,7 @@ public:
 
 private:
   const std::shared_ptr<const BotPlatformCatalog> catalog_;
+  const std::shared_ptr<ActorRestartConstraintRegistry> restart_constraints_;
 };
 
 } // namespace obcx::core

@@ -61,6 +61,60 @@ struct GroupTarget {
   auto operator==(const GroupTarget &) const -> bool = default;
 };
 
+struct PrivateTarget {
+  BotInstallationRef installation;
+  std::string native_user_id;
+
+  void validate() const {
+    installation.validate();
+    detail::validate_identifier(native_user_id, "native_user_id");
+  }
+
+  using obcx_bot_json_factory = void;
+  static auto from_json(const Json &document) -> PrivateTarget {
+    detail::require_only_keys(document, "PrivateTarget",
+                              {"installation", "native_user_id"});
+    if (!document.contains("installation")) {
+      throw std::invalid_argument("PrivateTarget requires installation");
+    }
+    PrivateTarget result{
+        .installation = document.at("installation").get<BotInstallationRef>(),
+        .native_user_id = detail::require_string(document, "native_user_id",
+                                                 "PrivateTarget")};
+    result.validate();
+    return result;
+  }
+
+  auto operator==(const PrivateTarget &) const -> bool = default;
+};
+
+struct PrivateMessageRef {
+  PrivateTarget target;
+  std::string native_message_id;
+
+  void validate() const {
+    target.validate();
+    detail::validate_identifier(native_message_id, "native_message_id");
+  }
+
+  using obcx_bot_json_factory = void;
+  static auto from_json(const Json &document) -> PrivateMessageRef {
+    detail::require_only_keys(document, "PrivateMessageRef",
+                              {"target", "native_message_id"});
+    if (!document.contains("target") || !document.at("target").is_object()) {
+      throw std::invalid_argument("PrivateMessageRef requires target");
+    }
+    PrivateMessageRef result{
+        .target = document.at("target").get<PrivateTarget>(),
+        .native_message_id = detail::require_string(
+            document, "native_message_id", "PrivateMessageRef")};
+    result.validate();
+    return result;
+  }
+
+  auto operator==(const PrivateMessageRef &) const -> bool = default;
+};
+
 struct BotMessageRef {
   GroupTarget group;
   std::string native_message_id;
@@ -96,6 +150,18 @@ inline void to_json(Json &document, const GroupTarget &target) {
   target.validate();
   document = {{"installation", target.installation},
               {"native_group_id", target.native_group_id}};
+}
+
+inline void to_json(Json &document, const PrivateTarget &target) {
+  target.validate();
+  document = {{"installation", target.installation},
+              {"native_user_id", target.native_user_id}};
+}
+
+inline void to_json(Json &document, const PrivateMessageRef &message) {
+  message.validate();
+  document = {{"target", message.target},
+              {"native_message_id", message.native_message_id}};
 }
 
 inline void to_json(Json &document, const BotMessageRef &message) {

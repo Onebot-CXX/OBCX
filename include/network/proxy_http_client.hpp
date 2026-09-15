@@ -46,6 +46,9 @@ class ProxyHttpClient : public HttpClient {
 public:
   explicit ProxyHttpClient(asio::io_context &ioc, ProxyConfig proxy_config,
                            const common::ConnectionConfig &config);
+  explicit ProxyHttpClient(asio::any_io_executor executor,
+                           ProxyConfig proxy_config,
+                           const common::ConnectionConfig &config);
   ~ProxyHttpClient() override = default;
 
   /**
@@ -84,65 +87,6 @@ public:
       -> HttpResponse override;
 
   void close() override;
-
-private:
-  asio::io_context &ioc_;
-  ProxyConfig proxy_config_;
-  std::string target_host_;
-  uint16_t target_port_ = 443;
-
-  /**
-   * @brief 异步建立代理隧道（协程版本）
-   * @return 隧道TCP流
-   */
-  auto connect_through_proxy_async() -> asio::awaitable<beast::tcp_stream>;
-
-  /**
-   * @brief 异步建立HTTP代理隧道
-   * @param stream TCP流
-   */
-  auto establish_http_tunnel_async(beast::tcp_stream &stream)
-      -> asio::awaitable<void>;
-
-  /**
-   * @brief 异步建立HTTPS代理隧道
-   * @param ssl_stream SSL流
-   * @return 底层TCP流
-   */
-  auto establish_https_tunnel_async(
-      beast::ssl_stream<beast::tcp_stream> &ssl_stream)
-      -> asio::awaitable<beast::tcp_stream>;
-
-  /**
-   * @brief 异步建立SOCKS5代理隧道
-   * @param stream TCP流
-   */
-  auto establish_socks5_tunnel_async(beast::tcp_stream &stream)
-      -> asio::awaitable<void>;
-
-  // 建立代理隧道（同步版本）
-  auto connect_through_proxy() -> tcp::socket;
-
-  // HTTP代理方法（同步版本）
-  auto establish_http_tunnel(tcp::socket &proxy_socket,
-                             const std::string &target_host,
-                             uint16_t target_port) -> tcp::socket;
-
-  // HTTPS代理方法（同步版本）
-  auto establish_https_tunnel(ssl::stream<tcp::socket> &ssl_socket,
-                              const std::string &target_host,
-                              uint16_t target_port) -> tcp::socket;
-
-  // SOCKS5代理方法（同步版本）
-  auto establish_socks5_tunnel(tcp::socket &proxy_socket,
-                               const std::string &target_host,
-                               uint16_t target_port) -> tcp::socket;
-
-  // 通过隧道发送HTTP请求（同步版本）
-  auto send_http_request(tcp::socket &tunnel_socket, const std::string &method,
-                         const std::string &path, const std::string &body,
-                         const std::map<std::string, std::string> &headers)
-      -> HttpResponse;
 };
 
 } // namespace obcx::network

@@ -194,6 +194,7 @@ TEST(BotOperationComponentTest,
   auto transport = std::make_shared<FakeOneBotTransport>();
   transport->responses = {
       R"({"status":"ok","retcode":0,"data":{"message_id":11}})",
+      R"({"status":"ok","retcode":0,"data":{"message_id":12}})",
       R"({"status":"ok","retcode":0,"data":null})",
       R"({"status":"ok","retcode":0,"data":{"user_id":22,"nickname":"member"}})",
       R"({"status":"ok","retcode":0,"data":{"messages":[{"sender":{"nickname":"a"},"content":"hello"}]}})",
@@ -216,7 +217,7 @@ TEST(BotOperationComponentTest,
   const auto onebot_actions = endpoint->declared_actions();
   EXPECT_EQ(
       std::set<ActionId>(onebot_actions.begin(), onebot_actions.end()).size(),
-      7U);
+      8U);
 
   const GroupTarget target{
       .installation = {.installation_id = "qq-main",
@@ -228,6 +229,13 @@ TEST(BotOperationComponentTest,
                      .target = target, .message = text_message()}));
   ASSERT_TRUE(sent.ok());
   EXPECT_EQ(sent.value->primary().native_message_id, "11");
+  const auto private_sent = run(obcx::bot::invoke(
+      *endpoint, obcx::bot::SendPrivateMessageRequest{
+                     .target = {.installation = target.installation,
+                                .native_user_id = "22"},
+                     .message = text_message()}));
+  ASSERT_TRUE(private_sent.ok());
+  EXPECT_EQ(private_sent.value->primary().native_message_id, "12");
   EXPECT_TRUE(
       run(obcx::bot::invoke(
               *endpoint,
@@ -261,7 +269,7 @@ TEST(BotOperationComponentTest,
                                     obcx::onebot11::bot::PokeOneBotGroupRequest{
                                         .target = target, .user_id = "22"}))
                   .ok());
-  ASSERT_EQ(transport->payloads.size(), 7U);
+  ASSERT_EQ(transport->payloads.size(), 8U);
   EXPECT_EQ(nlohmann::json::parse(transport->payloads.front()).at("action"),
             "send_group_msg");
 }
@@ -271,6 +279,7 @@ TEST(BotOperationComponentTest,
   auto transport = std::make_shared<FakeTelegramTransport>();
   transport->responses = {
       R"({"ok":true,"result":{"message_id":31}})",
+      R"({"ok":true,"result":{"message_id":30,"chat":{"id":7}}})",
       R"({"ok":true,"result":true})",
       R"({"ok":true,"result":{"message_id":32}})",
       R"({"ok":true,"result":{"message_id":31}})",
@@ -292,7 +301,7 @@ TEST(BotOperationComponentTest,
   const auto endpoint = installation.capability<BotOperationEndpoint>(
       CapabilityId{"bot.operations"});
   ASSERT_NE(endpoint, nullptr);
-  EXPECT_EQ(endpoint->declared_actions().size(), 8U);
+  EXPECT_EQ(endpoint->declared_actions().size(), 9U);
 
   const GroupTarget target{
       .installation = {.installation_id = "tg-main",
@@ -304,6 +313,13 @@ TEST(BotOperationComponentTest,
                      .target = target, .message = text_message()}));
   ASSERT_TRUE(sent.ok());
   EXPECT_EQ(sent.value->primary().native_message_id, "31");
+  const auto private_sent = run(obcx::bot::invoke(
+      *endpoint, obcx::bot::SendPrivateMessageRequest{
+                     .target = {.installation = target.installation,
+                                .native_user_id = "7"},
+                     .message = text_message()}));
+  ASSERT_TRUE(private_sent.ok());
+  EXPECT_EQ(private_sent.value->primary().native_message_id, "30");
   EXPECT_TRUE(
       run(obcx::bot::invoke(
               *endpoint,
@@ -418,7 +434,7 @@ TEST(BotOperationComponentTest,
   const auto endpoint = installation.capability<BotOperationEndpoint>(
       CapabilityId{"bot.operations"});
   const auto actions = endpoint->declared_actions();
-  EXPECT_EQ(actions.size(), 7U);
+  EXPECT_EQ(actions.size(), 8U);
   EXPECT_EQ(
       std::ranges::find(
           actions,
@@ -430,6 +446,7 @@ TEST(BotOperationComponentTest,
      TelegramSendOperationsEnforceProviderResultShapesAndCounts) {
   auto transport = std::make_shared<FakeTelegramTransport>();
   transport->responses = {
+      R"({"ok":true,"result":{"message_id":30,"chat":{"id":8}}})",
       R"({"ok":true,"result":[{"message_id":31}]})",
       R"({"ok":true,"result":[{"message_id":32}]})",
       R"({"ok":true,"result":{"message_id":33}})",
@@ -462,6 +479,11 @@ TEST(BotOperationComponentTest,
               obcx::bot::SubmissionSafety::PossiblySubmitted);
   };
 
+  expect_malformed(run(obcx::bot::invoke(
+      *endpoint, obcx::bot::SendPrivateMessageRequest{
+                     .target = {.installation = target.installation,
+                                .native_user_id = "7"},
+                     .message = text_message()})));
   expect_malformed(run(obcx::bot::invoke(
       *endpoint, obcx::telegram::bot::SendTelegramTopicMessageRequest{
                      .target = {.group = target, .topic_id = 7},
@@ -612,7 +634,7 @@ TEST(BotOperationComponentTest,
                     : obcx::bot::SubmissionSafety::DefinitelyNotSubmitted);
     }
   });
-  EXPECT_EQ(transport->payloads.size(), 14U);
+  EXPECT_EQ(transport->payloads.size(), 16U);
 }
 
 TEST(BotOperationComponentTest,
@@ -672,7 +694,7 @@ TEST(BotOperationComponentTest,
                     : obcx::bot::SubmissionSafety::DefinitelyNotSubmitted);
     }
   });
-  EXPECT_EQ(transport->payloads.size(), 12U);
+  EXPECT_EQ(transport->payloads.size(), 14U);
   EXPECT_EQ(transport->upload_calls, 2U);
 }
 

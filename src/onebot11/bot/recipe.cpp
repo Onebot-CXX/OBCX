@@ -56,11 +56,15 @@ auto make_plan(const core::BotInstallationInput &input, Connection connection,
                core::BotRecipeDescription description, std::string digest)
     -> std::shared_ptr<const core::BotInstallationPlan> {
   return std::make_shared<core::BotInstallationPlan>(
-      common::BotInstallationMetadata{input.installation_id, input.enabled,
-                                      input.surface, input.transport, "qq", ""},
+      common::BotInstallationMetadata{.installation_id = input.installation_id,
+                                      .enabled = input.enabled,
+                                      .surface = input.surface,
+                                      .transport = input.transport,
+                                      .ingress_platform = "qq",
+                                      .command_target = ""},
       std::move(description), std::move(digest),
       [connection = std::move(connection),
-       id = input.installation_id](boost::asio::io_context &executor) {
+       id = input.installation_id](boost::asio::io_context &executor) -> auto {
         std::vector<std::unique_ptr<core::BotComponent>> components;
         components.push_back(
             std::make_unique<core::OneBot11ProtocolComponent>());
@@ -80,18 +84,22 @@ auto make_plan(const core::BotInstallationInput &input, Connection connection,
 
 void register_recipes(core::BotPlatformCatalog &catalog) {
   catalog.register_recipe(
-      {surface, "websocket", "qq",
-       [](const core::BotInstallationInput &input,
-          const toml::table &connection, std::string_view path) {
+      {.surface = surface,
+       .transport = "websocket",
+       .ingress_platform = "qq",
+       .parse = [](const core::BotInstallationInput &input,
+                   const toml::table &connection, std::string_view path) {
          auto typed = configuration::parse_websocket(connection, path);
          return make_plan<core::OneBot11WebSocketTransportComponent>(
              input, std::move(typed), onebot_websocket_recipe(),
              core::configuration_digest(connection));
        }});
   catalog.register_recipe(
-      {surface, "http", "qq",
-       [](const core::BotInstallationInput &input,
-          const toml::table &connection, std::string_view path) {
+      {.surface = surface,
+       .transport = "http",
+       .ingress_platform = "qq",
+       .parse = [](const core::BotInstallationInput &input,
+                   const toml::table &connection, std::string_view path) {
          auto typed = configuration::parse_http(connection, path);
          return make_plan<core::OneBot11HttpTransportComponent>(
              input, std::move(typed), onebot_http_recipe(),

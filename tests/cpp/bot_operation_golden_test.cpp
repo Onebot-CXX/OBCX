@@ -51,6 +51,8 @@ void replay(const std::string_view action) {
 
 TEST(BotOperationGoldenTest, CommonMessaging) {
   replay<SendGroupMessageRequest, SendMessageResult>("message.send_group");
+  replay<SendPrivateMessageRequest, SendPrivateMessageResult>(
+      "message.send_private");
   replay<DeleteMessageRequest, DeleteMessageResult>("message.delete");
 }
 
@@ -102,7 +104,7 @@ TEST(BotOperationGoldenTest, ProductionRecipeManifests) {
     surfaces.insert(fixture.at("surface").get<std::string>());
   }
   EXPECT_EQ(Json(surfaces), baseline().at("surfaces"));
-  EXPECT_EQ(union_actions.size(), 13U);
+  EXPECT_EQ(union_actions.size(), 14U);
   EXPECT_EQ(baseline().at("operations").size(), union_actions.size());
   for (const auto &action : union_actions) {
     EXPECT_TRUE(baseline().at("operations").contains(action));

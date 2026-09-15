@@ -12,7 +12,10 @@ using namespace obcx::bot;
 static_assert(!std::is_default_constructible_v<BotInstallationRef>);
 static_assert(!std::is_default_constructible_v<GroupTarget>);
 static_assert(!std::is_default_constructible_v<BotMessageRef>);
+static_assert(!std::is_default_constructible_v<PrivateTarget>);
+static_assert(!std::is_default_constructible_v<PrivateMessageRef>);
 static_assert(!std::is_default_constructible_v<SendGroupMessageRequest>);
+static_assert(!std::is_default_constructible_v<SendPrivateMessageRequest>);
 
 TEST(BotCommonContractTest, ReferencesHaveExplicitOpenSurfaceIdentity) {
   const BotMessageRef message{
@@ -46,6 +49,12 @@ TEST(BotCommonContractTest, CommonActionsNeedNoPlatformEnumOrCodec) {
   forged["action"] = "test.echo.unregistered";
   EXPECT_THROW((void)forged.get<SendGroupMessageRequest>(),
                std::invalid_argument);
+  const SendPrivateMessageRequest private_request{
+      .target = {.installation = request.target.installation,
+                 .native_user_id = "user-1"},
+      .message = request.message};
+  EXPECT_EQ(Json(Json(private_request).get<SendPrivateMessageRequest>()),
+            Json(private_request));
   const DeleteMessageRequest removal{
       .message = {.group = request.target, .native_message_id = "42"}};
   EXPECT_EQ(Json(Json(removal).get<DeleteMessageRequest>()), Json(removal));
@@ -71,6 +80,23 @@ TEST(BotCommonContractTest, MessagingFacadeNeedsOnlyCommonSdk) {
           .message = {{.type = "text", .data = {{"text", "hello"}}}}}));
   ASSERT_TRUE(sent.ok());
   EXPECT_EQ(sent.value->primary(), message);
+
+  const PrivateMessageRef private_message{
+      .target = {.installation = message.group.installation,
+                 .native_user_id = "user-1"},
+      .native_message_id = "43"};
+  obcx::tests::ReplyGateway private_gateway{
+      SendPrivateMessageRequest::action,
+      OperationReply::success(
+          Json(SendPrivateMessageResult{.messages = {private_message}}))};
+  MessagingClient private_sender{private_gateway};
+  const auto private_sent =
+      obcx::tests::await_sdk(private_sender.execute(SendPrivateMessageRequest{
+          .target = private_message.target,
+          .message = {{.type = "text", .data = {{"text", "hello"}}}}}));
+  ASSERT_TRUE(private_sent.ok());
+  EXPECT_EQ(private_sent.value->primary(), private_message);
+
   obcx::tests::ReplyGateway delete_gateway{
       DeleteMessageRequest::action,
       OperationReply::success(Json(DeleteMessageResult{.message = message}))};

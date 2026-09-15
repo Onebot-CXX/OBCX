@@ -76,6 +76,11 @@ public:
   explicit HttpClient(asio::io_context &ioc,
                       const common::ConnectionConfig &config);
 
+  // Actor runtimes expose an executor, not necessarily an io_context.
+  // Asynchronous operations use their awaiting coroutine's executor.
+  explicit HttpClient(asio::any_io_executor executor,
+                      const common::ConnectionConfig &config);
+
   /**
    * @brief 析构函数
    */
@@ -205,6 +210,8 @@ protected:
                        const std::map<std::string, std::string> &headers);
 
 private:
+  friend class ProxyHttpClient;
+
   struct Impl;
   std::unique_ptr<Impl> pimpl_;
 };

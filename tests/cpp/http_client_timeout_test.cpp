@@ -331,6 +331,58 @@ private:
   std::atomic_int connect_requests_{0};
 };
 
+TEST(HttpClientActorExecutorTest, DirectRequestAndBodyLimitOnThreadPool) {
+  common::Logger::initialize(spdlog::level::err);
+  MockHttpServer server("127.0.0.1");
+  server.set_response_body("actor-response");
+  server.set_response_delay(std::chrono::milliseconds(0));
+  server.start();
+  asio::thread_pool pool(1);
+  common::ConnectionConfig config;
+  config.host = "127.0.0.1";
+  config.port = server.get_port();
+  config.use_ssl = false;
+  config.connect_timeout = SHORT_TIMEOUT;
+  network::HttpClient client(pool.get_executor(), config);
+  client.set_response_body_limit(1024);
+  const std::map<std::string, std::string> headers;
+  auto response =
+      asio::co_spawn(pool, client.get("/", headers), asio::use_future);
+  EXPECT_EQ(response.get().body, "actor-response");
+  auto oversized =
+      asio::co_spawn(pool, client.get("/", headers, 4), asio::use_future);
+  EXPECT_THROW(oversized.get(), network::HttpClientError);
+  pool.join();
+}
+
+TEST(HttpClientActorExecutorTest, ProxyRequestAndBodyLimitOnThreadPool) {
+  common::Logger::initialize(spdlog::level::err);
+  MockConnectProxy proxy("actor-proxy-response");
+  proxy.start();
+  asio::thread_pool pool(1);
+  common::ConnectionConfig config;
+  config.host = "target.invalid";
+  config.port = 80;
+  config.use_ssl = false;
+  config.connect_timeout = SHORT_TIMEOUT;
+  const network::ProxyConfig proxy_config{.type = network::ProxyType::HTTP,
+                                          .host = "127.0.0.1",
+                                          .port = proxy.port(),
+                                          .username = std::nullopt,
+                                          .password = std::nullopt};
+  network::ProxyHttpClient client(pool.get_executor(), proxy_config, config);
+  client.set_response_body_limit(1024);
+  const std::map<std::string, std::string> headers;
+  auto response =
+      asio::co_spawn(pool, client.get("/", headers), asio::use_future);
+  EXPECT_EQ(response.get().body, "actor-proxy-response");
+  auto oversized =
+      asio::co_spawn(pool, client.get("/", headers, 4), asio::use_future);
+  EXPECT_THROW(oversized.get(), network::HttpClientError);
+  EXPECT_EQ(proxy.connect_requests(), 2);
+  pool.join();
+}
+
 class HttpClientTimeoutTest : public testing::Test {
 protected:
   void SetUp() override {

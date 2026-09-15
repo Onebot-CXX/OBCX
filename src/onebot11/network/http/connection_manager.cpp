@@ -137,7 +137,7 @@ auto HttpConnectionManager::poll_events() -> asio::awaitable<void> {
         headers["Authorization"] = "Bearer " + config_.access_token;
       }
 
-      std::string events_path =
+      std::string_view events_path =
           "/get_latest_events"; // OneBot11 events endpoint
       auto response = co_await http_client_->get(events_path, headers);
 

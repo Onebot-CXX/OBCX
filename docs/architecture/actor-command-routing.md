@@ -55,6 +55,18 @@ Declarations do not change data flow until configuration activates them:
 [command_runtime]
 timeout_ms = 5000
 
+[command_runtime.help]
+page_bytes = 3500
+maximum_pages = 10
+
+[command_runtime.access.groups]
+mode = "unrestricted"
+entries = []
+
+[command_runtime.access.users]
+mode = "unrestricted"
+entries = []
+
 [[command_runtime.routes]]
 actor = "example"
 commands = ["ping"]
@@ -75,6 +87,41 @@ publication.
 `fallback` is `continue` or `consume` and is used for actor failure, malformed
 or missing completion, cancellation, and timeout. It does not replace the
 actor's successful propagation decision.
+
+The help bounds and both access policies are required whenever routes are
+configured; OBCX does not infer access defaults. Policy modes are
+`unrestricted`, `allowlist`, or `denylist`. Unrestricted policies require an
+empty `entries` array. Group entries use exact `platform`, `bot`, and
+`native_group_id`; user entries use exact `platform`, `bot`, and
+`native_user_id`. A bot is
+an installation ID, not a provider-wide identity. Per-command overrides are
+complete replacements for both global dimensions:
+
+```toml
+[[command_runtime.access.overrides]]
+command = "ping"
+
+[command_runtime.access.overrides.groups]
+mode = "allowlist"
+entries = [
+  { platform = "telegram", bot = "telegram_bot", native_group_id = "-100123" },
+]
+
+[command_runtime.access.overrides.users]
+mode = "allowlist"
+entries = [
+  { platform = "telegram", bot = "telegram_bot", native_user_id = "456" },
+]
+```
+
+Override names must be active canonical command names or `help`; aliases do not
+name policies. In a group, both effective group and user policies must permit
+the call. In a private conversation only the effective user policy applies.
+Constrained policies fail closed when normalized ingress identity is missing or
+inconsistent. Command policy also requires the process-supplied installation;
+the legacy event `self_id` fallback is not an ACL identity. A recognized denial
+is consumed as `command_access_denied`
+before actor, provider, or ordinary-pipeline side effects.
 
 Each active matcher is compiled into its generation's immutable routing table.
 Patterns use RE2 UTF-8 `FullMatch`, `log_errors = false`, a 4 KiB pattern byte
@@ -106,12 +153,41 @@ not enough. If different patterns both match, the coordinator reports
 and sends the original event through ordinary routing exactly once.
 
 After generation activation, the runtime derives one sorted aggregate catalog
-per bot across all active actors. Supported platforms receive a complete
-replacement publication with bounded retries. Desired/observed generation,
-attempt, retry, and failure status remain generation-owned. Publication
-failure does not disable local command routing, and superseded generations
-stop retrying. Only canonical names and descriptions enter this catalog;
-patterns and inferred aliases are never published.
+per bot across all active actors and adds one reserved `help` entry. Supported
+platforms receive a complete replacement publication with bounded retries.
+Desired/observed generation, attempt, retry, and failure status remain
+generation-owned. Publication failure does not disable local command routing,
+and superseded generations stop retrying. Only canonical names and
+descriptions enter this catalog; patterns, inferred aliases, and per-caller
+access-filtered variants are never published.
+
+## Built-in Help
+
+`help` is reserved by core: actor contracts and actor-owned routes cannot
+register it. Every exact platform/installation scope containing an active actor
+command receives one synthetic exact `/help`. It accepts no arguments and
+never invokes an actor.
+
+For an authorized caller, help independently applies the effective policy for
+each command and lists only permitted commands in canonical-name order,
+including permitted `help`. Each complete `/<name> - <description>` entry stays
+on one plain UTF-8 page. Candidate generation validation rejects entries or
+catalogs that cannot fit the explicit byte and page-count bounds rather than
+truncating output.
+
+The platform adapter converts each page into a closed typed operation without
+calling a provider. Telegram group/topic/private and OneBot group/private
+sources retain their exact installation and native destination. The
+coordinator submits pages sequentially through the process-owned
+`BotOperationGateway`. It stops after the first definite failure or possibly
+submitted outcome and never retries or falls through to ordinary routing.
+Validation-only and reload-candidate construction send no help pages and
+publish no catalog. Access policies, help bounds, routes, and rendered catalog
+inputs are immutable per generation. An invalid candidate leaves the active
+policy and published catalog unchanged; admitted work drains against its old
+generation. To roll back a valid policy-only deployment, restore the previous
+explicit `command_runtime.help` and `command_runtime.access` tables and perform
+another reload. No database rollback is involved.
 
 ## Completion And Propagation
 

@@ -1,17 +1,15 @@
-#include "onebot11/adapter/event_converter.hpp"
 #include "common/json_utils.hpp"
 #include "common/logger.hpp"
 #include "onebot11/adapter/message_converter.hpp"
-
-using json = nlohmann::json;
+#include "onebot11/adapter/protocol_adapter.hpp"
 
 namespace obcx::adapter::onebot11 {
 
-auto EventConverter::from_v11_json(std::string_view json_str)
+auto ProtocolAdapter::parse_event(std::string_view json_str)
     -> std::optional<common::Event> {
   auto j_opt = common::JsonUtils::parse(std::string(json_str));
   if (!j_opt) {
-    OBCX_WARN("EventConverter: Failed to parse JSON: {}", json_str);
+    OBCX_WARN("OneBot ProtocolAdapter: Failed to parse JSON: {}", json_str);
     return std::nullopt;
   }
   const auto &j = j_opt.value();
@@ -51,7 +49,7 @@ auto EventConverter::from_v11_json(std::string_view json_str)
       if (meta_event_type == "heartbeat") {
         common::HeartbeatEvent event;
         event.from_json(j);
-        OBCX_DEBUG("EventConverter: Received heartbeat, interval: {}ms",
+        OBCX_DEBUG("OneBot ProtocolAdapter: Received heartbeat, interval: {}ms",
                    event.interval);
         return event;
       } else {
@@ -61,13 +59,13 @@ auto EventConverter::from_v11_json(std::string_view json_str)
       }
     }
   } catch (const nlohmann::json::exception &e) {
-    OBCX_ERROR(
-        "EventConverter: JSON exception creating event object: {}. JSON: {}",
-        e.what(), json_str);
+    OBCX_ERROR("OneBot ProtocolAdapter: JSON exception creating event object: "
+               "{}. JSON: {}",
+               e.what(), json_str);
     return std::nullopt;
   }
 
-  OBCX_DEBUG("EventConverter: Unknown post_type '{}'", post_type);
+  OBCX_DEBUG("OneBot ProtocolAdapter: Unknown post_type '{}'", post_type);
   return std::nullopt;
 }
 

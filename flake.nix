@@ -120,6 +120,7 @@
                 obcxDependencies = with pkgs; [
                   boost
                   brotli
+                  curl
                   fmt
                   zlib
                   gtest

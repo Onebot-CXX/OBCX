@@ -2,6 +2,7 @@
 #include "core/runtime/process_configuration.hpp"
 
 #include "common/logger.hpp"
+#include "core/actor/actor_generation_lifecycle.hpp"
 #include "core/actor/actor_manager.hpp"
 #include "core/bot/bot_installation_directory.hpp"
 #include "core/bot/bot_operation_dispatcher.hpp"
@@ -568,6 +569,25 @@ auto RuntimeGeneration::command_routing_table() const noexcept
   return command_routing_table_;
 }
 
+void RuntimeGeneration::activate_actor_background_work() {
+  if (shutdown_.load(std::memory_order_acquire)) {
+    return;
+  }
+  const auto info = services_->get_service<ActorGenerationInfo>();
+  if (!info || info->purpose == ActorGenerationPurpose::ValidationOnly) {
+    return;
+  }
+  if (auto lifecycle = services_->get_service<ActorGenerationLifecycle>()) {
+    lifecycle->activate();
+  }
+}
+
+void RuntimeGeneration::invalidate_actor_background_work() noexcept {
+  if (auto lifecycle = services_->get_service<ActorGenerationLifecycle>()) {
+    lifecycle->invalidate();
+  }
+}
+
 void RuntimeGeneration::activate_command_catalogs() {
   bool expected = false;
   if (!command_catalog_active_.compare_exchange_strong(
@@ -795,6 +815,9 @@ void RuntimeGeneration::shutdown() {
     route_state_->accepting = false;
   }
   command_catalog_active_.store(false, std::memory_order_release);
+  if (auto lifecycle = services_->get_service<ActorGenerationLifecycle>()) {
+    lifecycle->retire();
+  }
   if (command_coordinator_) {
     command_coordinator_->shutdown();
   }
@@ -822,7 +845,8 @@ void RuntimeGeneration::shutdown() {
 
 RuntimeGenerationBuilder::RuntimeGenerationBuilder(
     std::shared_ptr<const BotPlatformCatalog> catalog)
-    : catalog_(std::move(catalog)) {
+    : catalog_(std::move(catalog)),
+      restart_constraints_(std::make_shared<ActorRestartConstraintRegistry>()) {
   if (!catalog_ || !catalog_->sealed()) {
     throw std::invalid_argument(
         "generation builder requires an explicit sealed platform catalog");
@@ -1062,6 +1086,17 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
           .purpose = actor_generation_purpose,
           .generation_id = request.generation_id,
       }));
+  generation->orchestrator_->register_service<ActorGenerationLifecycle>(
+      std::make_shared<ActorGenerationLifecycle>(
+          [weak = std::weak_ptr<RuntimeGeneration>(
+               generation)] -> ActorGenerationLifecycle::WorkLease {
+            if (auto active = weak.lock()) {
+              return active->admit_route();
+            }
+            return {};
+          }));
+  generation->orchestrator_->register_service<ActorRestartConstraintRegistry>(
+      restart_constraints_);
   generation->orchestrator_->register_service<DbManager>(
       generation->db_manager_);
   generation->orchestrator_->register_service<bot::BotOperationGateway>(
@@ -1113,7 +1148,8 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
       runtime_config.routing_hop_limit);
   generation->command_coordinator_ = std::make_shared<CommandCoordinator>(
       generation->id_, generation->command_routing_table_,
-      generation->scheduler_, generation->orchestrator_);
+      generation->scheduler_, generation->orchestrator_,
+      generation->bot_operation_client_);
   OBCX_INFO("Runtime generation {} ready with {} actors", request.generation_id,
             generation->actor_manager_->get_loaded_actor_names().size());
   return {.status = RuntimeGenerationBuildStatus::Ready,

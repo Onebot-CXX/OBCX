@@ -13,6 +13,9 @@ public:
   auto execute(SendGroupMessageRequest request) {
     return obcx::bot::invoke(gateway_, std::move(request));
   }
+  auto execute(SendPrivateMessageRequest request) {
+    return obcx::bot::invoke(gateway_, std::move(request));
+  }
   auto execute(DeleteMessageRequest request) {
     return obcx::bot::invoke(gateway_, std::move(request));
   }

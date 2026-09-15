@@ -260,6 +260,7 @@ TEST(BotInstallationAssemblerTest,
   EXPECT_EQ(std::set<ActionId>(websocket.advertised_actions.begin(),
                                websocket.advertised_actions.end()),
             (std::set<ActionId>{ActionId{"message.send_group"},
+                                ActionId{"message.send_private"},
                                 ActionId{"message.delete"},
                                 ActionId{"onebot11.group_member.get"},
                                 ActionId{"onebot11.forward_message.get"},
@@ -274,7 +275,7 @@ TEST(BotInstallationAssemblerTest,
                                    "telegram.command-catalog",
                                    "telegram.media-upload", "telegram.protocol",
                                    "telegram.transport"}));
-  EXPECT_EQ(telegram.advertised_actions.size(), 8U);
+  EXPECT_EQ(telegram.advertised_actions.size(), 9U);
 }
 
 TEST(BotInstallationAssemblerTest,

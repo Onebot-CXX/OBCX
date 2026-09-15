@@ -3,6 +3,7 @@
 
 #include "common/json_utils.hpp"
 
+#include <initializer_list>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -16,6 +17,25 @@ namespace detail {
 inline void require_object(const Json &document, const std::string_view type) {
   if (!document.is_object()) {
     throw std::invalid_argument(std::string{type} + " must be an object");
+  }
+}
+
+inline void require_only_keys(
+    const Json &document, const std::string_view type,
+    const std::initializer_list<std::string_view> allowed) {
+  require_object(document, type);
+  for (auto entry = document.begin(); entry != document.end(); ++entry) {
+    bool accepted = false;
+    for (const auto key : allowed) {
+      if (entry.key() == key) {
+        accepted = true;
+        break;
+      }
+    }
+    if (!accepted) {
+      throw std::invalid_argument(std::string{type} +
+                                  " contains an unknown field");
+    }
   }
 }
 

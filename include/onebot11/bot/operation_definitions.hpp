@@ -15,6 +15,8 @@ template <typename Visitor> void for_each_operation(Visitor visit) {
                                               "onebot11.transport"};
   visit(core::OperationDefinition<obcx::bot::SendGroupMessageRequest>{
       dependencies});
+  visit(core::OperationDefinition<obcx::bot::SendPrivateMessageRequest>{
+      dependencies});
   visit(
       core::OperationDefinition<obcx::bot::DeleteMessageRequest>{dependencies});
   visit(core::OperationDefinition<GetOneBotGroupMemberRequest>{dependencies});

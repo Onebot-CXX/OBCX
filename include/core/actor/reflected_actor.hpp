@@ -183,6 +183,8 @@ template <typename Derived> consteval auto validate_command_contract() -> bool {
                     "OBCX_COMMAND_REQUEST_TYPE_REQUIRED");
       static_assert(command::valid_name(entry.name),
                     "OBCX_COMMAND_INVALID_NAME");
+      static_assert(entry.name != command::help_name,
+                    "OBCX_COMMAND_RESERVED_NAME");
       static_assert(!entry.description.empty(),
                     "OBCX_COMMAND_EMPTY_DESCRIPTION");
       static_assert(entry.matcher_kind == command::MatcherKind::None ||

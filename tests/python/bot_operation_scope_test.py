@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 APPROVED_ACTIONS = frozenset(
     {
         "message.send_group",
+        "message.send_private",
         "message.delete",
         "telegram.message.send_topic",
         "telegram.message.edit_text",
@@ -158,7 +159,9 @@ class BotOperationScopeTest(unittest.TestCase):
         )
 
     def test_legacy_mapping_itself_cannot_grow_the_matrix(self) -> None:
-        self.assertEqual(set(LEGACY_METHOD_ACTIONS.values()), APPROVED_ACTIONS)
+        legacy_actions = set(LEGACY_METHOD_ACTIONS.values())
+        self.assertLessEqual(legacy_actions, APPROVED_ACTIONS)
+        self.assertEqual(APPROVED_ACTIONS - legacy_actions, {"message.send_private"})
 
     def test_bridge_state_and_retry_calls_are_installation_scoped(self) -> None:
         bridge_roots = (

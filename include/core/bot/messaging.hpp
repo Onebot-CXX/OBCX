@@ -87,6 +87,58 @@ inline auto SendGroupMessageRequest::from_json(const Json &document)
   return result;
 }
 
+struct SendPrivateMessageRequest {
+  using obcx_bot_json_factory = void;
+  static auto from_json(const Json &document) -> SendPrivateMessageRequest;
+
+  inline static const ActionId action{"message.send_private"};
+
+  PrivateTarget target;
+  common::Message message;
+
+  void validate() const {
+    target.validate();
+    detail::validate_message(message);
+  }
+};
+
+inline void to_json(Json &document, const SendPrivateMessageRequest &request) {
+  request.validate();
+  document = {{"action", request.action},
+              {"target", request.target},
+              {"message", request.message}};
+}
+
+inline void from_json(const Json &document,
+                      SendPrivateMessageRequest &request) {
+  detail::require_only_keys(document, "SendPrivateMessageRequest",
+                            {"action", "target", "message"});
+  if (document.contains("action") &&
+      document.at("action").get<ActionId>() != request.action) {
+    throw std::invalid_argument("SendPrivateMessageRequest action mismatch");
+  }
+  if (!document.contains("target")) {
+    throw std::invalid_argument("SendPrivateMessageRequest requires target");
+  }
+  request.target = document.at("target").get<PrivateTarget>();
+  request.message =
+      detail::require_message(document, "message", "SendPrivateMessageRequest");
+  request.validate();
+}
+
+inline auto SendPrivateMessageRequest::from_json(const Json &document)
+    -> SendPrivateMessageRequest {
+  detail::require_only_keys(document, "SendPrivateMessageRequest",
+                            {"action", "target", "message"});
+  if (!document.contains("target")) {
+    throw std::invalid_argument("SendPrivateMessageRequest requires target");
+  }
+  SendPrivateMessageRequest result{
+      .target = document.at("target").get<PrivateTarget>()};
+  obcx::bot::from_json(document, result);
+  return result;
+}
+
 struct DeleteMessageRequest {
   using obcx_bot_json_factory = void;
   static auto from_json(const Json &document) -> DeleteMessageRequest;
@@ -167,6 +219,47 @@ inline void from_json(const Json &document, SendMessageResult &result) {
   result.validate();
 }
 
+struct SendPrivateMessageResult {
+  std::vector<PrivateMessageRef> messages;
+
+  void validate() const {
+    if (messages.empty()) {
+      throw std::invalid_argument(
+          "SendPrivateMessageResult requires at least one message");
+    }
+    for (const auto &message : messages) {
+      message.validate();
+      if (message.target != messages.front().target) {
+        throw std::invalid_argument(
+            "SendPrivateMessageResult messages must share one private target");
+      }
+    }
+  }
+
+  [[nodiscard]] auto primary() const -> const PrivateMessageRef & {
+    validate();
+    return messages.front();
+  }
+
+  auto operator==(const SendPrivateMessageResult &) const -> bool = default;
+};
+
+inline void to_json(Json &document, const SendPrivateMessageResult &result) {
+  result.validate();
+  document = {{"messages", result.messages}};
+}
+
+inline void from_json(const Json &document, SendPrivateMessageResult &result) {
+  detail::require_only_keys(document, "SendPrivateMessageResult", {"messages"});
+  if (!document.contains("messages") || !document.at("messages").is_array()) {
+    throw std::invalid_argument(
+        "SendPrivateMessageResult requires messages array");
+  }
+  result.messages =
+      document.at("messages").get<std::vector<PrivateMessageRef>>();
+  result.validate();
+}
+
 struct DeleteMessageResult {
   using obcx_bot_json_factory = void;
   static auto from_json(const Json &document) -> DeleteMessageResult;
@@ -219,6 +312,26 @@ struct OperationTraits<SendGroupMessageRequest>
         result.primary().group != request.target) {
       throw std::invalid_argument(
           "group-send result does not match its requested scope");
+    }
+  }
+};
+
+template <>
+struct OperationTraits<SendPrivateMessageRequest>
+    : OperationContract<SendPrivateMessageRequest, SendPrivateMessageResult,
+                        true> {
+  static auto supports_surface(const SurfaceId &) -> bool { return true; }
+  static auto installation(const request_type &request)
+      -> const BotInstallationRef & {
+    return request.target.installation;
+  }
+  static void validate_result(const request_type &request,
+                              const result_type &result) {
+    result.validate();
+    if (result.messages.size() != 1U ||
+        result.primary().target != request.target) {
+      throw std::invalid_argument(
+          "private-send result does not match its requested scope");
     }
   }
 };

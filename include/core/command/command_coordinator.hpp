@@ -16,6 +16,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -48,6 +49,46 @@ struct CommandBotKey {
   std::string bot;
 
   auto operator<=>(const CommandBotKey &) const = default;
+};
+
+struct CommandAccessIdentity {
+  std::string platform;
+  std::string bot;
+  std::string native_id;
+
+  auto operator<=>(const CommandAccessIdentity &) const = default;
+};
+
+struct ActiveCommandAccessPolicy {
+  common::CommandAccessMode mode;
+  std::set<CommandAccessIdentity> entries;
+};
+
+struct ActiveCommandPolicy {
+  ActiveCommandAccessPolicy groups;
+  ActiveCommandAccessPolicy users;
+};
+
+enum class CommandConversationKind : std::uint8_t {
+  Group,
+  Private,
+};
+
+struct CommandPolicySubject {
+  std::string platform;
+  std::string bot;
+  CommandConversationKind conversation;
+  std::string group_id;
+  std::string user_id;
+  std::optional<std::int64_t> topic_id;
+};
+
+struct CommandHelpRenderResult {
+  std::vector<std::string> pages;
+  std::string code;
+  std::string message;
+
+  explicit operator bool() const noexcept { return code.empty(); }
 };
 
 struct ActiveCommandRoute {
@@ -89,6 +130,15 @@ public:
       -> const std::map<CommandRouteKey, ActiveCommandRoute> &;
   [[nodiscard]] auto bots() const noexcept
       -> const std::map<CommandBotKey, ActiveCommandBot> &;
+  [[nodiscard]] auto policy_for(std::string_view canonical_command) const
+      -> const ActiveCommandPolicy &;
+  [[nodiscard]] auto permits(std::string_view canonical_command,
+                             const CommandPolicySubject &subject) const -> bool;
+  [[nodiscard]] auto render_help(const ActiveCommandBot &bot,
+                                 const CommandPolicySubject &subject) const
+      -> CommandHelpRenderResult;
+  [[nodiscard]] auto help_page_bytes() const noexcept -> std::size_t;
+  [[nodiscard]] auto help_maximum_pages() const noexcept -> std::size_t;
 
 private:
   friend struct CommandRoutingBuildResult;
@@ -99,6 +149,10 @@ private:
 
   std::map<CommandRouteKey, ActiveCommandRoute> routes_;
   std::map<CommandBotKey, ActiveCommandBot> bots_;
+  std::optional<ActiveCommandPolicy> global_policy_;
+  std::map<std::string, ActiveCommandPolicy> policy_overrides_;
+  std::size_t help_page_bytes_ = 0;
+  std::size_t help_maximum_pages_ = 0;
 };
 
 struct CommandRoutingBuildFailure {
@@ -125,10 +179,12 @@ struct CommandRoutingBuildResult {
 
 class CommandCoordinator {
 public:
-  CommandCoordinator(std::uint64_t generation_id,
-                     std::shared_ptr<const CommandRoutingTable> routing_table,
-                     std::shared_ptr<NativeActorScheduler> scheduler,
-                     std::shared_ptr<Orchestrator> orchestrator);
+  CommandCoordinator(
+      std::uint64_t generation_id,
+      std::shared_ptr<const CommandRoutingTable> routing_table,
+      std::shared_ptr<NativeActorScheduler> scheduler,
+      std::shared_ptr<Orchestrator> orchestrator,
+      std::shared_ptr<bot::BotOperationGateway> operation_gateway);
 
   auto process(MessageEnvelope message, std::shared_ptr<void> route_lifetime)
       -> boost::asio::awaitable<OrchestratorResult>;
@@ -140,6 +196,7 @@ private:
   std::shared_ptr<const CommandRoutingTable> routing_table_;
   std::shared_ptr<NativeActorScheduler> scheduler_;
   std::shared_ptr<Orchestrator> orchestrator_;
+  std::shared_ptr<bot::BotOperationGateway> operation_gateway_;
   std::atomic_uint64_t next_transaction_ = 1;
   std::atomic_bool shutdown_ = false;
 };

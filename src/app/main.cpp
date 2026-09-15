@@ -55,7 +55,7 @@ public:
     ::sigemptyset(&signals_);
     ::sigaddset(&signals_, SIGINT);
     ::sigaddset(&signals_, SIGTERM);
-    error_ = ::pthread_sigmask(SIG_BLOCK, &signals_, nullptr);
+    error_ = pthread_sigmask(SIG_BLOCK, &signals_, nullptr);
     if (error_ != 0) {
       return;
     }

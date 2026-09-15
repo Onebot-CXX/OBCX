@@ -3,6 +3,138 @@
 ## Purpose
 TBD - created by archiving change add-re2-command-patterns. Update Purpose after archive.
 ## Requirements
+
+### Requirement: Command access configuration is explicit and exact-scoped
+When command routes are configured, `command_runtime` SHALL require explicit bounded help settings and complete global group and user access policies. Each policy MUST specify exactly one mode from `unrestricted`, `allowlist`, or `denylist` and an explicit entries array. `unrestricted` MUST reject non-empty entries. Every group/user entry MUST contain normalized platform, exact bot installation, and native group/user ID; unknown fields, malformed IDs, duplicates, unknown installations, and platform/installation mismatches MUST fail generation validation.
+
+#### Scenario: Existing deployment preserves unrestricted access
+- **WHEN** a configuration explicitly sets both global dimensions to `unrestricted` with empty arrays
+- **THEN** active commands retain their route-based access behavior and no allow or deny identity is inferred
+
+#### Scenario: Same native ID exists on two bots
+- **WHEN** an allowlist contains a native ID scoped to one installation and another installation receives the same native ID
+- **THEN** only the exact configured platform/installation/ID identity matches
+
+#### Scenario: Policy mode is omitted
+- **WHEN** command routes are configured without an explicit group mode, user mode, or required entries array
+- **THEN** validation fails rather than selecting an access default
+
+### Requirement: Access policy gates every recognized command before side effects
+The coordinator SHALL evaluate the effective access policy after exact/pattern route selection and before actor dispatch. Group conversations MUST satisfy both group and user policy decisions. Private conversations SHALL ignore the group dimension and MUST satisfy the user decision. A constrained policy MUST fail closed when trusted normalized identity is absent or inconsistent. Denial SHALL consume the recognized command with one bounded `command_access_denied` terminal result, invoke no actor/provider, and submit nothing to ordinary pipelines.
+
+#### Scenario: Group and user are both allowed
+- **WHEN** an active command is invoked from an allowlisted exact group by an allowlisted exact user
+- **THEN** normal actor command dispatch proceeds
+
+#### Scenario: Group is allowed but user is denied
+- **WHEN** group policy permits the source group and user policy denies the source sender
+- **THEN** the command is consumed without actor invocation, provider operation, or ordinary pipeline routing
+
+#### Scenario: Private caller is allowed
+- **WHEN** a private command route matches and user policy permits the exact platform/installation/user identity
+- **THEN** the command proceeds without requiring a group identity
+
+#### Scenario: Normalized identity is unavailable
+- **WHEN** an allowlist or denylist must evaluate a group/user identity that the trusted envelope does not provide consistently
+- **THEN** access fails closed and raw/provider fields or command arguments are not used as substitutes
+
+### Requirement: Per-command policy overrides replace global policy
+`command_runtime` SHALL accept bounded unique overrides keyed by canonical command name. Every override MUST provide complete explicit group and user policies and SHALL replace both global policies for that canonical command. An override MUST reference an active canonical command or reserved `help`; duplicates, inactive names, and matcher-derived aliases MUST fail candidate validation.
+
+#### Scenario: Help override grants broader access
+- **WHEN** global group policy denies a caller but the canonical `help` override replaces it with policies that permit the caller
+- **THEN** `/help` is permitted while other commands remain governed by the global denial
+
+#### Scenario: Pattern alias selects an overridden command
+- **WHEN** a matcher alias resolves to a canonical command having an override
+- **THEN** the canonical command's replacement policy is evaluated
+
+#### Scenario: Override names an inactive command
+- **WHEN** configuration contains an override for a command absent from every active route and not equal to `help`
+- **THEN** candidate validation fails before activation
+
+### Requirement: Help is a reserved generation-owned command
+The canonical name `help` SHALL be reserved by core and actor command contracts MUST NOT register it. Each exact platform/bot scope with at least one active actor command SHALL receive one synthetic exact `help` route and stable description. `/help` MUST accept no arguments, MUST NOT invoke an actor, and SHALL be consumed after its core processing succeeds or fails.
+
+#### Scenario: Actor declares help
+- **WHEN** an actor contract attempts to register canonical command `help`
+- **THEN** contract or generation validation rejects the reserved-name conflict before actor construction or catalog publication
+
+#### Scenario: Active bot receives help
+- **WHEN** one or more actor commands are active for an exact platform and installation
+- **THEN** exact `/help` detection selects the generation-owned help behavior in that scope
+
+#### Scenario: Help has arguments
+- **WHEN** a caller submits `/help anything`
+- **THEN** core returns one bounded invalid-help-arguments result, invokes no actor, and consumes the command
+
+### Requirement: Help lists every permitted routable canonical command
+For an authorized `/help` call, core SHALL evaluate the caller's effective policy independently for every command routed to the exact source platform/installation. It SHALL render `help` and every permitted canonical actor command exactly once in deterministic canonical-name order with each registered description. It MUST NOT display commands routed only to other installations, access-denied commands, RE2 expressions, or matcher-derived aliases.
+
+#### Scenario: Caller has a restricted command override
+- **WHEN** three commands are routed for the source bot but one command's effective policy denies the caller
+- **THEN** help lists the two permitted actor commands plus permitted `help`, and omits the denied command
+
+#### Scenario: Same bot command names are aggregated
+- **WHEN** multiple actors contribute distinct permitted commands to one bot scope
+- **THEN** help renders one sorted combined list using their registered descriptions
+
+#### Scenario: Another installation has commands
+- **WHEN** an active command exists only for a different bot installation
+- **THEN** it is absent from the caller's help output
+
+### Requirement: Complete help output is explicitly bounded
+`command_runtime.help` SHALL require finite positive `page_bytes` and `maximum_pages`. Rendering MUST use plain UTF-8 text, preserve complete name/description entries, and produce pages no larger than `page_bytes`. Candidate validation MUST reject a command entry that cannot fit one page or a complete bot catalog that would exceed `maximum_pages`; runtime filtering MUST NOT silently truncate an otherwise permitted command.
+
+#### Scenario: Help requires several valid pages
+- **WHEN** all permitted entries fit within the configured page count but not one page
+- **THEN** core sends deterministic bounded pages containing every entry exactly once
+
+#### Scenario: One description cannot fit
+- **WHEN** a formatted canonical name and description exceeds `page_bytes`
+- **THEN** generation validation fails before routing or catalog publication
+
+#### Scenario: Catalog exceeds page count
+- **WHEN** a bot's complete help rendering needs more than `maximum_pages`
+- **THEN** generation validation fails rather than truncating commands
+
+### Requirement: Help replies use exact typed conversation operations
+A platform command adapter SHALL translate each bounded help page and normalized source envelope into a closed typed bot `OperationEnvelope` without invoking a provider. The coordinator SHALL submit it through the generation's exact `BotOperationGateway`. Telegram group, positive topic, and private sources and OneBot group/private sources MUST preserve their exact installation and native destination. Inconsistent source identity MUST fail before provider I/O.
+
+#### Scenario: Telegram topic requests help
+- **WHEN** authorized `/help` originates in a Telegram topic
+- **THEN** every page uses the existing exact topic-aware text operation with the source installation, group, and topic ID
+
+#### Scenario: OneBot private user requests help
+- **WHEN** authorized `/help` originates in a OneBot private conversation
+- **THEN** every page uses the closed private-message operation for the exact installation and native user ID
+
+#### Scenario: Page outcome is ambiguous
+- **WHEN** a help page may have been submitted but its confirmation is lost
+- **THEN** core stops sending later pages, reports a conservative terminal failure, and performs no automatic retry or ordinary fallback
+
+### Requirement: Access and help state follow generation lifecycle
+Compiled policies, overrides, help routes, render bounds, and catalogs SHALL be immutable and generation-owned. Validation-only and reload candidates MUST perform no help send or catalog publication. Old admitted commands SHALL finish under the old policy; successful cutover SHALL apply only the new policy to subsequent messages.
+
+#### Scenario: Reload changes an allowlist
+- **WHEN** a valid candidate changes command access entries before cutover
+- **THEN** active requests continue using the old entries until successful generation publication
+
+#### Scenario: Candidate access configuration is invalid
+- **WHEN** a candidate has an invalid policy, override, or help bound
+- **THEN** reload rejects it while active routing, access, and published catalogs remain unchanged
+
+#### Scenario: Validation-only runs
+- **WHEN** `--validate-config` checks help/access configuration
+- **THEN** it validates identities, output bounds, routes, and operation capabilities without invoking actors/providers or publishing a catalog
+
+### Requirement: Access diagnostics are bounded and content-safe
+Command access/help diagnostics MAY identify generation, normalized platform, installation, canonical command, policy phase, and stable outcome code. They MUST NOT record raw messages, command arguments, help payloads, bot credentials, or complete provider payloads. Native group/user IDs MUST NOT be required in routine denial messages.
+
+#### Scenario: Access is denied
+- **WHEN** a caller fails an effective group or user policy
+- **THEN** diagnostics report `command_access_denied` and bounded safe scope fields without message contents, arguments, credentials, or full provider data
+
 ### Requirement: Commands may declare an optional RE2 matcher
 
 The command SDK and runtime SHALL allow an actor command observation to contain
@@ -380,29 +512,23 @@ NOT transfer the retained source event or its completion to the new generation.
 - **THEN** subsequent raw events use only the new immutable command routing table
 
 ### Requirement: Platform catalogs aggregate active registrations
-
-For each bot whose adapter supports command-catalog publication, OBCX SHALL
-derive one deterministic aggregate catalog from all active scoped command
-routes. It MUST publish the complete aggregate rather than allowing individual
-actors to replace platform state independently. Reconciliation SHALL begin only
-after startup activation or successful generation cutover. Publication failure
-MUST leave local routing active, expose degraded status, and use bounded retry
-without rolling back to a partially active generation.
+For each bot whose adapter supports command-catalog publication, OBCX SHALL derive one deterministic aggregate catalog from all active scoped actor command routes plus the reserved `help` entry. It MUST publish the complete aggregate rather than allowing individual actors to replace platform state independently. It MUST NOT publish access-filtered per-user variants, RE2 pattern text, or matcher-derived aliases. Reconciliation SHALL begin only after startup activation or successful generation cutover. Publication failure MUST leave local routing active, expose degraded status, and use bounded retry without rolling back to a partially active generation.
 
 #### Scenario: Multiple actors contribute Telegram commands
-
 - **WHEN** two actors have distinct active commands for one Telegram bot
-- **THEN** the Telegram adapter receives one sorted aggregate catalog containing both registrations
+- **THEN** the Telegram adapter receives one sorted aggregate catalog containing both registrations and one `help` entry
+
+#### Scenario: Access policy denies one caller
+- **WHEN** a command is active but denied to a particular group or user
+- **THEN** the platform-wide catalog still contains that canonical command while caller-specific `/help` filters it at invocation time
 
 #### Scenario: Candidate preparation succeeds before cutover
-
 - **WHEN** a candidate command table is valid but has not become active
 - **THEN** no platform command-menu mutation occurs
 
 #### Scenario: Remote catalog update fails
-
 - **WHEN** the platform rejects or times out an aggregate catalog publication after activation
-- **THEN** local command detection and routing remain active while diagnostics expose the desired catalog, last outcome, and retry state without credentials
+- **THEN** local command detection, access enforcement, and help routing remain active while diagnostics expose the desired catalog, last outcome, and retry state without credentials
 
 ### Requirement: Command diagnostics do not expose message contents
 

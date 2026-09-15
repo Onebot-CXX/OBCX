@@ -194,6 +194,15 @@ protected:
     return document +
            "\n[command_runtime]\n"
            "timeout_ms = 500\n\n"
+           "[command_runtime.help]\n"
+           "page_bytes = 3500\n"
+           "maximum_pages = 10\n\n"
+           "[command_runtime.access.groups]\n"
+           "mode = \"unrestricted\"\n"
+           "entries = []\n\n"
+           "[command_runtime.access.users]\n"
+           "mode = \"unrestricted\"\n"
+           "entries = []\n\n"
            "[[command_runtime.routes]]\n"
            "actor = \"test_actor_v2\"\n"
            "commands = [\"" +
@@ -482,8 +491,9 @@ TEST_F(RuntimeGenerationTest,
         result.generation->command_routing_table()->bots();
     ASSERT_EQ(command_bots.size(), 1U);
     EXPECT_EQ(command_bots.begin()->second.patterns.size(), 1U);
-    EXPECT_EQ(command_bots.begin()->second.catalog.size(), 1U);
-    EXPECT_EQ(command_bots.begin()->second.catalog.front().name, "sdk_ping");
+    EXPECT_EQ(command_bots.begin()->second.catalog.size(), 2U);
+    EXPECT_EQ(command_bots.begin()->second.catalog[0].name, "help");
+    EXPECT_EQ(command_bots.begin()->second.catalog[1].name, "sdk_ping");
     if (purpose == obcx::core::RuntimeGenerationBuildPurpose::Startup) {
       process_blocking_executor = result.generation->blocking_executor();
       startup = std::move(result.generation);
@@ -497,7 +507,11 @@ TEST_F(RuntimeGenerationTest,
   raw.source_platform = "qq";
   raw.source_bot = "primary";
   raw.conversation_id = "group:42";
-  raw.payload = {{"sender", "7"}};
+  raw.payload = {{"source_bot_configured", true},
+                 {"sender", "7"},
+                 {"group_id", "42"},
+                 {"chat_id", ""},
+                 {"message_type", "group"}};
   raw.raw = {{"raw_message", "/sdk_alias consume"}};
 
   boost::asio::io_context io;
@@ -574,7 +588,13 @@ TEST_F(RuntimeGenerationTest,
   EXPECT_EQ(status.front().desired_generation, 70U);
   EXPECT_FALSE(status.front().last_success_generation.has_value());
   EXPECT_EQ(status.front().failure_code, "command_catalog_publish_failed");
-  EXPECT_EQ(catalog->calls().size(), 3U);
+  const auto published = catalog->calls();
+  ASSERT_EQ(published.size(), 3U);
+  for (const auto &attempt : published) {
+    ASSERT_EQ(attempt.size(), 2U);
+    EXPECT_EQ(attempt[0].name, "help");
+    EXPECT_EQ(attempt[1].name, "sdk_ping");
+  }
 
   obcx::core::MessageEnvelope raw;
   raw.id = "catalog-failure-command";
@@ -583,7 +603,11 @@ TEST_F(RuntimeGenerationTest,
   raw.source_platform = "telegram";
   raw.source_bot = "primary";
   raw.conversation_id = "chat:42";
-  raw.payload = {{"sender", "7"}};
+  raw.payload = {{"source_bot_configured", true},
+                 {"sender", "7"},
+                 {"group_id", "42"},
+                 {"chat_id", "42"},
+                 {"message_type", "group"}};
   raw.raw = {
       {"text", "/sdk_ping consume"},
       {"entities",
@@ -927,6 +951,71 @@ TEST_F(RuntimeGenerationTest,
                            "selected_target = \"missing\"\n");
   expect_invalid("unknown-collection-reference.toml",
                  std::move(unknown_reference), "unknown target_installations");
+}
+
+TEST_F(RuntimeGenerationTest,
+       CommandPolicyChangesAreGenerationIsolatedAcrossReloadCandidates) {
+  const auto active_config =
+      snapshot("command-policy-active.toml",
+               valid_command_config(OBCX_TEST_ACTOR_V2_LIBRARY));
+  auto [database, registry] = services_for(active_config);
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
+  auto active =
+      builder.build(request(obcx::core::RuntimeGenerationBuildPurpose::Startup,
+                            1, active_config, database, registry));
+  ASSERT_TRUE(active.ready())
+      << (active.failure ? active.failure->message : "");
+
+  auto candidate_document = valid_command_config(OBCX_TEST_ACTOR_V2_LIBRARY);
+  const std::string unrestricted_users = "[command_runtime.access.users]\n"
+                                         "mode = \"unrestricted\"\n"
+                                         "entries = []";
+  const std::string allowlisted_users =
+      "[command_runtime.access.users]\n"
+      "mode = \"allowlist\"\n"
+      "entries = [{ platform = \"qq\", bot = \"primary\", "
+      "native_user_id = \"allowed-user\" }]";
+  const auto users = candidate_document.find(unrestricted_users);
+  ASSERT_NE(users, std::string::npos);
+  candidate_document.replace(users, unrestricted_users.size(),
+                             allowlisted_users);
+  const auto candidate_config =
+      snapshot("command-policy-candidate.toml", candidate_document);
+  auto candidate_request =
+      request(obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate, 2,
+              candidate_config, database, registry);
+  candidate_request.active_process_owned_fingerprint =
+      active.generation->process_owned_fingerprint();
+  candidate_request.active_process_owned_dependencies =
+      active.generation->process_owned_dependencies();
+  candidate_request.blocking_executor = active.generation->blocking_executor();
+  auto candidate = builder.build(std::move(candidate_request));
+  ASSERT_TRUE(candidate.ready())
+      << (candidate.failure
+              ? candidate.failure->code + ": " + candidate.failure->message
+              : "");
+
+  const obcx::core::CommandPolicySubject denied{
+      .platform = "qq",
+      .bot = "primary",
+      .conversation = obcx::core::CommandConversationKind::Private,
+      .user_id = "denied-user"};
+  const auto allowed = [&denied] {
+    auto value = denied;
+    value.user_id = "allowed-user";
+    return value;
+  }();
+  ASSERT_NE(active.generation->command_routing_table(), nullptr);
+  ASSERT_NE(candidate.generation->command_routing_table(), nullptr);
+  EXPECT_TRUE(
+      active.generation->command_routing_table()->permits("sdk_ping", denied));
+  EXPECT_FALSE(candidate.generation->command_routing_table()->permits(
+      "sdk_ping", denied));
+  EXPECT_TRUE(candidate.generation->command_routing_table()->permits("sdk_ping",
+                                                                     allowed));
+  EXPECT_TRUE(
+      active.generation->command_routing_table()->permits("sdk_ping", denied));
 }
 
 TEST_F(RuntimeGenerationTest,

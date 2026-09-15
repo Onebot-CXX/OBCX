@@ -8,7 +8,8 @@
   "local_actor/obcx-actor-bridge/actor-config.example.toml": {
     "credentials": [
       "bots.qq_bot.connection.access_token",
-      "bots.telegram_bot.connection.access_token"
+      "bots.telegram_bot.connection.access_token",
+      "bots.telegram_bot.connection.proxy_password"
     ],
     "legacy": []
   }

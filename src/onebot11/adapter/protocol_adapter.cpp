@@ -1,14 +1,8 @@
 #include "onebot11/adapter/protocol_adapter.hpp"
 #include "common/logger.hpp"
-#include "onebot11/adapter/event_converter.hpp"
 #include "onebot11/adapter/message_converter.hpp"
 
 namespace obcx::adapter::onebot11 {
-
-auto ProtocolAdapter::parse_event(std::string_view json_str)
-    -> std::optional<common::Event> {
-  return EventConverter::from_v11_json(json_str);
-}
 
 auto ProtocolAdapter::serialize_send_message_request(
     std::string_view target_id, const common::Message &message,

@@ -69,12 +69,70 @@ struct CommandRouteConfig {
   size_t timeout_ms = 0; // 0 = inherit command_runtime.timeout_ms
 };
 
+enum class CommandAccessMode {
+  Unrestricted,
+  Allowlist,
+  Denylist,
+};
+
+struct CommandGroupIdentityConfig {
+  std::string platform;
+  std::string bot;
+  std::string native_group_id;
+
+  auto operator==(const CommandGroupIdentityConfig &) const -> bool = default;
+};
+
+struct CommandUserIdentityConfig {
+  std::string platform;
+  std::string bot;
+  std::string native_user_id;
+
+  auto operator==(const CommandUserIdentityConfig &) const -> bool = default;
+};
+
+struct CommandGroupPolicyConfig {
+  std::optional<CommandAccessMode> mode;
+  std::vector<CommandGroupIdentityConfig> entries;
+  bool entries_present = false;
+};
+
+struct CommandUserPolicyConfig {
+  std::optional<CommandAccessMode> mode;
+  std::vector<CommandUserIdentityConfig> entries;
+  bool entries_present = false;
+};
+
+struct CommandAccessOverrideConfig {
+  std::string command;
+  CommandGroupPolicyConfig groups;
+  CommandUserPolicyConfig users;
+};
+
+struct CommandHelpConfig {
+  std::optional<size_t> page_bytes;
+  std::optional<size_t> maximum_pages;
+};
+
+struct CommandAccessConfig {
+  CommandGroupPolicyConfig groups;
+  CommandUserPolicyConfig users;
+  std::vector<CommandAccessOverrideConfig> overrides;
+  bool overrides_present = false;
+};
+
 struct CommandRuntimeConfig {
   static constexpr size_t default_timeout_ms = 5'000;
   static constexpr size_t min_timeout_ms = 100;
   static constexpr size_t max_timeout_ms = 300'000;
+  static constexpr size_t max_help_page_bytes = 65'536;
+  static constexpr size_t max_help_pages = 100;
+  static constexpr size_t max_access_entries = 10'000;
+  static constexpr size_t max_access_overrides = 1'024;
 
   size_t timeout_ms = default_timeout_ms;
+  CommandHelpConfig help;
+  CommandAccessConfig access;
   std::vector<CommandRouteConfig> routes;
 };
 

@@ -42,6 +42,8 @@ set(_expected_headers
     include/obcx/core/actor/actor_commands.hpp
     include/obcx/core/actor/actor_messages.hpp
     include/obcx/core/actor/actor_asio.hpp
+    include/obcx/core/actor/actor_generation_lifecycle.hpp
+    include/obcx/core/actor/actor_restart_constraints.hpp
     include/obcx/core/actor/actor_manager.hpp
     include/obcx/core/actor/actor_task.hpp
     include/obcx/core/actor/actor_work_stealing_executor.hpp
@@ -70,6 +72,7 @@ set(_expected_headers
     include/obcx/telegram/bot/operations.hpp
     include/obcx/telegram/bot/client.hpp
     include/obcx/network/http_client.hpp
+    include/obcx/network/proxy_http_client.hpp
     include/obcx/network/connection_config.hpp
     include/obcx/obcx/version.hpp)
 list(SORT _expected_headers)

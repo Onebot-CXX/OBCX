@@ -217,6 +217,8 @@ TEST(ActorManagerTest, RejectsMissingAndMalformedActorContracts) {
       {OBCX_TEST_CONTRACT_COMMAND_UNSUPPORTED_INPUT_LIBRARY,
        "not an accepted input"},
       {OBCX_TEST_CONTRACT_COMMAND_INVALID_NAME_LIBRARY, "invalid command name"},
+      {OBCX_TEST_CONTRACT_COMMAND_RESERVED_NAME_LIBRARY,
+       "reserved command name"},
       {OBCX_TEST_CONTRACT_COMMAND_INVALID_PATTERN_LIBRARY,
        "RE2 command pattern is invalid"},
       {OBCX_TEST_CONTRACT_COMMAND_MATCHER_CALLABLE_LIBRARY,

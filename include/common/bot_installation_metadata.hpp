@@ -19,7 +19,9 @@ struct BotInstallationMetadata {
   std::string command_target;
 
   void validate() const {
-    bot::BotInstallationRef{installation_id, surface}.validate();
+    bot::BotInstallationRef{.installation_id = installation_id,
+                            .surface = surface}
+        .validate();
     if (!bot::detail::valid_bot_id(transport) ||
         !bot::detail::valid_bot_id(ingress_platform)) {
       throw std::invalid_argument("invalid bot transport or ingress metadata");

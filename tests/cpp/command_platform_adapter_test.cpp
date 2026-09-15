@@ -1,6 +1,8 @@
 #include "core/actor/actor.hpp"
+#include "core/bot/messaging.hpp"
 #include "onebot11/bot/command_adapter.hpp"
 #include "telegram/bot/command_adapter.hpp"
+#include "telegram/bot/operations.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
@@ -113,6 +115,69 @@ TEST(CommandPlatformAdapterTest,
 
   EXPECT_FALSE(
       adapter->detect(qq_event("/" + std::string(257, 'x'))).has_value());
+}
+
+TEST(CommandPlatformAdapterTest,
+     BuildsExactTelegramGroupTopicAndPrivateReplyOperations) {
+  const auto adapter = obcx::telegram::bot::make_command_adapter("my_bot");
+  auto event = telegram_event("/help", common::json::array());
+  event.conversation_id = "chat:-1001";
+  event.payload = {{"sender", "7"},
+                   {"group_id", "-1001"},
+                   {"chat_id", "-1001"},
+                   {"message_type", "group"}};
+  auto reply = adapter->build_text_reply(event, "group help");
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply.operation->action,
+            obcx::bot::SendGroupMessageRequest::action);
+  EXPECT_EQ(reply.operation->installation.installation_id, "telegram_bot");
+  EXPECT_EQ(reply.operation->payload.at("target").at("native_group_id"),
+            "-1001");
+
+  event.payload["topic_id"] = 42;
+  reply = adapter->build_text_reply(event, "topic help");
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply.operation->action,
+            obcx::telegram::bot::SendTelegramTopicMessageRequest::action);
+  EXPECT_EQ(reply.operation->payload.at("target").at("topic_id"), 42);
+
+  event.conversation_id = "chat:7";
+  event.payload = {{"sender", "7"},
+                   {"group_id", ""},
+                   {"chat_id", "7"},
+                   {"message_type", "private"}};
+  reply = adapter->build_text_reply(event, "private help");
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply.operation->action,
+            obcx::bot::SendPrivateMessageRequest::action);
+  EXPECT_EQ(reply.operation->payload.at("target").at("native_user_id"), "7");
+
+  event.payload["chat_id"] = "8";
+  EXPECT_FALSE(static_cast<bool>(adapter->build_text_reply(event, "invalid")));
+}
+
+TEST(CommandPlatformAdapterTest, BuildsExactOneBotGroupAndPrivateReplies) {
+  const auto adapter = obcx::onebot11::bot::make_command_adapter();
+  auto event = qq_event("/help");
+  event.conversation_id = "group:42";
+  event.payload = {
+      {"sender", "7"}, {"group_id", "42"}, {"message_type", "group"}};
+  auto reply = adapter->build_text_reply(event, "group help");
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply.operation->action,
+            obcx::bot::SendGroupMessageRequest::action);
+  EXPECT_EQ(reply.operation->installation.installation_id, "qq_bot");
+
+  event.conversation_id = "private:7";
+  event.payload = {
+      {"sender", "7"}, {"group_id", ""}, {"message_type", "private"}};
+  reply = adapter->build_text_reply(event, "private help");
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply.operation->action,
+            obcx::bot::SendPrivateMessageRequest::action);
+
+  event.source_bot.clear();
+  EXPECT_FALSE(static_cast<bool>(adapter->build_text_reply(event, "invalid")));
 }
 
 TEST(CommandPlatformAdapterTest, CatalogCapabilitiesArePlatformSpecific) {

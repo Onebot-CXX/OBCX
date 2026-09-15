@@ -80,6 +80,12 @@ obcx_add_gtest(cli_handler_test "unit;cli;actor-runtime")
 obcx_add_gtest(command_coordinator_test
                "unit;actor-runtime;routing;bot-runtime;concurrency")
 obcx_add_gtest(command_platform_adapter_test "unit;actor-runtime;bot-runtime")
+obcx_add_gtest(curl_asio_multi_test "integration;network;curl")
+target_include_directories(curl_asio_multi_test PRIVATE
+  ${PROJECT_SOURCE_DIR}/src)
+target_compile_definitions(curl_asio_multi_test PRIVATE
+  OBCX_CURL_TLS_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/curl_tls")
+target_link_libraries(curl_asio_multi_test PRIVATE OpenSSL::SSL)
 obcx_add_gtest(db_manager_test "unit;database")
 obcx_add_gtest(http_client_timeout_test "integration;network")
 obcx_add_gtest(message_event_ingress_test "unit;bot-runtime")
@@ -90,6 +96,7 @@ obcx_add_gtest(runtime_reload_controller_test
                "integration;actor-runtime;reload")
 obcx_add_gtest(runtime_generation_test "integration;actor-runtime;reload")
 obcx_add_gtest(runtime_thread_budget_test "unit;actor-runtime;configuration")
+obcx_add_gtest(protocol_event_parsing_test "unit;bot-runtime;onebot11;telegram")
 obcx_add_gtest(telegram_formatting_test "unit;telegram")
 obcx_add_gtest(telegram_multipart_test "unit;network;telegram")
 obcx_add_gtest(tui_layout_test "unit;tui")
@@ -154,6 +161,7 @@ add_dependencies(
   obcx_contract_command_callable
   obcx_contract_command_unsupported_input
   obcx_contract_command_invalid_name
+  obcx_contract_command_reserved_name
   obcx_contract_command_invalid_pattern
   obcx_contract_command_matcher_callable
   obcx_contract_command_matcher_kind
@@ -189,6 +197,7 @@ target_compile_definitions(
     OBCX_TEST_CONTRACT_COMMAND_CALLABLE_LIBRARY="$<TARGET_FILE:obcx_contract_command_callable>"
     OBCX_TEST_CONTRACT_COMMAND_UNSUPPORTED_INPUT_LIBRARY="$<TARGET_FILE:obcx_contract_command_unsupported_input>"
     OBCX_TEST_CONTRACT_COMMAND_INVALID_NAME_LIBRARY="$<TARGET_FILE:obcx_contract_command_invalid_name>"
+    OBCX_TEST_CONTRACT_COMMAND_RESERVED_NAME_LIBRARY="$<TARGET_FILE:obcx_contract_command_reserved_name>"
     OBCX_TEST_CONTRACT_COMMAND_INVALID_PATTERN_LIBRARY="$<TARGET_FILE:obcx_contract_command_invalid_pattern>"
     OBCX_TEST_CONTRACT_COMMAND_MATCHER_CALLABLE_LIBRARY="$<TARGET_FILE:obcx_contract_command_matcher_callable>"
     OBCX_TEST_CONTRACT_COMMAND_MATCHER_KIND_LIBRARY="$<TARGET_FILE:obcx_contract_command_matcher_kind>"

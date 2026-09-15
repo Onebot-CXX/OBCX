@@ -1,6 +1,7 @@
 #include "core/actor/actor_manager.hpp"
 
 #include "common/logger.hpp"
+#include "core/actor/actor_commands.hpp"
 #include "core/command/command_matcher.hpp"
 
 #include <algorithm>
@@ -286,6 +287,10 @@ auto parse_actor_contract(const char *document,
       if (!is_canonical_command_name(registration.name)) {
         error = "actor command registration contains invalid command name '" +
                 registration.name + "'";
+        return std::nullopt;
+      }
+      if (registration.name == command::help_name) {
+        error = "actor command registration uses reserved command name 'help'";
         return std::nullopt;
       }
       if (registration.description.empty()) {

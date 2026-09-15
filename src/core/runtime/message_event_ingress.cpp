@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <limits>
 
 namespace obcx::core {
 namespace {
@@ -116,6 +117,12 @@ auto raw_message_envelope_from_event(const std::string &source_platform,
   const auto bot_id = source_bot.empty() ? event.self_id : source_bot;
   const auto conversation_id = conversation_id_from_event(event);
   auto raw = event_raw_json(event);
+  std::string chat_id;
+  if (event.data.is_object() && event.data.contains("chat") &&
+      event.data.at("chat").is_object() &&
+      event.data.at("chat").contains("id")) {
+    chat_id = ingress_json_scalar_to_string(event.data.at("chat").at("id"));
+  }
 
   MessageEnvelope envelope;
   envelope.id = "raw:" + source_platform + ":" + bot_id + ":" +
@@ -129,11 +136,29 @@ auto raw_message_envelope_from_event(const std::string &source_platform,
   envelope.payload = {
       {"message_id", event.message_id},
       {"conversation_id", conversation_id},
+      {"source_bot_configured", !source_bot.empty()},
       {"sender", event.user_id},
       {"group_id", event.group_id.value_or(std::string{})},
+      {"chat_id", std::move(chat_id)},
       {"message_type", event.message_type},
       {"payload", raw},
   };
+  if (event.data.is_object() && event.data.contains("message_thread_id")) {
+    const auto &topic = event.data.at("message_thread_id");
+    if (topic.is_number_integer()) {
+      envelope.payload["topic_id"] = topic.get<std::int64_t>();
+    } else if (topic.is_number_unsigned() &&
+               topic.get<std::uint64_t>() <=
+                   static_cast<std::uint64_t>(
+                       std::numeric_limits<std::int64_t>::max())) {
+      envelope.payload["topic_id"] =
+          static_cast<std::int64_t>(topic.get<std::uint64_t>());
+    } else {
+      // Preserve invalid topic presence so command policy/reply validation
+      // fails closed instead of degrading a topic event to a group event.
+      envelope.payload["topic_id"] = 0;
+    }
+  }
   envelope.raw = std::move(raw);
   return envelope;
 }

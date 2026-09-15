@@ -619,6 +619,49 @@
           ]
         }
       }
+    },
+    "message.send_private": {
+      "request": {
+        "action": "message.send_private",
+        "message": [
+          {
+            "data": {
+              "id": "41"
+            },
+            "type": "reply"
+          },
+          {
+            "data": {
+              "text": "hello"
+            },
+            "type": "text"
+          }
+        ],
+        "target": {
+          "installation": {
+            "installation_id": "qq-main",
+            "surface": "onebot11.qq"
+          },
+          "native_user_id": "456"
+        }
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "messages": [
+            {
+              "target": {
+                "installation": {
+                  "installation_id": "qq-main",
+                  "surface": "onebot11.qq"
+                },
+                "native_user_id": "456"
+              },
+              "native_message_id": "44"
+            }
+          ]
+        }
+      }
     }
   },
   "recipes": [
@@ -626,6 +669,7 @@
       "actions": [
         "message.delete",
         "message.send_group",
+        "message.send_private",
         "onebot11.forward_message.get",
         "onebot11.group.poke",
         "onebot11.group_file.resolve",
@@ -640,6 +684,7 @@
       "actions": [
         "message.delete",
         "message.send_group",
+        "message.send_private",
         "onebot11.forward_message.get",
         "onebot11.group.poke",
         "onebot11.group_file.resolve",
@@ -654,6 +699,7 @@
       "actions": [
         "message.delete",
         "message.send_group",
+        "message.send_private",
         "telegram.media.fetch_file",
         "telegram.media.send_group_uploads",
         "telegram.media.send_group_urls",
@@ -673,6 +719,7 @@
   "telegram_without_uploader": [
     "message.delete",
     "message.send_group",
+    "message.send_private",
     "telegram.media.fetch_file",
     "telegram.media.send_group_urls",
     "telegram.media.send_photo",
