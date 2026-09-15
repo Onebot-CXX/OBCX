@@ -63,13 +63,15 @@
           };
           clangP2996Packages = clangP2996BasePackages.overrideScope (
             final: prev: {
-              libllvm = (prev.libllvm.override {
-                buildLlvmPackages = final;
-              }).overrideAttrs {
-                # The fork's llvm-exegesis CPU-pinning tests are host-sensitive
-                # and are not required for the clangd development tool.
-                doCheck = false;
-              };
+              libllvm =
+                (prev.libllvm.override {
+                  buildLlvmPackages = final;
+                }).overrideAttrs
+                  {
+                    # The fork's llvm-exegesis CPU-pinning tests are host-sensitive
+                    # and are not required for the clangd development tool.
+                    doCheck = false;
+                  };
               libclang = prev.libclang.override {
                 buildLlvmPackages = final;
                 libllvm = final.libllvm;
@@ -77,23 +79,24 @@
             }
           );
           clangTools = clangP2996Packages.clang-tools;
-        in
-        {
-          default =
+          mkDevShell =
+            { includeClangTools }:
             if pkgs.stdenv.isDarwin then
               pkgs.mkShell {
-                packages = with pkgs; [
-                  cmake
-                  ninja
-                  git
-                  pkg-config
-                  cmake-format
-                  clangTools
-                  doxygen
-                  ffmpeg
-                  openspec
-                  treefmt
-                ];
+                packages =
+                  with pkgs;
+                  [
+                    cmake
+                    ninja
+                    git
+                    pkg-config
+                    cmake-format
+                    doxygen
+                    ffmpeg
+                    openspec
+                    treefmt
+                  ]
+                  ++ pkgs.lib.optional includeClangTools clangTools;
 
                 shellHook = ''
                   echo "OBCX macOS shell: tooling only; native builds require Linux GCC 16.1+ reflection."
@@ -139,20 +142,22 @@
                 ];
               in
               pkgs.mkShell.override { inherit stdenv; } {
-                nativeBuildInputs = with pkgs; [
-                  cmake
-                  ninja
-                  git
-                  gcc16
-                  binutils
-                  pkg-config
-                  cmake-format
-                  clangToolsWithGccQuery
-                  doxygen
-                  ffmpeg
-                  perf
-                  treefmt
-                ];
+                nativeBuildInputs =
+                  with pkgs;
+                  [
+                    cmake
+                    ninja
+                    git
+                    gcc16
+                    binutils
+                    pkg-config
+                    cmake-format
+                    doxygen
+                    ffmpeg
+                    perf
+                    treefmt
+                  ]
+                  ++ pkgs.lib.optional includeClangTools clangToolsWithGccQuery;
 
                 buildInputs = obcxDependencies;
 
@@ -161,6 +166,11 @@
                   export CXX=g++
                 '';
               };
+        in
+        {
+          default = mkDevShell { includeClangTools = true; };
+          # CI needs GCC reflection support, not the source-built LLVM/clangd.
+          ci = mkDevShell { includeClangTools = false; };
         }
       );
     };
