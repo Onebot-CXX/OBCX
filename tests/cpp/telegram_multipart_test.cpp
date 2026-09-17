@@ -69,6 +69,22 @@ TEST(TelegramMultipartTest, BuildsAttachMediaGroupWithBinaryFileParts) {
   EXPECT_NE(request.body.find(second_data), std::string::npos);
 }
 
+TEST(TelegramHttpResponseTest, PreservesProviderErrorEnvelope) {
+  const std::string body =
+      R"({"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":3}})";
+  const obcx::network::HttpResponse response{.status_code = 429, .body = body};
+
+  EXPECT_EQ(obcx::network::telegram_api_response_body(response), body);
+}
+
+TEST(TelegramHttpResponseTest, RejectsNonTelegramHttpErrorBody) {
+  const obcx::network::HttpResponse response{.status_code = 502,
+                                             .body = "proxy failure"};
+
+  EXPECT_THROW((void)obcx::network::telegram_api_response_body(response),
+               std::runtime_error);
+}
+
 TEST(TelegramMultipartTest, RejectsInvalidGroupSizeAndEmptyFiles) {
   EXPECT_THROW(
       {

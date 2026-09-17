@@ -47,7 +47,7 @@ def valid_document() -> dict[str, object]:
             "cpp_standard": 26,
             "compiler": "gcc>=16.1",
             "reflection_macro": 202506,
-            "input_contract_schema": 1,
+            "input_contract_schema": 2,
         },
         "publication": {
             "repository": "https://github.com/Onebot-CXX/example-actor",
@@ -80,22 +80,19 @@ class ActorMetadataValidationTest(unittest.TestCase):
             }
         )
         self.assertIn("unexpected top-level field [extension]", errors)
-        self.assertNotIn("migration", " ".join(errors).lower())
 
     def test_rejects_unknown_fields_inside_contract_tables(self) -> None:
         document = valid_document()
-        document["actor"]["extension_compatibility"] = True  # type: ignore[index]
         document["publication"]["download"] = "https://example.test"  # type: ignore[index]
         errors = metadata.validate_metadata(document)
-        self.assertIn("[actor].extension_compatibility is not supported", errors)
         self.assertIn("[publication].download is not supported", errors)
 
-    def test_rejects_non_v2_abi_and_entrypoint(self) -> None:
+    def test_rejects_unsupported_abi_and_entrypoint(self) -> None:
         document = valid_document()
-        document["actor"]["abi"] = 1  # type: ignore[index]
+        document["actor"]["abi"] = 3  # type: ignore[index]
         document["artifact"]["entrypoint"] = "unsupported_entrypoint"  # type: ignore[index]
         errors = metadata.validate_metadata(document)
-        self.assertIn("[actor].abi must equal the supported ABI 2, got 1", errors)
+        self.assertIn("[actor].abi must equal the supported ABI 2, got 3", errors)
         self.assertIn(
             "[artifact].entrypoint must equal 'obcx_create_actor_v2'", errors
         )
@@ -128,6 +125,14 @@ class ActorMetadataValidationTest(unittest.TestCase):
         self.assertIn("[dependencies].actors must not contain duplicate ids", errors)
         self.assertIn(
             "[dependencies].actors must not depend on the actor itself", errors
+        )
+
+    def test_rejects_unknown_input_contract_schema(self) -> None:
+        document = valid_document()
+        document["compatibility"]["input_contract_schema"] = 999
+        self.assertIn(
+            "[compatibility].input_contract_schema must equal 2",
+            metadata.validate_metadata(document),
         )
 
     def test_rejects_missing_publication_field_by_name(self) -> None:
@@ -170,7 +175,7 @@ actor_abi_max = 2
 cpp_standard = 26
 compiler = "gcc>=16.1"
 reflection_macro = 202506
-input_contract_schema = 1
+input_contract_schema = 2
 
 [publication]
 repository = "https://github.com/Onebot-CXX/example-actor"

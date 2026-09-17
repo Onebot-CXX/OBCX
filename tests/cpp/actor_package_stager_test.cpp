@@ -1,7 +1,7 @@
-#include "core/actor_manager.hpp"
-#include "core/actor_package_stager.hpp"
-#include "core/native_actor_scheduler.hpp"
-#include "core/process_staging_uuid.hpp"
+#include "core/actor/actor_manager.hpp"
+#include "core/actor/actor_package_stager.hpp"
+#include "core/actor/native_actor_scheduler.hpp"
+#include "core/infrastructure/process_staging_uuid.hpp"
 
 #include <boost/uuid/string_generator.hpp>
 #include <chrono>

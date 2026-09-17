@@ -8,5 +8,5 @@ extern "C" auto obcx_get_actor_name_v2() -> const char * {
 }
 extern "C" auto obcx_get_actor_version_v2() -> const char * { return "1.0.0"; }
 extern "C" auto obcx_get_actor_contract() -> const char * {
-  return R"({"schema_version":1,"actor":"activation_failure_actor","accepted_inputs":["obcx::tests::events::SdkSmoke"]})";
+  return R"({"schema_version":2,"actor":"activation_failure_actor","accepted_inputs":["obcx::tests::events::SdkSmoke"]})";
 }

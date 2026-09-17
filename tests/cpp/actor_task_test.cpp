@@ -1,4 +1,4 @@
-#include "core/actor.hpp"
+#include "core/actor/actor.hpp"
 #include "support/actor_task_test_scheduler.hpp"
 
 #include <gtest/gtest.h>

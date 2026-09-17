@@ -1,22 +1,22 @@
-#include "common/config_loader.hpp"
-#include "core/actor_manager.hpp"
-#include "core/actor_messages.hpp"
-#include "core/bot_registry.hpp"
-#include "core/command_coordinator.hpp"
-#include "core/db_manager.hpp"
-#include "core/orchestrator.hpp"
-#include "core/process_staging_uuid.hpp"
-#include "core/qq_bot.hpp"
-#include "core/runtime_generation.hpp"
-#include "core/tg_bot.hpp"
-#include "onebot11/adapter/protocol_adapter.hpp"
-#include "telegram/adapter/protocol_adapter.hpp"
+#include "common/config_snapshot.hpp"
+#include "core/actor/actor_manager.hpp"
+#include "core/actor/actor_messages.hpp"
+#include "core/bot/bot_installation_directory.hpp"
+#include "core/bot/bot_operation_dispatcher.hpp"
+#include "core/bot/typed_operation.hpp"
+#include "core/command/command_coordinator.hpp"
+#include "core/infrastructure/db_manager.hpp"
+#include "core/infrastructure/process_staging_uuid.hpp"
+#include "core/runtime/orchestrator.hpp"
+#include "core/runtime/runtime_generation.hpp"
+#include "support/bot_platform_fixture.hpp"
 
 #include <array>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/use_future.hpp>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -32,13 +32,12 @@ namespace {
 namespace fs = std::filesystem;
 using namespace std::chrono_literals;
 
-class CatalogTelegramBot final : public obcx::core::TGBot {
+class CatalogTelegramCapability final
+    : public obcx::core::CommandCatalogPublisher {
 public:
-  CatalogTelegramBot() : TGBot(obcx::adapter::telegram::ProtocolAdapter{}) {}
-
-  auto set_commands(
-      const std::vector<std::pair<std::string, std::string>> &commands)
-      -> boost::asio::awaitable<std::string> override {
+  auto publish(const std::vector<obcx::core::CommandCatalogEntry> &commands)
+      -> boost::asio::awaitable<
+          obcx::core::CommandCatalogPublishResult> override {
     {
       std::scoped_lock lock(mutex_);
       calls_.push_back(commands);
@@ -46,11 +45,12 @@ public:
     if (fail) {
       throw std::runtime_error{"catalog publish failed"};
     }
-    co_return "{}";
+    co_return obcx::core::CommandCatalogPublishResult{.supported = true,
+                                                      .succeeded = true};
   }
 
   [[nodiscard]] auto calls() const
-      -> std::vector<std::vector<std::pair<std::string, std::string>>> {
+      -> std::vector<std::vector<obcx::core::CommandCatalogEntry>> {
     std::scoped_lock lock(mutex_);
     return calls_;
   }
@@ -59,8 +59,17 @@ public:
 
 private:
   mutable std::mutex mutex_;
-  std::vector<std::vector<std::pair<std::string, std::string>>> calls_;
+  std::vector<std::vector<obcx::core::CommandCatalogEntry>> calls_;
 };
+
+auto make_test_endpoint(obcx::bot::BotInstallationRef installation)
+    -> std::shared_ptr<obcx::core::OperationRegistry> {
+  auto endpoint = std::make_shared<obcx::core::OperationRegistry>(installation);
+  endpoint->seal(installation, {});
+  return endpoint;
+}
+
+struct TestRegistryPlaceholder {};
 
 template <typename Predicate>
 auto wait_until(Predicate predicate,
@@ -99,7 +108,8 @@ protected:
       output << document;
     }
     auto built =
-        obcx::core::RuntimeGenerationBuilder::parse_config(path.string());
+        obcx::core::RuntimeGenerationBuilder{obcx::test::bot_platform_catalog()}
+            .parse_config(path.string());
     EXPECT_TRUE(built);
     return built.snapshot;
   }
@@ -109,12 +119,19 @@ protected:
                     std::string actor_config = "label = \"a\"") -> std::string {
     const auto database = (root_ / "runtime.sqlite3").string();
     return "[bots.primary]\n"
-           "type = \"qq\"\n"
-           "enabled = true\n\n"
+           "enabled = true\n"
+           "surface = \"onebot11.qq\"\n"
+           "transport = \"http\"\n\n"
            "[bots.primary.connection]\n"
+           "host = \"localhost\"\n"
+           "port = 3000\n"
            "access_token = \"" +
            token +
-           "\"\n\n"
+           "\"\n"
+           "use_tls = false\n"
+           "connect_timeout_ms = 5000\n"
+           "action_timeout_ms = 30000\n"
+           "poll_interval_ms = 1000\n\n"
            "[db.instances.main]\n"
            "type = \"sqlite\"\n"
            "path = \"" +
@@ -129,7 +146,8 @@ protected:
            "\"\n"
            "enabled = true\n"
            "db = \"main\"\n\n"
-           "[actors.test_actor_v2.config]\n" +
+           "[actors.test_actor_v2.config]\n"
+           "target_installation = \"primary\"\n" +
            actor_config +
            "\n\n[pipelines.sdk]\n"
            "source = \"obcx::tests::events::SdkSmoke\"\n\n"
@@ -145,14 +163,46 @@ protected:
                             std::string platform = "qq",
                             std::string bot_type = "qq") -> std::string {
     auto document = valid_config(actor_library);
-    const auto type = document.find("type = \"qq\"");
-    if (type != std::string::npos) {
-      document.replace(type, std::string{"type = \"qq\""}.size(),
-                       "type = \"" + bot_type + "\"");
+    const auto surface = document.find("surface = \"onebot11.qq\"");
+    if (surface != std::string::npos && bot_type == "telegram") {
+      document.replace(surface, std::string{"surface = \"onebot11.qq\""}.size(),
+                       "surface = \"telegram.bot_api\"");
+      const std::string onebot_connection = "host = \"localhost\"\n"
+                                            "port = 3000\n"
+                                            "access_token = \"stable-token\"\n"
+                                            "use_tls = false\n"
+                                            "connect_timeout_ms = 5000\n"
+                                            "action_timeout_ms = 30000\n"
+                                            "poll_interval_ms = 1000\n";
+      const std::string telegram_connection =
+          "host = \"api.telegram.org\"\n"
+          "port = 443\n"
+          "access_token = \"stable-token\"\n"
+          "bot_username = \"fixture_bot\"\n"
+          "use_tls = true\n"
+          "connect_timeout_ms = 5000\n"
+          "action_timeout_ms = 30000\n"
+          "poll_timeout_ms = 25000\n"
+          "poll_force_close_ms = 30000\n"
+          "poll_retry_interval_ms = 3000\n";
+      const auto connection = document.find(onebot_connection);
+      if (connection != std::string::npos) {
+        document.replace(connection, onebot_connection.size(),
+                         telegram_connection);
+      }
     }
     return document +
            "\n[command_runtime]\n"
            "timeout_ms = 500\n\n"
+           "[command_runtime.help]\n"
+           "page_bytes = 3500\n"
+           "maximum_pages = 10\n\n"
+           "[command_runtime.access.groups]\n"
+           "mode = \"unrestricted\"\n"
+           "entries = []\n\n"
+           "[command_runtime.access.users]\n"
+           "mode = \"unrestricted\"\n"
+           "entries = []\n\n"
            "[[command_runtime.routes]]\n"
            "actor = \"test_actor_v2\"\n"
            "commands = [\"" +
@@ -168,10 +218,10 @@ protected:
   auto services_for(
       const std::shared_ptr<const obcx::common::RuntimeConfigSnapshot> &config)
       -> std::pair<std::shared_ptr<obcx::core::DbManager>,
-                   std::shared_ptr<obcx::core::BotRegistry>> {
+                   std::shared_ptr<TestRegistryPlaceholder>> {
     return {obcx::core::DbManager::shared_manager(
                 config->get_db_instance_configs()),
-            std::make_shared<obcx::core::BotRegistry>()};
+            std::make_shared<TestRegistryPlaceholder>()};
   }
 
   auto private_actor_config(const std::string &library, std::string pipeline,
@@ -211,7 +261,7 @@ protected:
       std::uint64_t generation_id,
       std::shared_ptr<const obcx::common::RuntimeConfigSnapshot> config,
       std::shared_ptr<obcx::core::DbManager> database,
-      std::shared_ptr<obcx::core::BotRegistry> bots)
+      std::shared_ptr<TestRegistryPlaceholder>)
       -> obcx::core::RuntimeGenerationBuildRequest {
     return {.purpose = purpose,
             .generation_id = generation_id,
@@ -221,10 +271,16 @@ protected:
             .staging_root = root_ / "staging",
             .configured_io_sources = 1,
             .db_manager = std::move(database),
-            .bot_registry = std::move(bots)};
+            .bot_operation_client = gateway_};
   }
 
   fs::path root_;
+  std::shared_ptr<obcx::bot::BotOperationGateway> gateway_ = [] {
+    auto gateway = std::make_shared<obcx::core::BotOperationDispatcher>(
+        [](const obcx::bot::SurfaceId &) { return false; });
+    gateway->seal_registrations();
+    return gateway;
+  }();
 };
 
 TEST_F(RuntimeGenerationTest,
@@ -232,11 +288,16 @@ TEST_F(RuntimeGenerationTest,
   const auto config =
       snapshot("valid.toml", valid_config(OBCX_TEST_ACTOR_V2_LIBRARY));
   auto [database, registry] = services_for(config);
-  auto bot = std::make_shared<obcx::core::QQBot>(
-      obcx::adapter::onebot11::ProtocolAdapter{});
-  registry->register_bot("qq", "primary", bot);
+  auto endpoint = make_test_endpoint(obcx::bot::BotInstallationRef{
+      .installation_id = "primary",
+      .surface = obcx::bot::SurfaceId{"onebot11.qq"}});
+  auto directory = std::make_shared<obcx::core::BotInstallationDirectory>();
+  directory->register_capabilities(endpoint->installation(), endpoint);
 
-  obcx::core::RuntimeGenerationBuilder builder;
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
+  auto operation_client = std::make_shared<obcx::core::BotOperationDispatcher>(
+      [](const obcx::bot::SurfaceId &) { return false; });
   std::vector<std::shared_ptr<obcx::core::RuntimeGeneration>> generations;
   const std::array purposes = {
       obcx::core::RuntimeGenerationBuildPurpose::Startup,
@@ -246,6 +307,8 @@ TEST_F(RuntimeGenerationTest,
   std::uint64_t id = 1;
   for (const auto purpose : purposes) {
     auto build_request = request(purpose, id++, config, database, registry);
+    build_request.bot_installation_directory = directory;
+    build_request.bot_operation_client = operation_client;
     build_request.require_registered_bots =
         purpose == obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate;
     if (!generations.empty()) {
@@ -263,10 +326,23 @@ TEST_F(RuntimeGenerationTest,
                 ? result.failure->code + ": " + result.failure->message
                 : "missing failure");
     EXPECT_EQ(result.generation->db_manager(), database);
-    EXPECT_EQ(result.generation->bot_registry(), registry);
-    EXPECT_EQ(
-        result.generation->services()->get_service<obcx::core::BotRegistry>(),
-        registry);
+    EXPECT_EQ(result.generation->bot_installation_directory(), directory);
+    EXPECT_EQ(result.generation->bot_operation_client(), operation_client);
+    const auto generation_info =
+        result.generation->services()
+            ->get_service<obcx::core::ActorGenerationInfo>();
+    ASSERT_NE(generation_info, nullptr);
+    EXPECT_EQ(generation_info->generation_id, id - 1);
+    const auto expected_purpose =
+        purpose == obcx::core::RuntimeGenerationBuildPurpose::Startup
+            ? obcx::core::ActorGenerationPurpose::Startup
+        : purpose == obcx::core::RuntimeGenerationBuildPurpose::ValidationOnly
+            ? obcx::core::ActorGenerationPurpose::ValidationOnly
+            : obcx::core::ActorGenerationPurpose::ReloadCandidate;
+    EXPECT_EQ(generation_info->purpose, expected_purpose);
+    EXPECT_EQ(result.generation->services()
+                  ->get_service<obcx::bot::BotOperationGateway>(),
+              operation_client);
     if (purpose == obcx::core::RuntimeGenerationBuildPurpose::Startup) {
       process_blocking_executor = result.generation->blocking_executor();
       ASSERT_NE(process_blocking_executor, nullptr);
@@ -294,6 +370,39 @@ TEST_F(RuntimeGenerationTest,
   }
 }
 
+TEST_F(RuntimeGenerationTest, GenerationPreparationFailureIsTyped) {
+  struct Case {
+    std::string status;
+    std::string expected_code;
+    std::string expected_message;
+  };
+  for (const auto &test :
+       std::vector<Case>{{"failed", "reload_actor_initialization_failed",
+                          "fixture preparation failed"},
+                         {"restart", "reload_restart_required",
+                          "fixture preparation requires restart"}}) {
+    const auto config =
+        snapshot("preparation-" + test.status + ".toml",
+                 valid_config(OBCX_TEST_ACTOR_V2_LIBRARY, "stable-token",
+                              "label = \"a\"\npreparation_status = \"" +
+                                  test.status + "\""));
+    auto [database, registry] = services_for(config);
+    auto build_request =
+        request(obcx::core::RuntimeGenerationBuildPurpose::Startup, 1, config,
+                database, registry);
+
+    obcx::core::RuntimeGenerationBuilder builder{
+        obcx::test::bot_platform_catalog()};
+    const auto result = builder.build(std::move(build_request));
+
+    ASSERT_FALSE(result.ready());
+    ASSERT_TRUE(result.failure.has_value());
+    EXPECT_EQ(result.failure->code, test.expected_code);
+    EXPECT_NE(result.failure->message.find(test.expected_message),
+              std::string::npos);
+  }
+}
+
 TEST_F(RuntimeGenerationTest, StagingRootContainsTheProcessUuid) {
   const auto config = snapshot("process-staging-uuid.toml",
                                valid_config(OBCX_TEST_ACTOR_V2_LIBRARY));
@@ -303,7 +412,8 @@ TEST_F(RuntimeGenerationTest, StagingRootContainsTheProcessUuid) {
               database, registry);
   build_request.staging_root.clear();
 
-  obcx::core::RuntimeGenerationBuilder builder;
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
   auto result = builder.build(std::move(build_request));
 
   ASSERT_TRUE(result.ready())
@@ -321,7 +431,8 @@ TEST_F(RuntimeGenerationTest,
   const auto config = snapshot("missing-blocking-service.toml",
                                valid_config(OBCX_TEST_ACTOR_V2_LIBRARY));
   auto [database, registry] = services_for(config);
-  obcx::core::RuntimeGenerationBuilder builder;
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
   auto active =
       builder.build(request(obcx::core::RuntimeGenerationBuildPurpose::Startup,
                             1, config, database, registry));
@@ -347,11 +458,14 @@ TEST_F(RuntimeGenerationTest,
   const auto config = snapshot(
       "valid-command.toml", valid_command_config(OBCX_TEST_ACTOR_V2_LIBRARY));
   auto [database, registry] = services_for(config);
-  auto bot = std::make_shared<obcx::core::QQBot>(
-      obcx::adapter::onebot11::ProtocolAdapter{});
-  registry->register_bot("qq", "primary", bot);
+  auto endpoint = make_test_endpoint(obcx::bot::BotInstallationRef{
+      .installation_id = "primary",
+      .surface = obcx::bot::SurfaceId{"onebot11.qq"}});
+  auto directory = std::make_shared<obcx::core::BotInstallationDirectory>();
+  directory->register_capabilities(endpoint->installation(), endpoint);
 
-  obcx::core::RuntimeGenerationBuilder builder;
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
   std::shared_ptr<obcx::core::RuntimeGeneration> startup;
   std::shared_ptr<obcx::core::BlockingExecutor> process_blocking_executor;
   std::uint64_t id = 50;
@@ -360,6 +474,7 @@ TEST_F(RuntimeGenerationTest,
         obcx::core::RuntimeGenerationBuildPurpose::ValidationOnly,
         obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate}) {
     auto build_request = request(purpose, id++, config, database, registry);
+    build_request.bot_installation_directory = directory;
     build_request.require_registered_bots =
         purpose == obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate;
     if (purpose == obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate) {
@@ -376,8 +491,9 @@ TEST_F(RuntimeGenerationTest,
         result.generation->command_routing_table()->bots();
     ASSERT_EQ(command_bots.size(), 1U);
     EXPECT_EQ(command_bots.begin()->second.patterns.size(), 1U);
-    EXPECT_EQ(command_bots.begin()->second.catalog.size(), 1U);
-    EXPECT_EQ(command_bots.begin()->second.catalog.front().name, "sdk_ping");
+    EXPECT_EQ(command_bots.begin()->second.catalog.size(), 2U);
+    EXPECT_EQ(command_bots.begin()->second.catalog[0].name, "help");
+    EXPECT_EQ(command_bots.begin()->second.catalog[1].name, "sdk_ping");
     if (purpose == obcx::core::RuntimeGenerationBuildPurpose::Startup) {
       process_blocking_executor = result.generation->blocking_executor();
       startup = std::move(result.generation);
@@ -391,7 +507,11 @@ TEST_F(RuntimeGenerationTest,
   raw.source_platform = "qq";
   raw.source_bot = "primary";
   raw.conversation_id = "group:42";
-  raw.payload = {{"sender", "7"}};
+  raw.payload = {{"source_bot_configured", true},
+                 {"sender", "7"},
+                 {"group_id", "42"},
+                 {"chat_id", ""},
+                 {"message_type", "group"}};
   raw.raw = {{"raw_message", "/sdk_alias consume"}};
 
   boost::asio::io_context io;
@@ -411,7 +531,8 @@ TEST_F(RuntimeGenerationTest,
       "invalid-command.toml",
       valid_command_config(OBCX_TEST_ACTOR_V2_LIBRARY, "not_declared"));
   auto [database, registry] = services_for(config);
-  obcx::core::RuntimeGenerationBuilder builder;
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
   auto process_blocking_executor =
       std::make_shared<obcx::core::BlockingExecutor>(1);
 
@@ -435,17 +556,27 @@ TEST_F(RuntimeGenerationTest,
       "catalog.toml", valid_command_config(OBCX_TEST_ACTOR_V2_LIBRARY,
                                            "sdk_ping", "telegram", "telegram"));
   auto [database, registry] = services_for(config);
-  auto bot = std::make_shared<CatalogTelegramBot>();
-  bot->fail.store(true);
-  registry->register_bot("telegram", "primary", bot);
+  auto catalog = std::make_shared<CatalogTelegramCapability>();
+  catalog->fail.store(true);
+  auto directory = std::make_shared<obcx::core::BotInstallationDirectory>();
+  auto endpoint =
+      make_test_endpoint({.installation_id = "primary",
+                          .surface = obcx::bot::SurfaceId{"telegram.bot_api"}});
+  directory->register_capabilities(
+      {.installation_id = "primary",
+       .surface = obcx::bot::SurfaceId{"telegram.bot_api"}},
+      endpoint, catalog);
 
-  obcx::core::RuntimeGenerationBuilder builder;
-  auto built =
-      builder.build(request(obcx::core::RuntimeGenerationBuildPurpose::Startup,
-                            70, config, database, registry));
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
+  auto build_request =
+      request(obcx::core::RuntimeGenerationBuildPurpose::Startup, 70, config,
+              database, registry);
+  build_request.bot_installation_directory = directory;
+  auto built = builder.build(std::move(build_request));
   ASSERT_TRUE(built.ready()) << (built.failure ? built.failure->message : "");
   std::this_thread::sleep_for(100ms);
-  EXPECT_TRUE(bot->calls().empty());
+  EXPECT_TRUE(catalog->calls().empty());
 
   built.generation->activate_command_catalogs();
   ASSERT_TRUE(wait_until([&] {
@@ -457,7 +588,13 @@ TEST_F(RuntimeGenerationTest,
   EXPECT_EQ(status.front().desired_generation, 70U);
   EXPECT_FALSE(status.front().last_success_generation.has_value());
   EXPECT_EQ(status.front().failure_code, "command_catalog_publish_failed");
-  EXPECT_EQ(bot->calls().size(), 3U);
+  const auto published = catalog->calls();
+  ASSERT_EQ(published.size(), 3U);
+  for (const auto &attempt : published) {
+    ASSERT_EQ(attempt.size(), 2U);
+    EXPECT_EQ(attempt[0].name, "help");
+    EXPECT_EQ(attempt[1].name, "sdk_ping");
+  }
 
   obcx::core::MessageEnvelope raw;
   raw.id = "catalog-failure-command";
@@ -466,7 +603,11 @@ TEST_F(RuntimeGenerationTest,
   raw.source_platform = "telegram";
   raw.source_bot = "primary";
   raw.conversation_id = "chat:42";
-  raw.payload = {{"sender", "7"}};
+  raw.payload = {{"source_bot_configured", true},
+                 {"sender", "7"},
+                 {"group_id", "42"},
+                 {"chat_id", "42"},
+                 {"message_type", "group"}};
   raw.raw = {
       {"text", "/sdk_ping consume"},
       {"entities",
@@ -493,18 +634,28 @@ TEST_F(RuntimeGenerationTest,
                valid_command_config(OBCX_TEST_ACTOR_V2_LIBRARY, "sdk_ping",
                                     "telegram", "telegram"));
   auto [database, registry] = services_for(config);
-  auto bot = std::make_shared<CatalogTelegramBot>();
-  bot->fail.store(true);
-  registry->register_bot("telegram", "primary", bot);
+  auto catalog = std::make_shared<CatalogTelegramCapability>();
+  catalog->fail.store(true);
+  auto directory = std::make_shared<obcx::core::BotInstallationDirectory>();
+  auto endpoint =
+      make_test_endpoint({.installation_id = "primary",
+                          .surface = obcx::bot::SurfaceId{"telegram.bot_api"}});
+  directory->register_capabilities(
+      {.installation_id = "primary",
+       .surface = obcx::bot::SurfaceId{"telegram.bot_api"}},
+      endpoint, catalog);
 
-  obcx::core::RuntimeGenerationBuilder builder;
-  auto old =
-      builder.build(request(obcx::core::RuntimeGenerationBuildPurpose::Startup,
-                            80, config, database, registry));
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
+  auto old_request = request(obcx::core::RuntimeGenerationBuildPurpose::Startup,
+                             80, config, database, registry);
+  old_request.bot_installation_directory = directory;
+  auto old = builder.build(std::move(old_request));
   ASSERT_TRUE(old.ready());
   auto candidate_request =
       request(obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate, 81,
               config, database, registry);
+  candidate_request.bot_installation_directory = directory;
   candidate_request.require_registered_bots = true;
   candidate_request.active_process_owned_fingerprint =
       old.generation->process_owned_fingerprint();
@@ -512,22 +663,25 @@ TEST_F(RuntimeGenerationTest,
       old.generation->process_owned_dependencies();
   candidate_request.blocking_executor = old.generation->blocking_executor();
   auto candidate = builder.build(std::move(candidate_request));
-  ASSERT_TRUE(candidate.ready());
+  ASSERT_TRUE(candidate.ready())
+      << (candidate.failure
+              ? candidate.failure->code + ": " + candidate.failure->message
+              : "missing generation");
 
   old.generation->activate_command_catalogs();
-  ASSERT_TRUE(wait_until([&] { return !bot->calls().empty(); }));
+  ASSERT_TRUE(wait_until([&] { return !catalog->calls().empty(); }));
   old.generation->shutdown();
-  const auto attempts_after_shutdown = bot->calls().size();
+  const auto attempts_after_shutdown = catalog->calls().size();
   std::this_thread::sleep_for(250ms);
-  EXPECT_EQ(bot->calls().size(), attempts_after_shutdown);
+  EXPECT_EQ(catalog->calls().size(), attempts_after_shutdown);
 
-  bot->fail.store(false);
+  catalog->fail.store(false);
   candidate.generation->activate_command_catalogs();
   ASSERT_TRUE(wait_until([&] {
     const auto status = candidate.generation->command_catalog_status();
     return status.size() == 1 && status.front().last_success_generation == 81U;
   }));
-  EXPECT_EQ(bot->calls().size(), attempts_after_shutdown + 1U);
+  EXPECT_EQ(catalog->calls().size(), attempts_after_shutdown + 1U);
 }
 
 TEST_F(RuntimeGenerationTest,
@@ -535,7 +689,8 @@ TEST_F(RuntimeGenerationTest,
   const auto active_config =
       snapshot("active.toml", valid_config(OBCX_TEST_ACTOR_V2_LIBRARY));
   auto [database, registry] = services_for(active_config);
-  obcx::core::RuntimeGenerationBuilder builder;
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
   auto active =
       builder.build(request(obcx::core::RuntimeGenerationBuildPurpose::Startup,
                             1, active_config, database, registry));
@@ -592,6 +747,26 @@ TEST_F(RuntimeGenerationTest,
   EXPECT_EQ(database_result.failure->code, "reload_restart_required");
   EXPECT_EQ(database_result.failure->message, "database_instances");
 
+  // Constrained hosts can clamp different requests to the same mandatory
+  // one-worker-per-domain allocation. Only changes to the resolved budget are
+  // process-owned and require a restart.
+  const auto expect_restart_or_unchanged_resolved_budget =
+      [&](const obcx::core::RuntimeGenerationBuildResult &result) {
+        if (result.failure.has_value()) {
+          EXPECT_EQ(result.failure->code, "reload_restart_required");
+          EXPECT_EQ(result.failure->message, "runtime_thread_budget");
+          return;
+        }
+
+        ASSERT_TRUE(result.ready());
+        const auto &active_budget = active.generation->thread_budget();
+        const auto &candidate_budget = result.generation->thread_budget();
+        EXPECT_EQ(candidate_budget.actor_workers, active_budget.actor_workers);
+        EXPECT_EQ(candidate_budget.io_workers, active_budget.io_workers);
+        EXPECT_EQ(candidate_budget.blocking_workers,
+                  active_budget.blocking_workers);
+      };
+
   auto thread_request =
       request(obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate, 5,
               active_config, database, registry);
@@ -599,10 +774,8 @@ TEST_F(RuntimeGenerationTest,
   thread_request.active_process_owned_fingerprint =
       active.generation->process_owned_fingerprint();
   thread_request.blocking_executor = active.generation->blocking_executor();
-  auto thread_result = builder.build(std::move(thread_request));
-  ASSERT_TRUE(thread_result.failure.has_value());
-  EXPECT_EQ(thread_result.failure->code, "reload_restart_required");
-  EXPECT_EQ(thread_result.failure->message, "runtime_thread_budget");
+  const auto thread_result = builder.build(std::move(thread_request));
+  expect_restart_or_unchanged_resolved_budget(thread_result);
 
   auto blocking_document = valid_config(OBCX_TEST_ACTOR_V2_LIBRARY);
   const auto blocking_workers = blocking_document.find("blocking_workers = 1");
@@ -618,20 +791,19 @@ TEST_F(RuntimeGenerationTest,
   blocking_request.active_process_owned_fingerprint =
       active.generation->process_owned_fingerprint();
   blocking_request.blocking_executor = active.generation->blocking_executor();
-  auto blocking_result = builder.build(std::move(blocking_request));
-  ASSERT_TRUE(blocking_result.failure.has_value());
-  EXPECT_EQ(blocking_result.failure->code, "reload_restart_required");
-  EXPECT_EQ(blocking_result.failure->message, "runtime_thread_budget");
+  const auto blocking_result = builder.build(std::move(blocking_request));
+  expect_restart_or_unchanged_resolved_budget(blocking_result);
 }
 
 TEST_F(RuntimeGenerationTest,
        AllBuildPurposesRejectInvalidActorConfigurationContracts) {
   const std::array invalid_actor_configs = {
-      std::string{"positive_limit = 0"},
-      std::string{"positive_limit = \"secret-value\""},
-      std::string{"retry_base = 20\nretry_max = 10"},
+      std::string{"label = \"a\"\npositive_limit = 0"},
+      std::string{"label = \"a\"\npositive_limit = \"secret-value\""},
+      std::string{"label = \"a\"\nretry_base = 20\nretry_max = 10"},
   };
-  obcx::core::RuntimeGenerationBuilder builder;
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
   auto process_blocking_executor =
       std::make_shared<obcx::core::BlockingExecutor>(1);
   std::uint64_t generation_id = 30;
@@ -661,13 +833,216 @@ TEST_F(RuntimeGenerationTest,
 }
 
 TEST_F(RuntimeGenerationTest,
+       RequiredStringsAndBotInstallationsAreValidatedBeforeActivation) {
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
+  std::uint64_t generation_id = 90;
+  const auto expect_invalid = [&](std::string name, std::string document,
+                                  std::string_view expected_key) {
+    const auto config = snapshot(std::move(name), document);
+    auto [database, registry] = services_for(config);
+    auto result = builder.build(request(
+        obcx::core::RuntimeGenerationBuildPurpose::ValidationOnly,
+        generation_id++, config, std::move(database), std::move(registry)));
+    ASSERT_TRUE(result.failure.has_value());
+    EXPECT_EQ(result.failure->code, "reload_actor_config_invalid");
+    EXPECT_NE(result.failure->message.find(expected_key), std::string::npos);
+  };
+
+  auto missing_label = valid_config(OBCX_TEST_ACTOR_V2_LIBRARY);
+  const auto label = missing_label.find("label = \"a\"\n");
+  ASSERT_NE(label, std::string::npos);
+  missing_label.erase(label, std::string{"label = \"a\"\n"}.size());
+  expect_invalid("missing-required-string.toml", std::move(missing_label),
+                 "label");
+
+  auto missing_installation = valid_config(OBCX_TEST_ACTOR_V2_LIBRARY);
+  const auto installation =
+      missing_installation.find("target_installation = \"primary\"\n");
+  ASSERT_NE(installation, std::string::npos);
+  missing_installation.erase(
+      installation, std::string{"target_installation = \"primary\"\n"}.size());
+  expect_invalid("missing-installation.toml", std::move(missing_installation),
+                 "target_installation");
+}
+
+TEST_F(RuntimeGenerationTest,
+       BotInstallationCollectionsValidateBeforeActivationForEveryPurpose) {
+  const auto collection_document = [&](std::string installation = "primary",
+                                       std::string identity = "route-a",
+                                       bool keep_scalar = false) {
+    auto document = valid_config(OBCX_TEST_ACTOR_V2_LIBRARY);
+    if (!keep_scalar) {
+      const auto scalar = document.find("target_installation = \"primary\"\n");
+      EXPECT_NE(scalar, std::string::npos);
+      if (scalar != std::string::npos) {
+        document.erase(
+            scalar, std::string{"target_installation = \"primary\"\n"}.size());
+      }
+    }
+    document += "\n[[actors.test_actor_v2.config.target_installations]]\n"
+                "id = \"" +
+                identity + "\"\ntarget_installation = \"" + installation +
+                "\"\n";
+    return document;
+  };
+
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
+  auto process_blocking_executor =
+      std::make_shared<obcx::core::BlockingExecutor>(1);
+  std::uint64_t generation_id = 100;
+  const auto valid =
+      snapshot("valid-installation-collection.toml", collection_document());
+  auto [database, registry] = services_for(valid);
+  for (const auto purpose :
+       {obcx::core::RuntimeGenerationBuildPurpose::Startup,
+        obcx::core::RuntimeGenerationBuildPurpose::ValidationOnly,
+        obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate}) {
+    auto build_request =
+        request(purpose, generation_id++, valid, database, registry);
+    if (purpose == obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate) {
+      build_request.blocking_executor = process_blocking_executor;
+    }
+    auto result = builder.build(std::move(build_request));
+    ASSERT_TRUE(result.ready())
+        << (result.failure ? result.failure->message : "missing failure");
+  }
+
+  const auto expect_invalid = [&](std::string name, std::string document,
+                                  std::string_view expected) {
+    const auto config = snapshot(std::move(name), document);
+    auto [invalid_database, invalid_registry] = services_for(config);
+    auto result = builder.build(
+        request(obcx::core::RuntimeGenerationBuildPurpose::ValidationOnly,
+                generation_id++, config, std::move(invalid_database),
+                std::move(invalid_registry)));
+    ASSERT_TRUE(result.failure.has_value());
+    EXPECT_EQ(result.failure->code, "reload_actor_config_invalid");
+    EXPECT_NE(result.failure->message.find(expected), std::string::npos)
+        << result.failure->message;
+  };
+
+  expect_invalid("missing-collection-installation.toml",
+                 collection_document("missing"), "target_installation");
+
+  auto disabled = collection_document("secondary");
+  disabled += "\n[bots.secondary]\n"
+              "enabled = false\n"
+              "surface = \"onebot11.qq\"\n"
+              "transport = \"http\"\n"
+              "[bots.secondary.connection]\n"
+              "host = \"localhost\"\n"
+              "port = 3000\n"
+              "access_token = \"\"\n"
+              "use_tls = false\n"
+              "connect_timeout_ms = 5000\n"
+              "action_timeout_ms = 30000\n"
+              "poll_interval_ms = 1000\n";
+  expect_invalid("disabled-collection-installation.toml", std::move(disabled),
+                 "target_installation");
+
+  auto duplicate = collection_document();
+  duplicate += "\n[[actors.test_actor_v2.config.target_installations]]\n"
+               "id = \"route-a\"\ntarget_installation = \"primary\"\n";
+  expect_invalid("duplicate-collection-identity.toml", std::move(duplicate),
+                 "duplicate id");
+
+  auto duplicate_installation = collection_document();
+  duplicate_installation +=
+      "\n[[actors.test_actor_v2.config.target_installations]]\n"
+      "id = \"route-b\"\ntarget_installation = \"primary\"\n";
+  expect_invalid("duplicate-collection-installation.toml",
+                 std::move(duplicate_installation),
+                 "duplicate target_installation");
+
+  expect_invalid("mixed-installation-forms.toml",
+                 collection_document("primary", "route-a", true),
+                 "exactly one form");
+
+  auto unknown_reference = collection_document();
+  const auto label = unknown_reference.find("label = \"a\"\n");
+  ASSERT_NE(label, std::string::npos);
+  unknown_reference.insert(label + std::string{"label = \"a\"\n"}.size(),
+                           "selected_target = \"missing\"\n");
+  expect_invalid("unknown-collection-reference.toml",
+                 std::move(unknown_reference), "unknown target_installations");
+}
+
+TEST_F(RuntimeGenerationTest,
+       CommandPolicyChangesAreGenerationIsolatedAcrossReloadCandidates) {
+  const auto active_config =
+      snapshot("command-policy-active.toml",
+               valid_command_config(OBCX_TEST_ACTOR_V2_LIBRARY));
+  auto [database, registry] = services_for(active_config);
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
+  auto active =
+      builder.build(request(obcx::core::RuntimeGenerationBuildPurpose::Startup,
+                            1, active_config, database, registry));
+  ASSERT_TRUE(active.ready())
+      << (active.failure ? active.failure->message : "");
+
+  auto candidate_document = valid_command_config(OBCX_TEST_ACTOR_V2_LIBRARY);
+  const std::string unrestricted_users = "[command_runtime.access.users]\n"
+                                         "mode = \"unrestricted\"\n"
+                                         "entries = []";
+  const std::string allowlisted_users =
+      "[command_runtime.access.users]\n"
+      "mode = \"allowlist\"\n"
+      "entries = [{ platform = \"qq\", bot = \"primary\", "
+      "native_user_id = \"allowed-user\" }]";
+  const auto users = candidate_document.find(unrestricted_users);
+  ASSERT_NE(users, std::string::npos);
+  candidate_document.replace(users, unrestricted_users.size(),
+                             allowlisted_users);
+  const auto candidate_config =
+      snapshot("command-policy-candidate.toml", candidate_document);
+  auto candidate_request =
+      request(obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate, 2,
+              candidate_config, database, registry);
+  candidate_request.active_process_owned_fingerprint =
+      active.generation->process_owned_fingerprint();
+  candidate_request.active_process_owned_dependencies =
+      active.generation->process_owned_dependencies();
+  candidate_request.blocking_executor = active.generation->blocking_executor();
+  auto candidate = builder.build(std::move(candidate_request));
+  ASSERT_TRUE(candidate.ready())
+      << (candidate.failure
+              ? candidate.failure->code + ": " + candidate.failure->message
+              : "");
+
+  const obcx::core::CommandPolicySubject denied{
+      .platform = "qq",
+      .bot = "primary",
+      .conversation = obcx::core::CommandConversationKind::Private,
+      .user_id = "denied-user"};
+  const auto allowed = [&denied] {
+    auto value = denied;
+    value.user_id = "allowed-user";
+    return value;
+  }();
+  ASSERT_NE(active.generation->command_routing_table(), nullptr);
+  ASSERT_NE(candidate.generation->command_routing_table(), nullptr);
+  EXPECT_TRUE(
+      active.generation->command_routing_table()->permits("sdk_ping", denied));
+  EXPECT_FALSE(candidate.generation->command_routing_table()->permits(
+      "sdk_ping", denied));
+  EXPECT_TRUE(candidate.generation->command_routing_table()->permits("sdk_ping",
+                                                                     allowed));
+  EXPECT_TRUE(
+      active.generation->command_routing_table()->permits("sdk_ping", denied));
+}
+
+TEST_F(RuntimeGenerationTest,
        RebuiltActorsPipelinesAndRoutingPolicyRemainReloadable) {
   const auto active_config =
       snapshot("private-active.toml",
                private_actor_config(OBCX_PRIVATE_ACTOR_V1, "active_route",
                                     "active_stage", 32));
   auto [database, registry] = services_for(active_config);
-  obcx::core::RuntimeGenerationBuilder builder;
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
   auto active =
       builder.build(request(obcx::core::RuntimeGenerationBuildPurpose::Startup,
                             1, active_config, database, registry));
@@ -708,7 +1083,8 @@ TEST_F(RuntimeGenerationTest,
   const auto invalid_contract =
       snapshot("invalid-contract.toml", invalid_document);
   auto [database, registry] = services_for(invalid_contract);
-  obcx::core::RuntimeGenerationBuilder builder;
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
   auto process_blocking_executor =
       std::make_shared<obcx::core::BlockingExecutor>(1);
 
@@ -751,6 +1127,44 @@ TEST_F(RuntimeGenerationTest,
     auto result = builder.build(std::move(build_request));
     ASSERT_TRUE(result.failure.has_value());
     EXPECT_EQ(result.failure->code, "reload_activation_failed");
+  }
+}
+
+TEST_F(RuntimeGenerationTest,
+       UnknownSdkSchemaNeverConstructsOrPreparesAcrossAllPurposes) {
+  constexpr auto variable = "OBCX_SCHEMA_GATE_PROBE_MARKER";
+  const auto previous = std::getenv(variable);
+  struct RestoreEnvironment {
+    const char *key;
+    std::optional<std::string> value;
+    ~RestoreEnvironment() {
+      if (value) {
+        ::setenv(key, value->c_str(), 1);
+      } else {
+        ::unsetenv(key);
+      }
+    }
+  } restore{variable,
+            previous ? std::optional<std::string>{previous} : std::nullopt};
+  const auto marker = root_ / "incompatible-sdk-called";
+  ASSERT_EQ(::setenv(variable, marker.c_str(), 1), 0);
+  const std::array purposes = {
+      obcx::core::RuntimeGenerationBuildPurpose::Startup,
+      obcx::core::RuntimeGenerationBuildPurpose::ValidationOnly,
+      obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate};
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
+  auto blocking = std::make_shared<obcx::core::BlockingExecutor>(1);
+  const auto config = snapshot("unsupported-schema.toml",
+                               valid_config(OBCX_UNKNOWN_SCHEMA_PROBE));
+  auto [database, registry] = services_for(config);
+  for (const auto purpose : purposes) {
+    auto build_request = request(purpose, 1, config, database, registry);
+    build_request.blocking_executor = blocking;
+    const auto result = builder.build(std::move(build_request));
+    ASSERT_TRUE(result.failure);
+    EXPECT_EQ(result.failure->code, "reload_contract_invalid");
+    EXPECT_FALSE(fs::exists(marker));
   }
 }
 

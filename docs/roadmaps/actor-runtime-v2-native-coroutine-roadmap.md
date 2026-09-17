@@ -289,12 +289,12 @@ Required compatibility work:
   to the native actor scheduler.
 - Add `OBCX_ACTOR_EXPORT_V2` for new actors.
 - Reject unsupported ABI generations with an actionable loader error.
-- Update SDK installation, CMake helpers, fixture actors, and cross-repository
-  smoke tests.
+- Update SDK installation, CMake helpers, fixture actors, and generic external
+  SDK-consumer smoke tests.
 - Document compiler and standard-library compatibility requirements for passing
   coroutine frames across shared-library boundaries.
-- Do not remove V1 until message_store, bridge, and the external smoke harness
-  have used V2 for at least one compatibility window.
+- Do not remove V1 until the generic external SDK smoke harness has used V2
+  for at least one compatibility window.
 
 ## Configuration Shape
 

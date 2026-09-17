@@ -108,7 +108,8 @@ void WebsocketClient::start_writer() {
       },
       [this] {
         beast::error_code error;
-        beast::get_lowest_layer(ws_).socket().cancel(error);
+        static_cast<void>(beast::get_lowest_layer(ws_).socket().cancel(
+            error)); // NOLINT(bugprone-unused-return-value)
       });
   write_queue_ = queue;
   asio::co_spawn(

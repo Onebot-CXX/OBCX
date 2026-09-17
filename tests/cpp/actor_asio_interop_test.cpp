@@ -1,13 +1,16 @@
-#include "core/native_actor_scheduler.hpp"
+#include "core/actor/native_actor_scheduler.hpp"
+#include "core/bot/messaging_client.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/cancellation_state.hpp>
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <boost/scope/scope_exit.hpp>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -471,6 +474,97 @@ auto unbound_direct_asio_task(ActorContext &context,
   co_await timer.async_wait(context.asio_token(executor));
   co_return ActorResult::success();
 }
+
+struct GatewayLifetimeProbe {
+  std::shared_ptr<asio::steady_timer> timer;
+  std::atomic_bool entered{false};
+  std::atomic_bool finished{false};
+  std::atomic_bool request_valid{false};
+  std::atomic_bool actor_continued{false};
+  std::atomic_uint actor_destructions{0};
+};
+
+class LifetimeGateway final : public bot::BotOperationGateway {
+public:
+  LifetimeGateway(std::shared_ptr<GatewayLifetimeProbe> probe,
+                  bool ignore_cancel)
+      : probe_(std::move(probe)), ignore_cancel_(ignore_cancel) {}
+
+  auto supported_actions(const bot::BotInstallationRef &installation) const
+      -> bot::BotOperationResult<bot::SupportedActions> override {
+    return bot::BotOperationResult<bot::SupportedActions>::success(
+        {.installation = installation,
+         .actions = {bot::SendGroupMessageRequest::action}});
+  }
+
+  auto invoke(bot::OperationEnvelope envelope)
+      -> asio::awaitable<bot::OperationReply> override {
+    if (ignore_cancel_) {
+      co_await asio::this_coro::reset_cancellation_state(
+          asio::disable_cancellation());
+    }
+    probe_->entered.store(true, std::memory_order_release);
+    boost::system::error_code error;
+    co_await probe_->timer->async_wait(
+        asio::redirect_error(asio::use_awaitable, error));
+    // A cancellation-resistant provider may still complete after actor
+    // shutdown. Its owned request must remain intact, but it must not republish
+    // the actor.
+    envelope.validate();
+    const auto request = envelope.payload.get<bot::SendGroupMessageRequest>();
+    probe_->request_valid.store(
+        request.target.installation == envelope.installation &&
+            request.message.front().data.at("text") == "owned request",
+        std::memory_order_release);
+    probe_->finished.store(true, std::memory_order_release);
+    co_return bot::OperationReply::success(bot::Json(bot::SendMessageResult{
+        .messages = {{.group = request.target, .native_message_id = "42"}}}));
+  }
+
+private:
+  std::shared_ptr<GatewayLifetimeProbe> probe_;
+  bool ignore_cancel_;
+};
+
+class GatewayAsioActor final : public IActorV2 {
+public:
+  GatewayAsioActor(asio::any_io_executor executor,
+                   std::shared_ptr<bot::BotOperationGateway> gateway,
+                   std::shared_ptr<GatewayLifetimeProbe> probe)
+      : executor_(std::move(executor)), gateway_(std::move(gateway)),
+        probe_(std::move(probe)) {}
+  ~GatewayAsioActor() override { ++probe_->actor_destructions; }
+  auto get_name() const -> std::string override { return "gateway-asio"; }
+  auto get_version() const -> std::string override { return "test"; }
+
+  auto handle_message(const MessageEnvelope &, ActorContext &context)
+      -> ActorTask<ActorResult> override {
+    const auto result = co_await context.await_asio(
+        executor_,
+        [gateway = gateway_]()
+            -> asio::awaitable<
+                bot::BotOperationResult<bot::SendMessageResult>> {
+          bot::MessagingClient client{*gateway};
+          co_return co_await client.execute(bot::SendGroupMessageRequest{
+              .target = {.installation = {.installation_id = "fixture",
+                                          .surface =
+                                              bot::SurfaceId{"test.echo"}},
+                         .native_group_id = "group-1"},
+              .message = {
+                  {.type = "text", .data = {{"text", "owned request"}}}}});
+        });
+    probe_->actor_continued.store(true, std::memory_order_release);
+    co_return result.ok()
+        ? ActorResult::success()
+        : ActorResult::failed("gateway_failed", "typed operation failed",
+                              false);
+  }
+
+private:
+  asio::any_io_executor executor_;
+  std::shared_ptr<bot::BotOperationGateway> gateway_;
+  std::shared_ptr<GatewayLifetimeProbe> probe_;
+};
 
 template <typename Predicate>
 auto wait_until(Predicate predicate,
@@ -1010,6 +1104,70 @@ TEST(ActorAsioInteropTest,
   work.reset();
   io.stop();
   io_thread.join();
+}
+
+TEST(ActorAsioInteropTest,
+     TypedGatewayCancellationRetainsRequestAndCannotRepublishActor) {
+  for (const auto ignore_cancel : {false, true}) {
+    SCOPED_TRACE(ignore_cancel ? "late completion" : "cancellable provider");
+    asio::io_context io;
+    auto work = asio::make_work_guard(io);
+    auto probe = std::make_shared<GatewayLifetimeProbe>();
+    probe->timer = std::make_shared<asio::steady_timer>(io);
+    probe->timer->expires_after(30s);
+    std::thread io_thread([&] { io.run(); });
+    NativeActorScheduler scheduler(
+        NativeActorSchedulerOptions{.worker_count = 1});
+    boost::scope::scope_exit cleanup([&] {
+      asio::post(io, [timer = probe->timer] { timer->cancel(); });
+      scheduler.shutdown(ActorExecutorShutdownMode::Cancel);
+      scheduler.release_actors();
+      work.reset();
+      io.stop();
+      io_thread.join();
+    });
+    auto gateway = std::make_shared<LifetimeGateway>(probe, ignore_cancel);
+    const std::weak_ptr<bot::BotOperationGateway> weak_gateway = gateway;
+    scheduler.register_actor(
+        std::make_shared<GatewayAsioActor>(io.get_executor(), gateway, probe));
+    gateway.reset();
+    const auto completions = std::make_shared<std::atomic_uint>(0);
+    const auto completion = std::make_shared<std::promise<ActorResult>>();
+    auto result = completion->get_future();
+    MessageEnvelope message;
+    message.id = "gateway-lifetime";
+    ASSERT_TRUE(
+        scheduler.enqueue(ActorInvocation{.actor_id = "gateway-asio",
+                                          .partition_key = "same",
+                                          .message = std::move(message)},
+                          [completions, completion](ActorResult value) {
+                            if (completions->fetch_add(1) == 0) {
+                              completion->set_value(std::move(value));
+                            }
+                          }));
+    ASSERT_TRUE(wait_until([&] {
+      return probe->entered.load(std::memory_order_acquire) &&
+             scheduler.metrics().suspended_mailboxes == 1;
+    }));
+    scheduler.shutdown(ActorExecutorShutdownMode::Cancel);
+    ASSERT_EQ(result.wait_for(2s), std::future_status::ready);
+    EXPECT_FALSE(result.get().ok());
+    scheduler.release_actors();
+    if (ignore_cancel) {
+      EXPECT_EQ(probe->actor_destructions.load(), 0U);
+      EXPECT_FALSE(weak_gateway.expired());
+      asio::post(io, [timer = probe->timer] { timer->cancel(); });
+    }
+    ASSERT_TRUE(wait_until([&] {
+      return probe->finished.load(std::memory_order_acquire) &&
+             weak_gateway.expired();
+    }));
+    EXPECT_TRUE(probe->request_valid.load());
+    EXPECT_FALSE(probe->actor_continued.load());
+    EXPECT_EQ(probe->actor_destructions.load(), 1U);
+    EXPECT_EQ(completions->load(), 1U);
+    EXPECT_EQ(scheduler.metrics().pending, 0);
+  }
 }
 
 TEST(ActorAsioInteropTest, DirectCompletionTokenMatchesGenericTimerBoundary) {

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef OBCX_INCLUDE_TUI_TUI_APP_HPP_
+#define OBCX_INCLUDE_TUI_TUI_APP_HPP_
 
 #include "common/cli_handler.hpp"
 #include "tui/tui_layout.hpp"
@@ -66,3 +67,5 @@ private:
 };
 
 } // namespace obcx::common
+
+#endif // OBCX_INCLUDE_TUI_TUI_APP_HPP_

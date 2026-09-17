@@ -40,7 +40,7 @@ RUN rm -rf build \
   && nix develop .#default --command cmake --install build --prefix /opt/obcx
 
 RUN set -eu; \
-    for actor in obcx-actor-message-store obcx-actor-bridge; do \
+    for actor in obcx-message-store obcx-message-bridge; do \
       nix develop .#default --command env \
         ACTOR_SOURCE="local_actor/${actor}" \
         ACTOR_BUILD="build/${actor}" \

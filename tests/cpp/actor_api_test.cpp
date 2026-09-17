@@ -1,4 +1,4 @@
-#include "core/actor.hpp"
+#include "core/actor/actor.hpp"
 
 #include <gtest/gtest.h>
 

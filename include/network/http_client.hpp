@@ -1,6 +1,8 @@
-#pragma once
+#ifndef OBCX_INCLUDE_NETWORK_HTTP_CLIENT_HPP_
+#define OBCX_INCLUDE_NETWORK_HTTP_CLIENT_HPP_
 
 #include "common/message_type.hpp"
+#include "network/connection_config.hpp"
 
 #include <boost/asio.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -8,6 +10,7 @@
 #include <boost/beast/ssl.hpp>
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 namespace obcx::network {
 
@@ -24,9 +27,15 @@ struct HttpResponse {
   std::string body;
   http::response<http::string_body> raw_response;
 
-  [[nodiscard]] auto is_success() -> bool const {
+  [[nodiscard]] auto is_success() const -> bool {
     return status_code >= 200 && status_code < 300;
   }
+};
+
+/** Whether an HTTP request could have reached the target application. */
+enum class HttpRequestSubmissionState : std::uint8_t {
+  DefinitelyNotSubmitted,
+  PossiblySubmitted,
 };
 
 /**
@@ -34,8 +43,19 @@ struct HttpResponse {
  */
 class HttpClientError : public std::runtime_error {
 public:
-  explicit HttpClientError(std::string_view message)
-      : std::runtime_error(message.data()) {}
+  explicit HttpClientError(std::string_view message,
+                           HttpRequestSubmissionState submission_state =
+                               HttpRequestSubmissionState::PossiblySubmitted)
+      : std::runtime_error(std::string{message}),
+        submission_state_{submission_state} {}
+
+  [[nodiscard]] auto submission_state() const noexcept
+      -> HttpRequestSubmissionState {
+    return submission_state_;
+  }
+
+private:
+  HttpRequestSubmissionState submission_state_;
 };
 
 /**
@@ -56,10 +76,18 @@ public:
   explicit HttpClient(asio::io_context &ioc,
                       const common::ConnectionConfig &config);
 
+  // Transport resources use this owning executor; completions resume on the
+  // awaiting coroutine's executor. Keep the owning context alive and running
+  // through close/drain and destroy the client before destroying that context.
+  explicit HttpClient(asio::any_io_executor executor,
+                      const common::ConnectionConfig &config);
+
   /**
    * @brief 析构函数
    */
   virtual ~HttpClient();
+  HttpClient(const HttpClient &) = delete;
+  auto operator=(const HttpClient &) -> HttpClient & = delete;
 
   /**
    * @brief 异步发送POST请求（协程版本）
@@ -79,8 +107,9 @@ public:
    * @return 响应的awaitable
    */
   virtual auto get(std::string_view path,
-                   const std::map<std::string, std::string> &headers = {})
-      -> asio::awaitable<HttpResponse>;
+                   const std::map<std::string, std::string> &headers = {},
+                   std::optional<std::uint64_t> response_body_limit =
+                       std::nullopt) -> asio::awaitable<HttpResponse>;
 
   /**
    * @brief 异步发送HEAD请求（协程版本）
@@ -141,7 +170,8 @@ public:
   [[nodiscard]] auto is_connected() const -> bool;
 
   /**
-   * @brief 关闭连接
+   * @brief Close admission and request cancellation (idempotent, terminal).
+   * Keep the owning executor running until queued cleanup/completions drain.
    */
   virtual void close();
 
@@ -184,8 +214,12 @@ protected:
                        const std::map<std::string, std::string> &headers);
 
 private:
+  friend class ProxyHttpClient;
+
   struct Impl;
   std::unique_ptr<Impl> pimpl_;
 };
 
 } // namespace obcx::network
+
+#endif // OBCX_INCLUDE_NETWORK_HTTP_CLIENT_HPP_

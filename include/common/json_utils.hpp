@@ -1,4 +1,5 @@
-#pragma once
+#ifndef OBCX_INCLUDE_COMMON_JSON_UTILS_HPP_
+#define OBCX_INCLUDE_COMMON_JSON_UTILS_HPP_
 
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -265,3 +266,5 @@ auto get_by_path(const json &j, const std::string &path,
 } // namespace JsonUtils
 
 } // namespace obcx::common
+
+#endif // OBCX_INCLUDE_COMMON_JSON_UTILS_HPP_

@@ -3,6 +3,25 @@
 这里保存不属于自动化测试的 QQ/LLOneBot 本地运行环境。运行数据和包含凭据的
 TOML 配置由 `.gitignore` 排除，不能提交到仓库。
 
+这里的 OBCX 配置必须使用当前 typed installation schema：
+
+```toml
+[bots.qq_bot]
+enabled = true
+surface = "onebot11.qq"
+transport = "websocket"
+
+[bots.qq_bot.connection]
+host = "llonebot"
+port = 3001
+access_token = ""
+connect_timeout_ms = 5000
+action_timeout_ms = 30000
+```
+
+未知或不支持的 surface/transport 组合直接报错，不会回退到其他 provider 或
+transport。Telegram Bot API 只能使用 `telegram.bot_api + http`。
+
 目录约定：
 
 - `QQ/`：NTQQ 运行数据。

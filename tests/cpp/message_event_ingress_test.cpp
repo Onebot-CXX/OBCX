@@ -1,4 +1,4 @@
-#include "core/message_event_ingress.hpp"
+#include "core/runtime/message_event_ingress.hpp"
 
 #include <gtest/gtest.h>
 
@@ -63,8 +63,10 @@ TEST(MessageEventIngressTest, BuildsRawMessageEnvelopeFromMessageEvent) {
   EXPECT_EQ(envelope.id, "raw:qq:qq-main:group:group-3:qq-101");
   EXPECT_EQ(envelope.payload["message_id"], "qq-101");
   EXPECT_EQ(envelope.payload["conversation_id"], "group:group-3");
+  EXPECT_EQ(envelope.payload["source_bot_configured"], true);
   EXPECT_EQ(envelope.payload["sender"], "user-7");
   EXPECT_EQ(envelope.payload["group_id"], "group-3");
+  EXPECT_EQ(envelope.payload["chat_id"], "");
   EXPECT_EQ(envelope.payload["message_type"], "group");
   ASSERT_TRUE(envelope.payload["payload"].contains("message"));
   EXPECT_EQ(envelope.payload["payload"]["raw_message"], "hello actor");
@@ -72,11 +74,63 @@ TEST(MessageEventIngressTest, BuildsRawMessageEnvelopeFromMessageEvent) {
   EXPECT_EQ(envelope.raw["message"][0]["data"]["text"], "hello actor");
 }
 
+TEST(MessageEventIngressTest, BuildsSuccessfulMessageSendEnvelope) {
+  const auto before = std::chrono::system_clock::now();
+  const auto envelope = bot_message_sent_envelope(
+      "telegram", "telegram-main",
+      obcx::bot::ActionId{"telegram.media.send_photo"});
+  const auto after = std::chrono::system_clock::now();
+
+  EXPECT_EQ(envelope.type, "obcx::core::events::BotMessageSentEvent");
+  EXPECT_EQ(envelope.source_platform, "telegram");
+  EXPECT_EQ(envelope.source_bot, "telegram-main");
+  EXPECT_EQ(envelope.conversation_id, "global");
+  EXPECT_TRUE(envelope.id.starts_with("message-sent:telegram:telegram-main:"));
+  EXPECT_EQ(envelope.payload["action"], "telegram.media.send_photo");
+  EXPECT_GE(envelope.timestamp, before);
+  EXPECT_LE(envelope.timestamp, after);
+}
+
+TEST(MessageEventIngressTest, NormalizesTelegramChatTopicAndPrivateIdentity) {
+  auto event = qq_message_event();
+  event.self_id = "0";
+  event.message_id = "42";
+  event.user_id = "7";
+  event.group_id = "-1001";
+  event.message_type = "group";
+  event.data = {{"chat", {{"id", -1001}, {"type", "supergroup"}}},
+                {"message_thread_id", 99}};
+  auto envelope =
+      raw_message_envelope_from_event("telegram", "telegram-main", event);
+  EXPECT_EQ(envelope.source_bot, "telegram-main");
+  EXPECT_EQ(envelope.conversation_id, "chat:-1001");
+  EXPECT_EQ(envelope.payload["sender"], "7");
+  EXPECT_EQ(envelope.payload["group_id"], "-1001");
+  EXPECT_EQ(envelope.payload["chat_id"], "-1001");
+  EXPECT_EQ(envelope.payload["topic_id"], 99);
+
+  event.data["message_thread_id"] = "invalid";
+  envelope =
+      raw_message_envelope_from_event("telegram", "telegram-main", event);
+  EXPECT_EQ(envelope.payload["topic_id"], 0);
+
+  event.group_id.reset();
+  event.message_type = "private";
+  event.data = {{"chat", {{"id", 7}, {"type", "private"}}}};
+  envelope =
+      raw_message_envelope_from_event("telegram", "telegram-main", event);
+  EXPECT_EQ(envelope.conversation_id, "chat:7");
+  EXPECT_EQ(envelope.payload["group_id"], "");
+  EXPECT_EQ(envelope.payload["chat_id"], "7");
+  EXPECT_FALSE(envelope.payload.contains("topic_id"));
+}
+
 TEST(MessageEventIngressTest, UsesEventSelfIdWhenSourceBotIsEmpty) {
   const auto envelope =
       raw_message_envelope_from_event("qq", "", qq_message_event());
 
   EXPECT_EQ(envelope.source_bot, "qq-main");
+  EXPECT_EQ(envelope.payload["source_bot_configured"], false);
 }
 
 TEST(MessageEventIngressTest, SeparatesEqualMessageIdsAcrossConversations) {

@@ -46,7 +46,7 @@ actor_abi_max = 2
 cpp_standard = 26
 compiler = "gcc>=16.1"
 reflection_macro = 202506
-input_contract_schema = 1
+input_contract_schema = 2
 
 [publication]
 repository = "https://github.com/Onebot-CXX/example-actor"

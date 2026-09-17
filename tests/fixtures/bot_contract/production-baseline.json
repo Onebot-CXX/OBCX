@@ -1,0 +1,773 @@
+{
+  "errors": [
+    {
+      "error": {
+        "code": "invalid_request",
+        "message": "fixture failure",
+        "retryable": false,
+        "submission_safety": "definitely_not_submitted"
+      },
+      "ok": false
+    },
+    {
+      "error": {
+        "code": "route_not_found",
+        "message": "fixture failure",
+        "retryable": false,
+        "submission_safety": "definitely_not_submitted"
+      },
+      "ok": false
+    },
+    {
+      "error": {
+        "code": "surface_mismatch",
+        "message": "fixture failure",
+        "retryable": false,
+        "submission_safety": "definitely_not_submitted"
+      },
+      "ok": false
+    },
+    {
+      "error": {
+        "code": "unsupported_action",
+        "message": "fixture failure",
+        "retryable": false,
+        "submission_safety": "definitely_not_submitted"
+      },
+      "ok": false
+    },
+    {
+      "error": {
+        "code": "provider_rejected",
+        "message": "fixture failure",
+        "provider_code": "429",
+        "retry_after_ms": 1500,
+        "retryable": true,
+        "submission_safety": "definitely_not_submitted"
+      },
+      "ok": false
+    },
+    {
+      "error": {
+        "code": "malformed_response",
+        "message": "fixture failure",
+        "retryable": false,
+        "submission_safety": "possibly_submitted"
+      },
+      "ok": false
+    },
+    {
+      "error": {
+        "code": "transport_failure",
+        "message": "fixture failure",
+        "retryable": false,
+        "submission_safety": "possibly_submitted"
+      },
+      "ok": false
+    },
+    {
+      "error": {
+        "code": "media_too_large",
+        "message": "fixture failure",
+        "retryable": false,
+        "submission_safety": "definitely_not_submitted"
+      },
+      "ok": false
+    },
+    {
+      "error": {
+        "code": "cancelled",
+        "message": "fixture failure",
+        "retryable": false,
+        "submission_safety": "possibly_submitted"
+      },
+      "ok": false
+    },
+    {
+      "error": {
+        "code": "outcome_unknown",
+        "message": "fixture failure",
+        "retryable": false,
+        "submission_safety": "possibly_submitted"
+      },
+      "ok": false
+    }
+  ],
+  "operations": {
+    "message.delete": {
+      "request": {
+        "action": "message.delete",
+        "message": {
+          "group": {
+            "installation": {
+              "installation_id": "tg-main",
+              "surface": "telegram.bot_api"
+            },
+            "native_group_id": "-1001"
+          },
+          "native_message_id": "42"
+        }
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "message": {
+            "group": {
+              "installation": {
+                "installation_id": "tg-main",
+                "surface": "telegram.bot_api"
+              },
+              "native_group_id": "-1001"
+            },
+            "native_message_id": "42"
+          }
+        }
+      }
+    },
+    "message.send_group": {
+      "request": {
+        "action": "message.send_group",
+        "message": [
+          {
+            "data": {
+              "id": "41"
+            },
+            "type": "reply"
+          },
+          {
+            "data": {
+              "text": "hello"
+            },
+            "type": "text"
+          }
+        ],
+        "target": {
+          "installation": {
+            "installation_id": "qq-main",
+            "surface": "onebot11.qq"
+          },
+          "native_group_id": "123"
+        }
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "messages": [
+            {
+              "group": {
+                "installation": {
+                  "installation_id": "qq-main",
+                  "surface": "onebot11.qq"
+                },
+                "native_group_id": "123"
+              },
+              "native_message_id": "43"
+            }
+          ]
+        }
+      }
+    },
+    "onebot11.forward_message.get": {
+      "request": {
+        "action": "onebot11.forward_message.get",
+        "forward_id": "forward-id",
+        "installation": {
+          "installation_id": "qq-main",
+          "surface": "onebot11.qq"
+        }
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "forward_id": "forward-id",
+          "installation": {
+            "installation_id": "qq-main",
+            "surface": "onebot11.qq"
+          },
+          "messages": [
+            {
+              "content": [
+                {
+                  "data": {
+                    "id": "41"
+                  },
+                  "type": "reply"
+                },
+                {
+                  "data": {
+                    "text": "hello"
+                  },
+                  "type": "text"
+                }
+              ],
+              "sender": {
+                "nickname": "alice"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "onebot11.group.poke": {
+      "request": {
+        "action": "onebot11.group.poke",
+        "target": {
+          "installation": {
+            "installation_id": "qq-main",
+            "surface": "onebot11.qq"
+          },
+          "native_group_id": "123"
+        },
+        "user_id": "456"
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "target": {
+            "installation": {
+              "installation_id": "qq-main",
+              "surface": "onebot11.qq"
+            },
+            "native_group_id": "123"
+          },
+          "user_id": "456"
+        }
+      }
+    },
+    "onebot11.group_file.resolve": {
+      "request": {
+        "action": "onebot11.group_file.resolve",
+        "file_id": "group-file",
+        "target": {
+          "installation": {
+            "installation_id": "qq-main",
+            "surface": "onebot11.qq"
+          },
+          "native_group_id": "123"
+        }
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "file_id": "group-file",
+          "target": {
+            "installation": {
+              "installation_id": "qq-main",
+              "surface": "onebot11.qq"
+            },
+            "native_group_id": "123"
+          },
+          "url": "https://example.test/group-file"
+        }
+      }
+    },
+    "onebot11.group_member.get": {
+      "request": {
+        "action": "onebot11.group_member.get",
+        "no_cache": true,
+        "target": {
+          "installation": {
+            "installation_id": "qq-main",
+            "surface": "onebot11.qq"
+          },
+          "native_group_id": "123"
+        },
+        "user_id": "456"
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "card": "card",
+          "nickname": "alice",
+          "target": {
+            "installation": {
+              "installation_id": "qq-main",
+              "surface": "onebot11.qq"
+            },
+            "native_group_id": "123"
+          },
+          "title": "title",
+          "user_id": "456"
+        }
+      }
+    },
+    "onebot11.private_file.resolve": {
+      "request": {
+        "action": "onebot11.private_file.resolve",
+        "file_id": "private-file",
+        "installation": {
+          "installation_id": "qq-main",
+          "surface": "onebot11.qq"
+        },
+        "user_id": "456"
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "file_id": "private-file",
+          "installation": {
+            "installation_id": "qq-main",
+            "surface": "onebot11.qq"
+          },
+          "url": "https://example.test/private-file",
+          "user_id": "456"
+        }
+      }
+    },
+    "telegram.media.fetch_file": {
+      "request": {
+        "action": "telegram.media.fetch_file",
+        "file": {
+          "file_id": "file-id",
+          "file_name": "sticker.webp",
+          "file_size": 4,
+          "file_type": "sticker",
+          "file_unique_id": "unique-id",
+          "mime_type": "image/webp"
+        },
+        "installation": {
+          "installation_id": "tg-main",
+          "surface": "telegram.bot_api"
+        },
+        "maximum_bytes": 16
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "bytes": [
+            82,
+            73,
+            70,
+            70
+          ],
+          "file": {
+            "file_id": "file-id",
+            "file_name": "sticker.webp",
+            "file_size": 4,
+            "file_type": "sticker",
+            "file_unique_id": "unique-id",
+            "mime_type": "image/webp"
+          },
+          "installation": {
+            "installation_id": "tg-main",
+            "surface": "telegram.bot_api"
+          }
+        }
+      }
+    },
+    "telegram.media.send_group_uploads": {
+      "request": {
+        "action": "telegram.media.send_group_uploads",
+        "caption": "test",
+        "caption_entities": [
+          {
+            "length": 4,
+            "offset": 0,
+            "type": "bold"
+          }
+        ],
+        "maximum_bytes": 16,
+        "media": [
+          {
+            "bytes": [
+              0,
+              127,
+              128,
+              255
+            ],
+            "filename": "a.jpg",
+            "mime_type": "image/jpeg",
+            "type": "photo"
+          },
+          {
+            "bytes": [
+              1,
+              2
+            ],
+            "filename": "b.jpg",
+            "mime_type": "image/jpeg",
+            "type": "photo"
+          }
+        ],
+        "reply_to": {
+          "group": {
+            "installation": {
+              "installation_id": "tg-main",
+              "surface": "telegram.bot_api"
+            },
+            "native_group_id": "-1001"
+          },
+          "native_message_id": "42"
+        },
+        "target": {
+          "installation": {
+            "installation_id": "tg-main",
+            "surface": "telegram.bot_api"
+          },
+          "native_group_id": "-1001"
+        },
+        "topic_id": 7
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "messages": [
+            {
+              "group": {
+                "installation": {
+                  "installation_id": "tg-main",
+                  "surface": "telegram.bot_api"
+                },
+                "native_group_id": "-1001"
+              },
+              "native_message_id": "42"
+            },
+            {
+              "group": {
+                "installation": {
+                  "installation_id": "tg-main",
+                  "surface": "telegram.bot_api"
+                },
+                "native_group_id": "-1001"
+              },
+              "native_message_id": "43"
+            }
+          ]
+        }
+      }
+    },
+    "telegram.media.send_group_urls": {
+      "request": {
+        "action": "telegram.media.send_group_urls",
+        "caption": "test",
+        "caption_entities": [
+          {
+            "length": 4,
+            "offset": 0,
+            "type": "bold"
+          }
+        ],
+        "media": [
+          {
+            "source": "https://example.test/a.jpg",
+            "type": "photo"
+          },
+          {
+            "source": "file-id",
+            "type": "photo"
+          }
+        ],
+        "reply_to": {
+          "group": {
+            "installation": {
+              "installation_id": "tg-main",
+              "surface": "telegram.bot_api"
+            },
+            "native_group_id": "-1001"
+          },
+          "native_message_id": "42"
+        },
+        "target": {
+          "installation": {
+            "installation_id": "tg-main",
+            "surface": "telegram.bot_api"
+          },
+          "native_group_id": "-1001"
+        },
+        "topic_id": 7
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "messages": [
+            {
+              "group": {
+                "installation": {
+                  "installation_id": "tg-main",
+                  "surface": "telegram.bot_api"
+                },
+                "native_group_id": "-1001"
+              },
+              "native_message_id": "42"
+            },
+            {
+              "group": {
+                "installation": {
+                  "installation_id": "tg-main",
+                  "surface": "telegram.bot_api"
+                },
+                "native_group_id": "-1001"
+              },
+              "native_message_id": "43"
+            }
+          ]
+        }
+      }
+    },
+    "telegram.media.send_photo": {
+      "request": {
+        "action": "telegram.media.send_photo",
+        "caption": "test",
+        "caption_entities": [
+          {
+            "length": 4,
+            "offset": 0,
+            "type": "bold"
+          }
+        ],
+        "photo": "file-id",
+        "target": {
+          "installation": {
+            "installation_id": "tg-main",
+            "surface": "telegram.bot_api"
+          },
+          "native_group_id": "-1001"
+        }
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "messages": [
+            {
+              "group": {
+                "installation": {
+                  "installation_id": "tg-main",
+                  "surface": "telegram.bot_api"
+                },
+                "native_group_id": "-1001"
+              },
+              "native_message_id": "42"
+            }
+          ]
+        }
+      }
+    },
+    "telegram.message.edit_text": {
+      "request": {
+        "action": "telegram.message.edit_text",
+        "message": {
+          "group": {
+            "installation": {
+              "installation_id": "tg-main",
+              "surface": "telegram.bot_api"
+            },
+            "native_group_id": "-1001"
+          },
+          "native_message_id": "42"
+        },
+        "parse_mode": "HTML",
+        "text": "edited"
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "message": {
+            "group": {
+              "installation": {
+                "installation_id": "tg-main",
+                "surface": "telegram.bot_api"
+              },
+              "native_group_id": "-1001"
+            },
+            "native_message_id": "42"
+          }
+        }
+      }
+    },
+    "telegram.message.send_topic": {
+      "request": {
+        "action": "telegram.message.send_topic",
+        "message": [
+          {
+            "data": {
+              "id": "41"
+            },
+            "type": "reply"
+          },
+          {
+            "data": {
+              "text": "hello"
+            },
+            "type": "text"
+          }
+        ],
+        "target": {
+          "group": {
+            "installation": {
+              "installation_id": "tg-main",
+              "surface": "telegram.bot_api"
+            },
+            "native_group_id": "-1001"
+          },
+          "topic_id": 7
+        }
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "messages": [
+            {
+              "group": {
+                "installation": {
+                  "installation_id": "tg-main",
+                  "surface": "telegram.bot_api"
+                },
+                "native_group_id": "-1001"
+              },
+              "native_message_id": "42"
+            }
+          ]
+        }
+      }
+    },
+    "message.send_private": {
+      "request": {
+        "action": "message.send_private",
+        "message": [
+          {
+            "data": {
+              "id": "41"
+            },
+            "type": "reply"
+          },
+          {
+            "data": {
+              "text": "hello"
+            },
+            "type": "text"
+          }
+        ],
+        "target": {
+          "installation": {
+            "installation_id": "qq-main",
+            "surface": "onebot11.qq"
+          },
+          "native_user_id": "456"
+        }
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "messages": [
+            {
+              "target": {
+                "installation": {
+                  "installation_id": "qq-main",
+                  "surface": "onebot11.qq"
+                },
+                "native_user_id": "456"
+              },
+              "native_message_id": "44"
+            }
+          ]
+        }
+      }
+    },
+    "telegram.media.send_photo_upload": {
+      "request": {
+        "action": "telegram.media.send_photo_upload",
+        "caption": "test",
+        "maximum_bytes": 16,
+        "photo": {
+          "bytes": [
+            82,
+            73,
+            70,
+            70
+          ],
+          "filename": "thumbnail.webp",
+          "mime_type": "image/webp",
+          "type": "photo"
+        },
+        "target": {
+          "installation": {
+            "installation_id": "tg-main",
+            "surface": "telegram.bot_api"
+          },
+          "native_group_id": "-1001"
+        },
+        "topic_id": 7
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "messages": [
+            {
+              "group": {
+                "installation": {
+                  "installation_id": "tg-main",
+                  "surface": "telegram.bot_api"
+                },
+                "native_group_id": "-1001"
+              },
+              "native_message_id": "42"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "recipes": [
+    {
+      "actions": [
+        "message.delete",
+        "message.send_group",
+        "message.send_private",
+        "onebot11.forward_message.get",
+        "onebot11.group.poke",
+        "onebot11.group_file.resolve",
+        "onebot11.group_member.get",
+        "onebot11.private_file.resolve"
+      ],
+      "id": "onebot11.qq.websocket",
+      "surface": "onebot11.qq",
+      "transport": "websocket"
+    },
+    {
+      "actions": [
+        "message.delete",
+        "message.send_group",
+        "message.send_private",
+        "onebot11.forward_message.get",
+        "onebot11.group.poke",
+        "onebot11.group_file.resolve",
+        "onebot11.group_member.get",
+        "onebot11.private_file.resolve"
+      ],
+      "id": "onebot11.qq.http",
+      "surface": "onebot11.qq",
+      "transport": "http"
+    },
+    {
+      "actions": [
+        "message.delete",
+        "message.send_group",
+        "message.send_private",
+        "telegram.media.fetch_file",
+        "telegram.media.send_group_uploads",
+        "telegram.media.send_group_urls",
+        "telegram.media.send_photo",
+        "telegram.media.send_photo_upload",
+        "telegram.message.edit_text",
+        "telegram.message.send_topic"
+      ],
+      "id": "telegram.bot_api.http",
+      "surface": "telegram.bot_api",
+      "transport": "http"
+    }
+  ],
+  "surfaces": [
+    "onebot11.qq",
+    "telegram.bot_api"
+  ],
+  "telegram_without_uploader": [
+    "message.delete",
+    "message.send_group",
+    "message.send_private",
+    "telegram.media.fetch_file",
+    "telegram.media.send_group_urls",
+    "telegram.media.send_photo",
+    "telegram.message.edit_text",
+    "telegram.message.send_topic"
+  ]
+}

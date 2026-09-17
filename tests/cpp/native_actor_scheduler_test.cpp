@@ -1,4 +1,4 @@
-#include "core/native_actor_scheduler.hpp"
+#include "core/actor/native_actor_scheduler.hpp"
 
 #include <gtest/gtest.h>
 

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef OBCX_INCLUDE_COMMON_MESSAGE_TYPE_HPP_
+#define OBCX_INCLUDE_COMMON_MESSAGE_TYPE_HPP_
 
 #include "json_utils.hpp"
 
@@ -101,6 +102,17 @@ struct MessageSegment {
   void to_json(json &j) const;
   void from_json(const json &j);
 };
+
+// Header-owned ADL codecs let the common Bot SDK work without obcx_core.
+// Preserve existing segment JSON semantics; this does not change ingress.
+inline void to_json(json &j, const MessageSegment &segment) {
+  JsonUtils::set_value(j, "type", segment.type);
+  JsonUtils::set_value(j, "data", segment.data);
+}
+inline void from_json(const json &j, MessageSegment &segment) {
+  segment.type = JsonUtils::get_value<std::string>(j, "type");
+  segment.data = JsonUtils::get_value<json>(j, "data");
+}
 
 /**
  * \if CHINESE
@@ -239,33 +251,6 @@ struct ErrorEvent {
 using Event = std::variant<MessageEvent, NoticeEvent, RequestEvent, MetaEvent,
                            HeartbeatEvent, ErrorEvent>;
 
-/**
- * \if CHINESE
- * @brief 连接配置
- * \endif
- * \if ENGLISH
- * @brief Connection configuration
- * \endif
- */
-struct ConnectionConfig {
-  std::string host = "localhost";
-  uint16_t port = 8080;
-  std::string access_token;
-  std::string secret;
-  std::chrono::milliseconds connect_timeout{5000};
-  std::chrono::milliseconds action_timeout{30000};
-  std::chrono::milliseconds poll_timeout{
-      25000}; // Long-poll timeout sent to server (e.g., Telegram getUpdates)
-  std::chrono::milliseconds poll_force_close{30000};
-  std::chrono::milliseconds poll_retry_interval{3000};
-  std::chrono::milliseconds heartbeat_interval{30000};
-  bool use_ssl = false;
-
-  // Proxy configuration
-  std::string proxy_host;
-  uint16_t proxy_port = 0;
-  std::string proxy_type = "http"; // "http", "https", "socks5"
-  std::string proxy_username;
-  std::string proxy_password;
-};
 } // namespace obcx::common
+
+#endif // OBCX_INCLUDE_COMMON_MESSAGE_TYPE_HPP_

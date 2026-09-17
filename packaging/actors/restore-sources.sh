@@ -9,12 +9,12 @@ restore_actor_source() {
 
   case "$actor" in
     bridge)
-      repository=obcx-actor-bridge
+      repository=obcx-message-bridge
       base_revision=de8c3046c218c9e2a254abe832e91595f4cc629a
       bundle_ref=refs/heads/develop
       ;;
     message-store)
-      repository=obcx-actor-message-store
+      repository=obcx-message-store
       base_revision=3a9dfc2b27375d22531b4308356b75f4bac7077f
       bundle_ref=refs/remotes/origin/main
       ;;

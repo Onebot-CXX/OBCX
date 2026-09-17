@@ -1,4 +1,6 @@
-#include "core/reflected_actor.hpp"
+#include "core/actor/reflected_actor.hpp"
+#include "core/bot/messaging.hpp"
+#include "core/bot/typed_operation.hpp"
 
 namespace obcx::sdk_fixture::events {
 struct SdkSmoke {};
@@ -24,6 +26,18 @@ public:
             obcx::command::re2(R"(^(?:sdk_ping|sdk_alias)$)")));
   }
 
+  [[nodiscard]] static auto configuration_contract() -> obcx::common::json {
+    return {
+        {"bot_installation_collections",
+         {{"installation_pairs",
+           {{"minimum_items", 1},
+            {"identity", "id"},
+            {"bot_installations",
+             {{"onebot11_installation", "qq"},
+              {"telegram_installation", "telegram"}}}}}}},
+    };
+  }
+
   auto handle(const obcx::sdk_fixture::events::SdkSmoke &,
               const obcx::core::MessageEnvelope &message,
               obcx::core::ActorContext &context)
@@ -32,11 +46,29 @@ public:
         context.config().get_value<std::string>("label").value_or("missing");
     label = co_await context.run_blocking(
         [label = std::move(label)]() mutable { return std::move(label); });
+    const auto bot_operations =
+        context.get_service<obcx::bot::BotOperationGateway>();
+    const obcx::bot::BotInstallationRef installation{
+        .installation_id = "standalone-telegram",
+        .surface = obcx::bot::SurfaceId{"telegram.bot_api"},
+    };
+    const auto bot_operation_client_available = [&] {
+      if (bot_operations == nullptr) {
+        return false;
+      }
+      const auto supported = bot_operations->supported_actions(installation);
+      return supported.ok() && supported.value->supports(
+                                   obcx::bot::SendGroupMessageRequest::action);
+    }();
+
     auto result = obcx::core::ActorResult::success();
     obcx::core::MessageEnvelope emitted;
     emitted.type = "SdkV2Handled";
     emitted.causation_id = message.id;
-    emitted.payload = {{"label", label}};
+    emitted.payload = {
+        {"label", label},
+        {"bot_operation_client", bot_operation_client_available},
+    };
     result.emit(std::move(emitted));
     co_return result;
   }

@@ -9,24 +9,24 @@ apply_actor_patch() {
 
   case "$actor" in
     bridge)
-      repository=obcx-actor-bridge
+      repository=obcx-message-bridge
       base_revision=de8c3046c218c9e2a254abe832e91595f4cc629a
-      patched_revision=de8c3046c218c9e2a254abe832e91595f4cc629a
+      patched_revision=7b1fb9e5f5d9d094dd68c7185a78948b79c2b91c
       ;;
     message-store)
-      repository=obcx-actor-message-store
+      repository=obcx-message-store
       base_revision=3a9dfc2b27375d22531b4308356b75f4bac7077f
-      patched_revision=d3511ae5950a0e6454458eb763b9947165397d2a
+      patched_revision=06f14ed226369079c99474c62088293628ce94e3
       ;;
     registry)
       repository=obcx-actor-registry
       base_revision=057b46522872bfbc2dd87435e3751b8d2001e26b
-      patched_revision=ff8a4fecdabd91b2b5e930c39454389bb72109eb
+      patched_revision=986c40978111360e31e314cb9e25d5b641fab8a4
       ;;
     template)
       repository=obcx-actor-template
       base_revision=993048e6d7e280167cc2189a51464d8fd9197c68
-      patched_revision=4bc3c5558a6864d9a067c486a978f943b90cb1f6
+      patched_revision=30a1373f53b637eb8bf00250c8f9c3ca26578512
       ;;
     *)
       printf 'unknown actor patch: %s\n' "$actor" >&2

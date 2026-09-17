@@ -310,9 +310,9 @@ def validate_metadata(document: dict[str, Any]) -> list[str]:
     input_contract_schema = _required_integer(
         compatibility, "compatibility", "input_contract_schema", errors
     )
-    if input_contract_schema is not None and input_contract_schema != 1:
+    if input_contract_schema is not None and input_contract_schema != 2:
         errors.append(
-            "[compatibility].input_contract_schema must equal 1"
+            "[compatibility].input_contract_schema must equal 2"
         )
 
     repository = _required_string(

@@ -1,6 +1,8 @@
-#include "core/actor_messages.hpp"
-#include "core/command_coordinator.hpp"
-#include "core/reflected_actor.hpp"
+#include "core/actor/actor_messages.hpp"
+#include "core/actor/reflected_actor.hpp"
+#include "core/bot/messaging.hpp"
+#include "core/command/command_coordinator.hpp"
+#include "support/bot_platform_fixture.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -10,9 +12,11 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <gtest/gtest.h>
 #include <memory>
@@ -24,6 +28,22 @@
 namespace obcx::tests::command_runtime {
 
 struct TestCommand final : obcx::command::RequestMessage<TestCommand> {};
+
+class MessageObserverActor final
+    : public obcx::core::ReflectedActor<MessageObserverActor> {
+public:
+  static constexpr std::string_view actor_name = "message_observer";
+  static constexpr std::string_view actor_version = "1.0.0";
+
+  auto handle(const obcx::core::events::RawMessageEvent &,
+              const obcx::core::MessageEnvelope &, obcx::core::ActorContext &)
+      -> obcx::core::ActorResult {
+    ++message_count;
+    return obcx::core::ActorResult::success();
+  }
+
+  std::atomic_int message_count = 0;
+};
 
 class CommandActor final : public obcx::core::ReflectedActor<CommandActor> {
 public:
@@ -139,13 +159,24 @@ auto run_awaitable(asio::io_context &ioc, asio::awaitable<T> awaitable) -> T {
   return std::move(*result);
 }
 
+auto message_observer_contract() -> obcx::core::ActorInputContract {
+  const auto input = std::string{obcx::core::canonical_message_type_name<
+      obcx::core::events::RawMessageEvent>()};
+  return obcx::core::ActorInputContract{
+      .schema_version = 2,
+      .actor = "message_observer",
+      .accepted_inputs = {input},
+      .accepted_input_set = {input},
+  };
+}
+
 auto command_contract(const bool accept_request = true,
                       std::optional<std::string> pattern = std::nullopt)
     -> obcx::core::ActorInputContract {
   const auto request_type = std::string{obcx::core::canonical_message_type_name<
       obcx::tests::command_runtime::TestCommand>()};
   auto contract = obcx::core::ActorInputContract{
-      .schema_version = 1,
+      .schema_version = 2,
       .actor = "command_actor",
       .accepted_inputs =
           {
@@ -178,20 +209,81 @@ auto command_contract(const bool accept_request = true,
   return contract;
 }
 
+class RecordingGateway final : public obcx::bot::BotOperationGateway {
+public:
+  [[nodiscard]] auto supported_actions(
+      const obcx::bot::BotInstallationRef &installation) const
+      -> obcx::bot::BotOperationResult<obcx::bot::SupportedActions> override {
+    return obcx::bot::BotOperationResult<obcx::bot::SupportedActions>::success(
+        {.installation = installation, .actions = {}});
+  }
+
+  auto invoke(obcx::bot::OperationEnvelope envelope)
+      -> asio::awaitable<obcx::bot::OperationReply> override {
+    operations.push_back(std::move(envelope));
+    if (on_invoke) {
+      on_invoke(operations.size());
+    }
+    if (!replies.empty()) {
+      auto reply = std::move(replies.front());
+      replies.pop_front();
+      co_return reply;
+    }
+    co_return obcx::bot::OperationReply::success(obcx::bot::Json::object());
+  }
+
+  std::vector<obcx::bot::OperationEnvelope> operations;
+  std::deque<obcx::bot::OperationReply> replies;
+  std::function<void(std::size_t)> on_invoke;
+};
+
 auto config_document(std::string fallback = "continue",
                      std::string platform = "qq", std::string bot_type = "qq",
                      std::string actor = "command_actor",
                      std::string command = "test") -> std::string {
+  const auto telegram = bot_type == "telegram";
+  const auto surface =
+      std::string{telegram ? "telegram.bot_api" : "onebot11.qq"};
+  const auto connection =
+      std::string{telegram ? "host = \"api.telegram.org\"\n"
+                             "port = 443\n"
+                             "access_token = \"YOUR_TELEGRAM_TOKEN\"\n"
+                             "bot_username = \"fixture_bot\"\n"
+                             "use_tls = true\n"
+                             "connect_timeout_ms = 5000\n"
+                             "action_timeout_ms = 30000\n"
+                             "poll_timeout_ms = 25000\n"
+                             "poll_force_close_ms = 30000\n"
+                             "poll_retry_interval_ms = 3000\n\n"
+                           : "host = \"localhost\"\n"
+                             "port = 3000\n"
+                             "access_token = \"\"\n"
+                             "use_tls = false\n"
+                             "connect_timeout_ms = 5000\n"
+                             "action_timeout_ms = 30000\n"
+                             "poll_interval_ms = 1000\n\n"};
   return "[bots.primary]\n"
-         "type = \"" +
-         bot_type +
+         "enabled = true\n"
+         "surface = \"" +
+         surface +
          "\"\n"
-         "enabled = true\n\n"
+         "transport = \"http\"\n\n"
+         "[bots.primary.connection]\n" +
+         connection +
          "[actors.command_actor]\n"
          "enabled = true\n"
          "partition = \"conversation_id\"\n\n"
          "[command_runtime]\n"
          "timeout_ms = 100\n\n"
+         "[command_runtime.help]\n"
+         "page_bytes = 3500\n"
+         "maximum_pages = 10\n\n"
+         "[command_runtime.access.groups]\n"
+         "mode = \"unrestricted\"\n"
+         "entries = []\n\n"
+         "[command_runtime.access.users]\n"
+         "mode = \"unrestricted\"\n"
+         "entries = []\n\n"
          "[[command_runtime.routes]]\n"
          "actor = \"" +
          actor +
@@ -205,6 +297,19 @@ auto config_document(std::string fallback = "continue",
          "bots = [\"primary\"]\n"
          "fallback = \"" +
          fallback + "\"\n";
+}
+
+void replace_policy(std::string &document, const std::string_view dimension,
+                    const std::string_view mode,
+                    const std::string_view entries) {
+  const auto original = "[command_runtime.access." + std::string{dimension} +
+                        "]\nmode = \"unrestricted\"\nentries = []";
+  const auto replacement = "[command_runtime.access." + std::string{dimension} +
+                           "]\nmode = \"" + std::string{mode} +
+                           "\"\nentries = " + std::string{entries};
+  const auto offset = document.find(original);
+  ASSERT_NE(offset, std::string::npos);
+  document.replace(offset, original.size(), replacement);
 }
 
 class CommandCoordinatorTest : public ::testing::Test {
@@ -226,7 +331,8 @@ protected:
       std::ofstream output(path);
       output << document;
     }
-    const auto built = obcx::common::ConfigLoader::build_snapshot(path);
+    const auto built = obcx::common::ConfigLoader::build_snapshot(
+        path, obcx::test::bot_platform_catalog());
     EXPECT_TRUE(built);
     return built.snapshot;
   }
@@ -247,7 +353,11 @@ protected:
     message.source_platform = "qq";
     message.source_bot = "primary";
     message.conversation_id = "group:42";
-    message.payload = {{"sender", "7"}};
+    message.payload = {{"source_bot_configured", true},
+                       {"sender", "7"},
+                       {"group_id", "42"},
+                       {"chat_id", ""},
+                       {"message_type", "group"}};
     message.raw = {{"raw_message", "/test " + arguments}};
     return message;
   }
@@ -265,6 +375,9 @@ protected:
     std::shared_ptr<obcx::core::NativeActorScheduler> scheduler;
     std::shared_ptr<obcx::core::Orchestrator> orchestrator;
     std::shared_ptr<obcx::tests::command_runtime::CommandActor> actor;
+    std::shared_ptr<obcx::tests::command_runtime::MessageObserverActor>
+        message_observer;
+    std::shared_ptr<RecordingGateway> gateway;
     std::shared_ptr<obcx::core::CommandCoordinator> coordinator;
 
     ~Runtime() {
@@ -288,7 +401,10 @@ protected:
     auto orchestrator =
         std::make_shared<obcx::core::Orchestrator>(scheduler, services);
     auto actor = std::make_shared<obcx::tests::command_runtime::CommandActor>();
+    auto message_observer =
+        std::make_shared<obcx::tests::command_runtime::MessageObserverActor>();
     orchestrator->register_actor(actor);
+    orchestrator->register_actor(message_observer);
     orchestrator->configure_actors(config->get_actor_configs());
     orchestrator->configure_pipelines(
         {{.name = "raw",
@@ -301,13 +417,16 @@ protected:
                    obcx::core::events::RawMessageEvent>()},
                .outputs = {"RawObserved"},
                .mode = "await"}}}});
+    auto gateway = std::make_shared<RecordingGateway>();
     auto coordinator = std::make_shared<obcx::core::CommandCoordinator>(
-        7, std::move(routing_table), scheduler, orchestrator);
+        7, std::move(routing_table), scheduler, orchestrator, gateway);
     return Runtime{
         .services = std::move(services),
         .scheduler = std::move(scheduler),
         .orchestrator = std::move(orchestrator),
         .actor = std::move(actor),
+        .message_observer = std::move(message_observer),
+        .gateway = std::move(gateway),
         .coordinator = std::move(coordinator),
     };
   }
@@ -328,18 +447,20 @@ TEST_F(CommandCoordinatorTest, BuildsImmutableRoutesAndDetectionOnlyCatalogs) {
                 obcx::tests::command_runtime::TestCommand>());
   EXPECT_EQ(route.timeout, 100ms);
   const auto &bot = built.table->bots().begin()->second;
-  ASSERT_EQ(bot.catalog.size(), 1U);
-  EXPECT_EQ(bot.catalog.front().name, "test");
+  ASSERT_EQ(bot.catalog.size(), 2U);
+  EXPECT_EQ(bot.catalog[0].name, "help");
+  EXPECT_EQ(bot.catalog[1].name, "test");
   EXPECT_FALSE(bot.adapter->supports_catalog_publication());
 }
 
 TEST_F(CommandCoordinatorTest,
        UsesConfiguredTelegramUsernameForExplicitCommandTargets) {
   auto document = config_document("continue", "telegram", "telegram");
-  const auto actor = document.find("[actors.command_actor]");
-  ASSERT_NE(actor, std::string::npos);
-  document.insert(actor, "[bots.primary.connection]\n"
-                         "bot_username = \"my_bot\"\n\n");
+  const auto username = document.find("bot_username = \"fixture_bot\"");
+  ASSERT_NE(username, std::string::npos);
+  document.replace(username,
+                   std::string{"bot_username = \"fixture_bot\""}.size(),
+                   "bot_username = \"my_bot\"");
   const auto config = snapshot("telegram-target.toml", document);
   const auto built = table(config);
   ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
@@ -358,10 +479,12 @@ TEST_F(CommandCoordinatorTest,
        obcx::common::json::array(
            {{{"type", "bot_command"}, {"offset", 0}, {"length", 12}}})},
   };
-  const auto detected = bot.adapter->detect(event, bot.target);
+  const auto detected = bot.adapter->detect(event);
   ASSERT_TRUE(detected.has_value());
   EXPECT_EQ(detected->name, "test");
-  EXPECT_FALSE(bot.adapter->detect(event, "other_bot").has_value());
+  event.raw["text"] = "/test@other_bot";
+  event.raw["entities"][0]["length"] = 15;
+  EXPECT_FALSE(bot.adapter->detect(event).has_value());
 }
 
 TEST_F(CommandCoordinatorTest, AggregatesCommandsFromMultipleActorsPerBot) {
@@ -385,9 +508,10 @@ TEST_F(CommandCoordinatorTest, AggregatesCommandsFromMultipleActorsPerBot) {
   ASSERT_EQ(built.table->routes().size(), 2U);
   ASSERT_EQ(built.table->bots().size(), 1U);
   const auto &catalog = built.table->bots().begin()->second.catalog;
-  ASSERT_EQ(catalog.size(), 2U);
-  EXPECT_EQ(catalog[0].name, "other");
-  EXPECT_EQ(catalog[1].name, "test");
+  ASSERT_EQ(catalog.size(), 3U);
+  EXPECT_EQ(catalog[0].name, "help");
+  EXPECT_EQ(catalog[1].name, "other");
+  EXPECT_EQ(catalog[2].name, "test");
 }
 
 TEST_F(CommandCoordinatorTest, RejectsInvalidActorCommandBotAndAdapterEdges) {
@@ -445,8 +569,9 @@ TEST_F(CommandCoordinatorTest,
   ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
   const auto &bot = built.table->bots().begin()->second;
   ASSERT_EQ(bot.patterns.size(), 1U);
-  EXPECT_EQ(bot.catalog.size(), 1U);
-  EXPECT_EQ(bot.catalog.front().name, "test");
+  EXPECT_EQ(bot.catalog.size(), 2U);
+  EXPECT_EQ(bot.catalog[0].name, "help");
+  EXPECT_EQ(bot.catalog[1].name, "test");
 
   auto active = runtime(config, built.table);
   asio::io_context ioc;
@@ -551,6 +676,77 @@ TEST_F(CommandCoordinatorTest,
 }
 
 TEST_F(CommandCoordinatorTest,
+       InvokesMessageObserverBeforeHelpAndConsumedCommandRouting) {
+  auto document = config_document("consume");
+  document += "\n[actors.message_observer]\n"
+              "enabled = true\n"
+              "partition = \"source_bot\"\n\n"
+              "[[command_runtime.message_observers]]\n"
+              "actor = \"message_observer\"\n"
+              "platforms = [\"qq\"]\n"
+              "bots = [\"primary\"]\n"
+              "timeout_ms = 100\n";
+  const auto config = snapshot("message-observer.toml", document);
+  const auto built = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", command_contract()},
+                {"message_observer", message_observer_contract()}});
+  ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
+  ASSERT_EQ(built.table
+                ->message_observers(obcx::core::CommandBotKey{.platform = "qq",
+                                                              .bot = "primary"})
+                .size(),
+            1U);
+
+  auto active = runtime(config, built.table);
+  asio::io_context ioc;
+  const auto help = run_awaitable(
+      ioc, active.coordinator->process(raw_command("help", ""),
+                                       std::make_shared<int>(12)));
+  EXPECT_TRUE(help.ok());
+  EXPECT_EQ(active.message_observer->message_count, 1);
+  EXPECT_EQ(active.actor->raw_count, 0);
+
+  const auto consumed = run_awaitable(
+      ioc,
+      active.coordinator->process(raw("consume"), std::make_shared<int>(13)));
+  EXPECT_TRUE(consumed.ok());
+  EXPECT_EQ(active.message_observer->message_count, 2);
+  EXPECT_EQ(active.actor->command_count, 1);
+  EXPECT_EQ(active.actor->raw_count, 0);
+}
+
+TEST_F(CommandCoordinatorTest, InvokesMessageObserverBeforeAccessDenial) {
+  auto document = config_document("consume");
+  replace_policy(
+      document, "groups", "allowlist",
+      R"([{ platform = "qq", bot = "primary", native_group_id = "99" }])");
+  document += "\n[actors.message_observer]\n"
+              "enabled = true\n"
+              "partition = \"source_bot\"\n\n"
+              "[[command_runtime.message_observers]]\n"
+              "actor = \"message_observer\"\n"
+              "platforms = [\"qq\"]\n"
+              "bots = [\"primary\"]\n"
+              "timeout_ms = 100\n";
+  const auto config = snapshot("denied-message-observer.toml", document);
+  const auto built = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", command_contract()},
+                {"message_observer", message_observer_contract()}});
+  ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
+
+  auto active = runtime(config, built.table);
+  asio::io_context ioc;
+  const auto denied = run_awaitable(
+      ioc,
+      active.coordinator->process(raw("consume"), std::make_shared<int>(14)));
+  ASSERT_EQ(denied.failures.size(), 1U);
+  EXPECT_EQ(denied.failures.front().failure.code, "command_access_denied");
+  EXPECT_EQ(active.message_observer->message_count, 1);
+  EXPECT_EQ(active.actor->command_count, 0);
+  EXPECT_EQ(active.actor->raw_count, 0);
+}
+
+TEST_F(CommandCoordinatorTest,
        RoutesTypedCompletionAndAppliesContinueOrConsumeOnce) {
   const auto config = snapshot("routing.toml", config_document());
   auto active = runtime(config);
@@ -627,6 +823,371 @@ TEST_F(CommandCoordinatorTest,
     EXPECT_EQ(result.failures.front().failure.code, code);
   }
   EXPECT_EQ(active.actor->raw_count, cases.size());
+}
+
+TEST_F(CommandCoordinatorTest,
+       ExactScopedPoliciesGateAliasesGroupsUsersAndPrivateCallers) {
+  auto document = config_document("consume");
+  replace_policy(
+      document, "groups", "allowlist",
+      R"([{ platform = "qq", bot = "primary", native_group_id = "42" }])");
+  replace_policy(
+      document, "users", "denylist",
+      R"([{ platform = "qq", bot = "primary", native_user_id = "8" }])");
+  const auto config = snapshot("access.toml", document);
+  const auto built = obcx::core::build_command_routing_table(
+      *config,
+      {{"command_actor", command_contract(true, R"(^(?:test|alias)$)")}});
+  ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
+  EXPECT_TRUE(built.table->permits(
+      "test", {.platform = "qq",
+               .bot = "primary",
+               .conversation = obcx::core::CommandConversationKind::Group,
+               .group_id = "42",
+               .user_id = "7"}));
+  EXPECT_FALSE(built.table->permits(
+      "test", {.platform = "qq",
+               .bot = "secondary",
+               .conversation = obcx::core::CommandConversationKind::Group,
+               .group_id = "42",
+               .user_id = "7"}));
+
+  auto active = runtime(config, built.table);
+  asio::io_context ioc;
+  auto allowed = run_awaitable(
+      ioc, active.coordinator->process(raw_command("alias", "consume"),
+                                       std::make_shared<int>(20)));
+  EXPECT_TRUE(allowed.ok());
+  EXPECT_EQ(active.actor->command_count, 1);
+
+  auto denied_group = raw_command("test", "consume");
+  denied_group.raw["raw_message"] = "/test do-not-log-this";
+  denied_group.conversation_id = "group:43";
+  denied_group.payload["group_id"] = "43";
+  auto denied = run_awaitable(
+      ioc, active.coordinator->process(std::move(denied_group),
+                                       std::make_shared<int>(21)));
+  ASSERT_EQ(denied.failures.size(), 1U);
+  EXPECT_EQ(denied.failures.front().failure.code, "command_access_denied");
+  EXPECT_EQ(denied.failures.front().failure.message,
+            "command access was denied");
+  EXPECT_EQ(denied.failures.front().failure.message.find("do-not-log-this"),
+            std::string::npos);
+
+  auto denied_user = raw_command("test", "consume");
+  denied_user.payload["sender"] = "8";
+  denied = run_awaitable(
+      ioc, active.coordinator->process(std::move(denied_user),
+                                       std::make_shared<int>(22)));
+  ASSERT_EQ(denied.failures.size(), 1U);
+  EXPECT_EQ(denied.failures.front().failure.code, "command_access_denied");
+
+  auto private_message = raw_command("test", "consume");
+  private_message.conversation_id = "private:7";
+  private_message.payload["message_type"] = "private";
+  private_message.payload["group_id"] = "";
+  private_message.payload["sender"] = "7";
+  allowed = run_awaitable(
+      ioc, active.coordinator->process(std::move(private_message),
+                                       std::make_shared<int>(23)));
+  EXPECT_TRUE(allowed.ok());
+  EXPECT_EQ(active.actor->command_count, 2);
+
+  auto missing_sender = raw_command("test", "consume");
+  missing_sender.payload["sender"] = "";
+  denied = run_awaitable(
+      ioc, active.coordinator->process(std::move(missing_sender),
+                                       std::make_shared<int>(24)));
+  ASSERT_EQ(denied.failures.size(), 1U);
+  EXPECT_EQ(denied.failures.front().failure.code, "command_access_denied");
+
+  auto fallback_bot = raw_command("test", "consume");
+  fallback_bot.payload["source_bot_configured"] = false;
+  denied = run_awaitable(
+      ioc, active.coordinator->process(std::move(fallback_bot),
+                                       std::make_shared<int>(25)));
+  ASSERT_EQ(denied.failures.size(), 1U);
+  EXPECT_EQ(denied.failures.front().failure.code, "command_access_denied");
+  EXPECT_EQ(active.actor->command_count, 2);
+  EXPECT_EQ(active.actor->raw_count, 0);
+  EXPECT_TRUE(active.gateway->operations.empty());
+}
+
+TEST_F(CommandCoordinatorTest, CanonicalOverrideReplacesBothGlobalPolicies) {
+  auto document = config_document("consume");
+  replace_policy(
+      document, "groups", "denylist",
+      R"([{ platform = "qq", bot = "primary", native_group_id = "42" }])");
+  replace_policy(
+      document, "users", "denylist",
+      R"([{ platform = "qq", bot = "primary", native_user_id = "7" }])");
+  document += R"(
+
+[command_runtime.access.overrides.test.groups]
+mode = "allowlist"
+entries = [{ platform = "qq", bot = "primary", native_group_id = "42" }]
+[command_runtime.access.overrides.test.users]
+mode = "allowlist"
+entries = [{ platform = "qq", bot = "primary", native_user_id = "7" }]
+
+[command_runtime.access.overrides.help.groups]
+mode = "unrestricted"
+entries = []
+[command_runtime.access.overrides.help.users]
+mode = "allowlist"
+entries = [{ platform = "qq", bot = "primary", native_user_id = "8" }]
+)";
+  const auto config = snapshot("override.toml", document);
+  const auto built = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", command_contract(true, R"(^alias$)")}});
+  ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
+  obcx::core::CommandPolicySubject subject{
+      .platform = "qq",
+      .bot = "primary",
+      .conversation = obcx::core::CommandConversationKind::Group,
+      .group_id = "42",
+      .user_id = "7",
+      .topic_id = std::nullopt,
+  };
+  EXPECT_TRUE(built.table->permits("test", subject));
+  EXPECT_FALSE(built.table->permits("help", subject));
+  subject.user_id = "8";
+  EXPECT_FALSE(built.table->permits("test", subject));
+  EXPECT_TRUE(built.table->permits("help", subject));
+  auto active = runtime(config, built.table);
+  asio::io_context ioc;
+  const auto result = run_awaitable(
+      ioc, active.coordinator->process(raw_command("alias", "consume"),
+                                       std::make_shared<int>(25)));
+  EXPECT_TRUE(result.ok());
+  EXPECT_EQ(active.actor->command_count, 1);
+
+  auto inactive_document = config_document();
+  inactive_document += R"(
+
+[command_runtime.access.overrides.inactive]
+groups = { mode = "unrestricted", entries = [] }
+users = { mode = "unrestricted", entries = [] }
+)";
+  const auto inactive = snapshot("inactive-override.toml", inactive_document);
+  const auto rejected = table(inactive);
+  ASSERT_TRUE(rejected.failure);
+  EXPECT_EQ(rejected.failure->code, "command_access_override_inactive");
+}
+
+TEST_F(CommandCoordinatorTest,
+       HelpIsActorFreeFilteredDeterministicAndUsesExactGroupOrPrivateTarget) {
+  auto document = config_document("consume");
+  replace_policy(
+      document, "groups", "denylist",
+      R"([{ platform = "qq", bot = "primary", native_group_id = "42" }])");
+  document += R"(
+
+[command_runtime.access.overrides.help]
+groups = { mode = "unrestricted", entries = [] }
+users = { mode = "unrestricted", entries = [] }
+)";
+  const auto config = snapshot("help-filter.toml", document);
+  auto active = runtime(config);
+  asio::io_context ioc;
+  auto result = run_awaitable(
+      ioc, active.coordinator->process(raw_command("help", ""),
+                                       std::make_shared<int>(30)));
+  EXPECT_TRUE(result.ok());
+  EXPECT_EQ(active.actor->command_count, 0);
+  EXPECT_EQ(active.actor->raw_count, 0);
+  ASSERT_EQ(active.gateway->operations.size(), 1U);
+  const auto &group_reply = active.gateway->operations.front();
+  EXPECT_EQ(group_reply.action, obcx::bot::SendGroupMessageRequest::action);
+  EXPECT_EQ(group_reply.payload.at("target").at("native_group_id"), "42");
+  const auto text = group_reply.payload.at("message")
+                        .at(0)
+                        .at("data")
+                        .at("text")
+                        .get<std::string>();
+  EXPECT_EQ(text, "/help - List commands available to you\n");
+  EXPECT_EQ(text.find("/test"), std::string::npos);
+
+  auto private_help = raw_command("help", "");
+  private_help.conversation_id = "private:7";
+  private_help.payload["message_type"] = "private";
+  private_help.payload["group_id"] = "";
+  result = run_awaitable(
+      ioc, active.coordinator->process(std::move(private_help),
+                                       std::make_shared<int>(31)));
+  EXPECT_TRUE(result.ok());
+  ASSERT_EQ(active.gateway->operations.size(), 2U);
+  EXPECT_EQ(active.gateway->operations.back().action,
+            obcx::bot::SendPrivateMessageRequest::action);
+  EXPECT_EQ(active.gateway->operations.back().payload.at("target").at(
+                "native_user_id"),
+            "7");
+
+  result = run_awaitable(
+      ioc, active.coordinator->process(raw_command("help", "unexpected"),
+                                       std::make_shared<int>(32)));
+  ASSERT_EQ(result.failures.size(), 1U);
+  EXPECT_EQ(result.failures.front().failure.code, "invalid_help_arguments");
+  EXPECT_EQ(active.gateway->operations.size(), 2U);
+}
+
+TEST_F(CommandCoordinatorTest,
+       HelpPagesAreWholeBoundedSequentialAndStopAfterAmbiguity) {
+  auto document = config_document("consume");
+  const auto bytes = document.find("page_bytes = 3500");
+  ASSERT_NE(bytes, std::string::npos);
+  document.replace(bytes, std::string{"page_bytes = 3500"}.size(),
+                   "page_bytes = 50");
+  const auto config = snapshot("help-pages.toml", document);
+  auto active = runtime(config);
+  asio::io_context ioc;
+  auto result = run_awaitable(
+      ioc, active.coordinator->process(raw_command("help", ""),
+                                       std::make_shared<int>(33)));
+  EXPECT_TRUE(result.ok());
+  ASSERT_EQ(active.gateway->operations.size(), 2U);
+  for (const auto &operation : active.gateway->operations) {
+    const auto page = operation.payload.at("message")
+                          .at(0)
+                          .at("data")
+                          .at("text")
+                          .get<std::string>();
+    EXPECT_LE(page.size(), 50U);
+    EXPECT_EQ(page.back(), '\n');
+  }
+
+  auto failed = runtime(config);
+  failed.gateway->replies.push_back(obcx::bot::OperationReply::failure(
+      {.code = obcx::bot::BotOperationErrorCode::TransportFailure,
+       .message = "not submitted",
+       .retryable = true,
+       .submission_safety =
+           obcx::bot::SubmissionSafety::DefinitelyNotSubmitted}));
+  result = run_awaitable(
+      ioc, failed.coordinator->process(raw_command("help", ""),
+                                       std::make_shared<int>(34)));
+  ASSERT_EQ(result.failures.size(), 1U);
+  EXPECT_EQ(result.failures.front().failure.code,
+            "command_help_delivery_failed");
+  EXPECT_EQ(failed.gateway->operations.size(), 1U);
+  EXPECT_EQ(failed.actor->command_count, 0);
+
+  auto uncertain = runtime(config);
+  uncertain.gateway->replies.push_back(obcx::bot::OperationReply::failure(
+      {.code = obcx::bot::BotOperationErrorCode::OutcomeUnknown,
+       .message = "outcome unknown",
+       .retryable = false,
+       .submission_safety = obcx::bot::SubmissionSafety::PossiblySubmitted}));
+  result = run_awaitable(
+      ioc, uncertain.coordinator->process(raw_command("help", ""),
+                                          std::make_shared<int>(35)));
+  ASSERT_EQ(result.failures.size(), 1U);
+  EXPECT_EQ(result.failures.front().failure.code,
+            "command_help_delivery_uncertain");
+  EXPECT_EQ(uncertain.gateway->operations.size(), 1U);
+  EXPECT_EQ(uncertain.actor->command_count, 0);
+}
+
+TEST_F(CommandCoordinatorTest,
+       HelpRenderingPreservesCompleteUnicodeEntriesAtPageBoundaries) {
+  auto document = config_document("consume");
+  const auto bytes = document.find("page_bytes = 3500");
+  ASSERT_NE(bytes, std::string::npos);
+  document.replace(bytes, std::string{"page_bytes = 3500"}.size(),
+                   "page_bytes = 50");
+  const auto config = snapshot("help-unicode.toml", document);
+  auto contract = command_contract();
+  contract.commands.front().description = "説明🙂";
+  const auto built = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", std::move(contract)}});
+  ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
+  const auto *bot = built.table->find_bot({.platform = "qq", .bot = "primary"});
+  ASSERT_NE(bot, nullptr);
+  const auto rendered = built.table->render_help(
+      *bot, {.platform = "qq",
+             .bot = "primary",
+             .conversation = obcx::core::CommandConversationKind::Group,
+             .group_id = "42",
+             .user_id = "7"});
+  ASSERT_TRUE(rendered) << rendered.message;
+  ASSERT_EQ(rendered.pages.size(), 2U);
+  EXPECT_EQ(rendered.pages.back(), "/test - 説明🙂\n");
+  EXPECT_LE(rendered.pages.front().size(), 50U);
+  EXPECT_LE(rendered.pages.back().size(), 50U);
+}
+
+TEST_F(CommandCoordinatorTest,
+       ShutdownStopsRemainingHelpPagesWithinTheAdmittingGeneration) {
+  auto document = config_document("consume");
+  const auto bytes = document.find("page_bytes = 3500");
+  ASSERT_NE(bytes, std::string::npos);
+  document.replace(bytes, std::string{"page_bytes = 3500"}.size(),
+                   "page_bytes = 50");
+  const auto config = snapshot("help-shutdown.toml", document);
+  auto active = runtime(config);
+  active.gateway->on_invoke =
+      [coordinator = active.coordinator](const std::size_t invocation) {
+        if (invocation == 1U) {
+          coordinator->shutdown();
+        }
+      };
+
+  asio::io_context ioc;
+  const auto result = run_awaitable(
+      ioc, active.coordinator->process(raw_command("help", ""),
+                                       std::make_shared<int>(35)));
+  ASSERT_EQ(result.failures.size(), 1U);
+  EXPECT_EQ(result.failures.front().failure.code, "command_cancelled");
+  EXPECT_EQ(active.gateway->operations.size(), 1U);
+  EXPECT_EQ(active.actor->command_count, 0);
+  EXPECT_EQ(active.actor->raw_count, 0);
+}
+
+TEST_F(CommandCoordinatorTest,
+       RejectsReservedNamesInvalidUtf8AndUnsatisfiedHelpBounds) {
+  const auto config = snapshot("reserved.toml", config_document());
+  auto reserved = command_contract();
+  reserved.commands.front().name = "help";
+  auto rejected = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", reserved}});
+  ASSERT_TRUE(rejected.failure);
+  EXPECT_EQ(rejected.failure->code, "command_reserved_name");
+
+  auto invalid_utf8 = command_contract();
+  invalid_utf8.commands.front().description = std::string{"bad\xFF", 4};
+  rejected = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", invalid_utf8}});
+  ASSERT_TRUE(rejected.failure);
+  EXPECT_EQ(rejected.failure->code, "command_help_entry_invalid");
+
+  auto control_text = command_contract();
+  control_text.commands.front().description = "line one\nline two";
+  rejected = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", control_text}});
+  ASSERT_TRUE(rejected.failure);
+  EXPECT_EQ(rejected.failure->code, "command_help_entry_invalid");
+
+  auto too_small = config_document();
+  const auto bytes = too_small.find("page_bytes = 3500");
+  ASSERT_NE(bytes, std::string::npos);
+  too_small.replace(bytes, std::string{"page_bytes = 3500"}.size(),
+                    "page_bytes = 10");
+  const auto bounded = snapshot("too-small.toml", too_small);
+  rejected = table(bounded);
+  ASSERT_TRUE(rejected.failure);
+  EXPECT_EQ(rejected.failure->code, "command_help_entry_too_large");
+
+  auto too_few_pages = config_document();
+  const auto page_bytes = too_few_pages.find("page_bytes = 3500");
+  too_few_pages.replace(page_bytes, std::string{"page_bytes = 3500"}.size(),
+                        "page_bytes = 50");
+  const auto page_count = too_few_pages.find("maximum_pages = 10");
+  too_few_pages.replace(page_count, std::string{"maximum_pages = 10"}.size(),
+                        "maximum_pages = 1");
+  const auto paged = snapshot("too-few-pages.toml", too_few_pages);
+  rejected = table(paged);
+  ASSERT_TRUE(rejected.failure);
+  EXPECT_EQ(rejected.failure->code, "command_help_page_limit_exceeded");
 }
 
 TEST_F(CommandCoordinatorTest, TimesOutCooperativeActorAndUsesFallback) {

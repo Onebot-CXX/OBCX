@@ -86,9 +86,10 @@ after = ["persist"]
 mode = "await"
 ```
 
-Shared services such as `DbManager`, `BotRegistry`, protocol capabilities, and
+Actor-visible shared services such as `DbManager`, `BotOperationGateway`, and
 blocking executors are registered in `ActorServices` and resolved through the
-context. Concrete actor packages stay outside the core library.
+context. Process bot components and their capability directory are not actor
+services. Concrete actor packages stay outside the core library.
 
 ## Runtime generations and reload
 
@@ -114,11 +115,12 @@ ELF loader may reuse an already loaded dependency with the same SONAME.
 Process-owned runtime/SDK dependencies may be shared only when their content
 identity matches the active generation.
 
-`BotRegistry` and `DbManager` are process-owned. Every generation receives the
-same already-populated registry, so a bridge mapping reload reconstructs actor
-state while the existing bot objects and connections continue running. Bot
-definitions, database instances, and resolved scheduler budgets are
-fingerprinted and require restart when changed.
+`BotInstallationDirectory`, the shared `BotOperationDispatcher`, and
+`DbManager` are process-owned. Every generation receives the same dispatcher
+and weak installation capability directory, so a bridge mapping reload
+reconstructs actor state while existing installations and transports continue
+running. Bot definitions, database instances, and resolved scheduler budgets
+are fingerprinted and require restart when changed.
 
 ## Package boundary
 

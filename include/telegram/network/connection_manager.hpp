@@ -1,23 +1,29 @@
-#pragma once
+#ifndef OBCX_INCLUDE_TELEGRAM_NETWORK_CONNECTION_MANAGER_HPP_
+#define OBCX_INCLUDE_TELEGRAM_NETWORK_CONNECTION_MANAGER_HPP_
 
 #include "common/message_type.hpp"
-#include "interfaces/connection_manager.hpp"
-#include "interfaces/telegram_bot.hpp"
+#include "network/connection_config.hpp"
 #include "network/http_client.hpp"
 #include "telegram/adapter/protocol_adapter.hpp"
+#include "telegram/provider_types.hpp"
 
 #include <atomic>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <functional>
 #include <memory>
 #include <optional>
 
 namespace obcx::network {
+namespace asio = boost::asio;
 
 struct TelegramMultipartRequest {
   std::string body;
   std::string content_type;
 };
+
+[[nodiscard]] auto telegram_api_response_body(const HttpResponse &response)
+    -> std::string;
 
 [[nodiscard]] auto build_telegram_media_group_multipart(
     std::string_view chat_id,
@@ -41,8 +47,9 @@ struct TelegramMultipartRequest {
  * 实现通过HTTP轮询的方式与Telegram Bot API通信。
  * 定期轮询获取更新，通过HTTP POST发送API请求。
  */
-class TelegramConnectionManager : public IConnectionManager {
+class TelegramConnectionManager {
 public:
+  using EventCallback = std::function<void(const common::Event &)>;
   TelegramConnectionManager(asio::io_context &ioc,
                             adapter::telegram::ProtocolAdapter &adapter);
   TelegramConnectionManager(const TelegramConnectionManager &) = delete;
@@ -52,16 +59,16 @@ public:
   TelegramConnectionManager(TelegramConnectionManager &&) = delete;
   auto operator=(TelegramConnectionManager &&)
       -> TelegramConnectionManager & = delete;
-  ~TelegramConnectionManager() override;
+  ~TelegramConnectionManager();
 
-  // 实现IConnectionManager接口
-  void connect(const common::ConnectionConfig &config) override;
-  void disconnect() override;
-  [[nodiscard]] auto is_connected() const -> bool override;
+  // Telegram HTTP transport operations.
+  void connect(const common::ConnectionConfig &config);
+  void disconnect();
+  [[nodiscard]] auto is_connected() const -> bool;
   auto send_action_and_wait_async(std::string action_payload, uint64_t echo_id)
-      -> asio::awaitable<std::string> override;
-  void set_event_callback(EventCallback callback) override;
-  [[nodiscard]] auto get_connection_type() const -> std::string override;
+      -> asio::awaitable<std::string>;
+  void set_event_callback(EventCallback callback);
+  [[nodiscard]] auto get_connection_type() const -> std::string;
 
   /**
    * @brief 下载Telegram文件
@@ -75,7 +82,8 @@ public:
    * @param download_url 文件下载URL
    * @return 文件内容的二进制数据
    */
-  auto download_file_content(std::string_view download_url)
+  auto download_file_content(std::string_view download_url,
+                             std::size_t maximum_bytes)
       -> asio::awaitable<std::string>;
 
   /**
@@ -133,6 +141,7 @@ private:
    * @param updates_json 更新JSON数组
    */
   void process_updates(std::string_view updates_json);
+  void shutdown();
 
   asio::io_context &ioc_;
   adapter::telegram::ProtocolAdapter &adapter_;
@@ -151,3 +160,5 @@ private:
 };
 
 } // namespace obcx::network
+
+#endif // OBCX_INCLUDE_TELEGRAM_NETWORK_CONNECTION_MANAGER_HPP_

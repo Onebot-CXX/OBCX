@@ -1,4 +1,4 @@
-#include "core/reflected_actor.hpp"
+#include "core/actor/reflected_actor.hpp"
 
 namespace obcx::compile_tests {
 
@@ -204,6 +204,18 @@ public:
   auto handle(const CommandMessage &, const core::MessageEnvelope &,
               core::ActorContext &) -> core::ActorResult;
 };
+#elif OBCX_CASE == 20
+class Actor final : public core::ReflectedActor<Actor> {
+public:
+  static constexpr std::string_view actor_name = "reserved_command_name";
+  static constexpr std::string_view actor_version = "1";
+  static constexpr auto command_contract() {
+    return command::catalog(
+        command::observe<CommandMessage>("help", "Reserved command"));
+  }
+  auto handle(const CommandMessage &, const core::MessageEnvelope &,
+              core::ActorContext &) -> core::ActorResult;
+};
 #endif
 
 } // namespace obcx::compile_tests
@@ -218,7 +230,7 @@ struct {
 #endif
 
 auto main() -> int {
-#if OBCX_CASE <= 9 || (OBCX_CASE >= 14 && OBCX_CASE <= 19)
+#if OBCX_CASE <= 9 || (OBCX_CASE >= 14 && OBCX_CASE <= 20)
   using Actor = obcx::compile_tests::Actor;
   return Actor::input_contract_json().empty() ? 1 : 0;
 #elif OBCX_CASE == 10

@@ -2,7 +2,8 @@
 
 This directory is the actor-only publication registry for OBCX ABI 2
 packages. A submission is a canonical `entries/<actor-id>/actor.toml`; no
-second metadata dialect is accepted.
+second metadata dialect is accepted. Process-local BotInstallation components
+and capabilities are compiled into OBCX and are not registry packages.
 
 Validate entries and confirm that the checked-in index is current:
 

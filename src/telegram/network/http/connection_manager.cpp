@@ -5,6 +5,8 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/strand.hpp>
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -63,6 +65,19 @@ auto telegram_http_error(const HttpResponse &response) -> std::runtime_error {
 }
 
 } // namespace
+
+auto telegram_api_response_body(const HttpResponse &response) -> std::string {
+  if (response.is_success()) {
+    return response.body;
+  }
+  const auto document = json::parse(response.body, nullptr, false);
+  if (!document.is_discarded() && document.is_object() &&
+      document.contains("ok") && document.at("ok").is_boolean() &&
+      !document.at("ok").get<bool>()) {
+    return response.body;
+  }
+  throw telegram_http_error(response);
+}
 
 auto build_telegram_media_group_multipart(
     std::string_view chat_id,
@@ -133,16 +148,23 @@ auto build_telegram_media_group_multipart_with_entities(
 
 TelegramConnectionManager::TelegramConnectionManager(
     asio::io_context &ioc, adapter::telegram::ProtocolAdapter &adapter)
-    : ioc_(ioc), adapter_(adapter), poll_timer_(ioc) {
+    : ioc_(ioc), adapter_(adapter), poll_timer_(asio::make_strand(ioc)) {
   OBCX_INFO("Connection established to {}:{}", "TelegramConnectionManager",
             "initialized");
 }
 
 TelegramConnectionManager::~TelegramConnectionManager() {
   // Release our own resources (poll_timer_, http_client_) while the
-  // referenced io_context is still alive. IBot::~IBot guarantees this
-  // destruction order.
-  disconnect();
+  // referenced installation io_context is still alive. BotInstallation owns
+  // transports ahead of its executor and guarantees this destruction order.
+  try {
+    shutdown();
+  } catch (const std::exception &error) {
+    OBCX_ERROR("Failed to shut down Telegram connection manager: {}",
+               error.what());
+  } catch (...) {
+    OBCX_ERROR("Failed to shut down Telegram connection manager");
+  }
   http_client_.reset();
 }
 
@@ -185,9 +207,14 @@ void TelegramConnectionManager::connect(
   start_polling();
 }
 
-void TelegramConnectionManager::disconnect() {
+void TelegramConnectionManager::disconnect() { shutdown(); }
+
+void TelegramConnectionManager::shutdown() {
   stop_polling();
   is_connected_ = false;
+  if (http_client_) {
+    http_client_->close();
+  }
 
   OBCX_INFO("Connection closed");
 }
@@ -228,11 +255,7 @@ auto TelegramConnectionManager::send_action_and_wait_async(
     HttpResponse response =
         co_await http_client_->post(api_path, body, headers);
 
-    if (!response.is_success()) {
-      throw telegram_http_error(response);
-    }
-
-    co_return response.body;
+    co_return telegram_api_response_body(response);
 
   } catch (const std::exception &e) {
     OBCX_ERROR("API request failed: {}", e.what());
@@ -299,7 +322,8 @@ auto TelegramConnectionManager::download_file(std::string file_id)
 }
 
 auto TelegramConnectionManager::download_file_content(
-    std::string_view download_url) -> asio::awaitable<std::string> {
+    std::string_view download_url, const std::size_t maximum_bytes)
+    -> asio::awaitable<std::string> {
   if (!http_client_) {
     throw std::runtime_error("HTTP client not initialized");
   }
@@ -323,7 +347,8 @@ auto TelegramConnectionManager::download_file_content(
     // browser-like header set we want for the file CDN.
     std::map<std::string, std::string> headers;
 
-    HttpResponse response = co_await http_client_->get(path, headers);
+    HttpResponse response =
+        co_await http_client_->get(path, headers, maximum_bytes);
 
     if (response.is_success()) {
       co_return response.body;
@@ -395,11 +420,7 @@ auto TelegramConnectionManager::upload_photo_multipart(
   std::string api_path = "/bot" + config_.access_token + "/sendPhoto";
   HttpResponse response = co_await http_client_->post(api_path, body, headers);
 
-  if (!response.is_success()) {
-    throw telegram_http_error(response);
-  }
-
-  co_return response.body;
+  co_return telegram_api_response_body(response);
 }
 
 auto TelegramConnectionManager::upload_media_group_multipart(
@@ -434,23 +455,22 @@ auto TelegramConnectionManager::upload_media_group_multipart_with_entities(
       "/bot" + config_.access_token + "/sendMediaGroup";
   HttpResponse response =
       co_await http_client_->post(api_path, request.body, headers);
-  if (!response.is_success()) {
-    throw telegram_http_error(response);
-  }
-  co_return response.body;
+  co_return telegram_api_response_body(response);
 }
 
 void TelegramConnectionManager::start_polling() {
   if (is_polling_.exchange(true) == false) {
-    asio::co_spawn(ioc_, poll_updates(), asio::detached);
+    asio::co_spawn(poll_timer_.get_executor(), poll_updates(), asio::detached);
     OBCX_INFO("Start polling, interval: {}ms", config_.poll_timeout.count());
   }
 }
 
 void TelegramConnectionManager::stop_polling() {
-  is_polling_ = false;
-  poll_timer_.cancel();
-  OBCX_INFO("Stop polling");
+  if (is_polling_.exchange(false)) {
+    // Serialize timer cancellation with polling's expires_after/async_wait.
+    asio::post(poll_timer_.get_executor(), [this] { poll_timer_.cancel(); });
+    OBCX_INFO("Stop polling");
+  }
 }
 
 auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
@@ -494,6 +514,9 @@ auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
       HttpResponse response =
           co_await http_client_->post(updates_path, body, headers);
 
+      if (!is_polling_) {
+        break;
+      }
       if (response.is_success() && !response.body.empty()) {
         process_updates(response.body);
       }
@@ -502,6 +525,9 @@ auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
       // success we immediately reissue getUpdates with the advanced offset.
 
     } catch (const std::exception &e) {
+      if (!is_polling_) {
+        break;
+      }
       OBCX_WARN("Polling failed: {}", e.what());
       should_delay = true;
     }

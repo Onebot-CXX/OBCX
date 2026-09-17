@@ -1,5 +1,5 @@
-#include "common/config_loader.hpp"
-#include "core/db_manager.hpp"
+#include "common/config_snapshot.hpp"
+#include "core/infrastructure/db_manager.hpp"
 
 #include <gtest/gtest.h>
 
@@ -104,6 +104,40 @@ TEST(DbManagerTest, RunsWritesOnDedicatedWriterThread) {
   EXPECT_NE(writer_thread, caller_thread);
 }
 
+TEST(DbManagerTest, TransactionsCommitOrRollBackAtomically) {
+  const auto db_path = temp_db_path("transaction");
+  DbManager manager;
+  manager.configure({sqlite_config("main", db_path)});
+  manager.run_write<void>("main", [](IDbConnection &connection) {
+    connection.execute("CREATE TABLE transaction_probe (value INTEGER);");
+  });
+
+  const auto committed = manager.run_transaction<std::int64_t>(
+      "main", [](IDbConnection &connection) {
+        connection.execute("INSERT INTO transaction_probe(value) VALUES (?);",
+                           {std::int64_t{1}});
+        return std::int64_t{7};
+      });
+  EXPECT_EQ(committed, 7);
+
+  EXPECT_THROW(manager.run_transaction<void>(
+                   "main",
+                   [](IDbConnection &connection) {
+                     connection.execute(
+                         "INSERT INTO transaction_probe(value) VALUES (?);",
+                         {std::int64_t{2}});
+                     throw std::runtime_error("rollback probe");
+                   }),
+               std::runtime_error);
+  const auto rows = manager.run_read<std::vector<DbRow>>(
+      "main", [](IDbConnection &connection) {
+        return connection.query(
+            "SELECT value FROM transaction_probe ORDER BY value;");
+      });
+  ASSERT_EQ(rows.size(), 1);
+  EXPECT_EQ(std::get<std::int64_t>(rows.front().at("value")), 1);
+}
+
 TEST(DbManagerTest, RunsMigrationWorkUnderMigrationLock) {
   const auto db_path = temp_db_path("migration_lock");
   DbManager manager;
@@ -142,6 +176,11 @@ public:
   }
 
   void run_write_task(std::function<void(IDbConnection &)> work) override {
+    work(*this);
+  }
+
+  void run_transaction_task(
+      std::function<void(IDbConnection &)> work) override {
     work(*this);
   }
 

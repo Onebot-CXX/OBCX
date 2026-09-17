@@ -1,6 +1,8 @@
-#include "core/command_platform_adapter.hpp"
-#include "core/tg_bot.hpp"
-#include "telegram/adapter/protocol_adapter.hpp"
+#include "core/actor/actor.hpp"
+#include "core/bot/messaging.hpp"
+#include "onebot11/bot/command_adapter.hpp"
+#include "telegram/bot/command_adapter.hpp"
+#include "telegram/bot/operations.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
@@ -11,21 +13,18 @@
 namespace obcx::core {
 namespace {
 
-class CapturingTelegramBot final : public TGBot {
+class CapturingTelegramCatalog final : public CommandCatalogPublisher {
 public:
-  CapturingTelegramBot() : TGBot(adapter::telegram::ProtocolAdapter{}) {}
-
-  auto set_commands(
-      const std::vector<std::pair<std::string, std::string>> &commands)
-      -> boost::asio::awaitable<std::string> override {
-    calls.push_back(commands);
+  auto publish(const std::vector<CommandCatalogEntry> &entries)
+      -> boost::asio::awaitable<CommandCatalogPublishResult> override {
+    calls.push_back(entries);
     if (fail) {
       throw std::runtime_error{"catalog failure"};
     }
-    co_return "{}";
+    co_return CommandCatalogPublishResult{.supported = true, .succeeded = true};
   }
 
-  std::vector<std::vector<std::pair<std::string, std::string>>> calls;
+  std::vector<std::vector<CommandCatalogEntry>> calls;
   bool fail = false;
 };
 
@@ -61,64 +60,129 @@ auto qq_event(std::string text) -> MessageEnvelope {
 }
 
 TEST(CommandPlatformAdapterTest, TelegramUsesEntityAndExactBotTarget) {
-  const auto adapter = command_platform_adapter("telegram");
+  const auto adapter = obcx::telegram::bot::make_command_adapter("my_bot");
   ASSERT_NE(adapter, nullptr);
   auto event = telegram_event(
       "/chat@my_bot hello",
       common::json::array(
           {{{"type", "bot_command"}, {"offset", 0}, {"length", 12}}}));
-  const auto detected = adapter->detect(event, "my_bot");
+  const auto detected = adapter->detect(event);
   ASSERT_TRUE(detected.has_value());
   EXPECT_EQ(detected->name, "chat");
   EXPECT_EQ(detected->arguments, "hello");
-  EXPECT_FALSE(adapter->detect(event, "other_bot").has_value());
+  EXPECT_FALSE(obcx::telegram::bot::make_command_adapter("other_bot")
+                   ->detect(event)
+                   .has_value());
 }
 
 TEST(CommandPlatformAdapterTest, TelegramRejectsPrefixAndNonCommandEntity) {
-  const auto adapter = command_platform_adapter("telegram");
+  const auto adapter = obcx::telegram::bot::make_command_adapter("my_bot");
   auto event = telegram_event(
       "/recallxxx",
       common::json::array(
           {{{"type", "bot_command"}, {"offset", 0}, {"length", 10}}}));
-  const auto detected = adapter->detect(event, "bot");
+  const auto detected = adapter->detect(event);
   ASSERT_TRUE(detected.has_value());
   EXPECT_EQ(detected->name, "recallxxx");
   EXPECT_NE(detected->name, "recall");
 
   event.raw["entities"][0]["type"] = "mention";
-  EXPECT_FALSE(adapter->detect(event, "bot").has_value());
+  EXPECT_FALSE(adapter->detect(event).has_value());
 }
 
 TEST(CommandPlatformAdapterTest, QqUsesLeadingExactToken) {
-  const auto adapter = command_platform_adapter("qq");
+  const auto adapter = obcx::onebot11::bot::make_command_adapter();
   ASSERT_NE(adapter, nullptr);
-  const auto detected = adapter->detect(qq_event("/checkalive now"), {});
+  const auto detected = adapter->detect(qq_event("/checkalive now"));
   ASSERT_TRUE(detected.has_value());
   EXPECT_EQ(detected->name, "checkalive");
   EXPECT_EQ(detected->arguments, "now");
-  EXPECT_FALSE(adapter->detect(qq_event("prefix /checkalive"), {}).has_value());
+  EXPECT_FALSE(adapter->detect(qq_event("prefix /checkalive")).has_value());
 }
 
 TEST(CommandPlatformAdapterTest,
      QqProducesBoundedNormalizedNonCanonicalCandidates) {
-  const auto adapter = command_platform_adapter("qq");
+  const auto adapter = obcx::onebot11::bot::make_command_adapter();
   ASSERT_NE(adapter, nullptr);
-  const auto localized = adapter->detect(qq_event("/戳一下 target"), {});
+  const auto localized = adapter->detect(qq_event("/戳一下 target"));
   ASSERT_TRUE(localized.has_value());
   EXPECT_EQ(localized->name, "戳一下");
   EXPECT_EQ(localized->arguments, "target");
 
-  const auto punctuation = adapter->detect(qq_event("/poke-user now"), {});
+  const auto punctuation = adapter->detect(qq_event("/poke-user now"));
   ASSERT_TRUE(punctuation.has_value());
   EXPECT_EQ(punctuation->name, "poke-user");
 
   EXPECT_FALSE(
-      adapter->detect(qq_event("/" + std::string(257, 'x')), {}).has_value());
+      adapter->detect(qq_event("/" + std::string(257, 'x'))).has_value());
+}
+
+TEST(CommandPlatformAdapterTest,
+     BuildsExactTelegramGroupTopicAndPrivateReplyOperations) {
+  const auto adapter = obcx::telegram::bot::make_command_adapter("my_bot");
+  auto event = telegram_event("/help", common::json::array());
+  event.conversation_id = "chat:-1001";
+  event.payload = {{"sender", "7"},
+                   {"group_id", "-1001"},
+                   {"chat_id", "-1001"},
+                   {"message_type", "group"}};
+  auto reply = adapter->build_text_reply(event, "group help");
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply.operation->action,
+            obcx::bot::SendGroupMessageRequest::action);
+  EXPECT_EQ(reply.operation->installation.installation_id, "telegram_bot");
+  EXPECT_EQ(reply.operation->payload.at("target").at("native_group_id"),
+            "-1001");
+
+  event.payload["topic_id"] = 42;
+  reply = adapter->build_text_reply(event, "topic help");
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply.operation->action,
+            obcx::telegram::bot::SendTelegramTopicMessageRequest::action);
+  EXPECT_EQ(reply.operation->payload.at("target").at("topic_id"), 42);
+
+  event.conversation_id = "chat:7";
+  event.payload = {{"sender", "7"},
+                   {"group_id", ""},
+                   {"chat_id", "7"},
+                   {"message_type", "private"}};
+  reply = adapter->build_text_reply(event, "private help");
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply.operation->action,
+            obcx::bot::SendPrivateMessageRequest::action);
+  EXPECT_EQ(reply.operation->payload.at("target").at("native_user_id"), "7");
+
+  event.payload["chat_id"] = "8";
+  EXPECT_FALSE(static_cast<bool>(adapter->build_text_reply(event, "invalid")));
+}
+
+TEST(CommandPlatformAdapterTest, BuildsExactOneBotGroupAndPrivateReplies) {
+  const auto adapter = obcx::onebot11::bot::make_command_adapter();
+  auto event = qq_event("/help");
+  event.conversation_id = "group:42";
+  event.payload = {
+      {"sender", "7"}, {"group_id", "42"}, {"message_type", "group"}};
+  auto reply = adapter->build_text_reply(event, "group help");
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply.operation->action,
+            obcx::bot::SendGroupMessageRequest::action);
+  EXPECT_EQ(reply.operation->installation.installation_id, "qq_bot");
+
+  event.conversation_id = "private:7";
+  event.payload = {
+      {"sender", "7"}, {"group_id", ""}, {"message_type", "private"}};
+  reply = adapter->build_text_reply(event, "private help");
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply.operation->action,
+            obcx::bot::SendPrivateMessageRequest::action);
+
+  event.source_bot.clear();
+  EXPECT_FALSE(static_cast<bool>(adapter->build_text_reply(event, "invalid")));
 }
 
 TEST(CommandPlatformAdapterTest, CatalogCapabilitiesArePlatformSpecific) {
-  const auto telegram = command_platform_adapter("telegram");
-  const auto qq = command_platform_adapter("qq");
+  const auto telegram = obcx::telegram::bot::make_command_adapter("my_bot");
+  const auto qq = obcx::onebot11::bot::make_command_adapter();
   ASSERT_NE(telegram, nullptr);
   ASSERT_NE(qq, nullptr);
   EXPECT_TRUE(telegram->supports_catalog_publication());
@@ -131,28 +195,29 @@ TEST(CommandPlatformAdapterTest, CatalogCapabilitiesArePlatformSpecific) {
                   ->validate_catalog({CommandCatalogEntry{
                       .name = "Bad!", .description = "Bad"}})
                   .has_value());
-  EXPECT_EQ(command_platform_adapter("unknown"), nullptr);
+  EXPECT_EQ(telegram->platform(), "telegram");
+  EXPECT_EQ(qq->platform(), "qq");
 }
 
 TEST(CommandPlatformAdapterTest, TelegramPublishesOneCompleteReplacementList) {
-  auto adapter = command_platform_adapter("telegram");
-  CapturingTelegramBot bot;
+  auto adapter = obcx::telegram::bot::make_command_adapter("my_bot");
+  CapturingTelegramCatalog catalog_capability;
   const std::vector catalog = {
       CommandCatalogEntry{.name = "chat", .description = "Chat"},
       CommandCatalogEntry{.name = "toggle_think",
                           .description = "Toggle thinking"},
   };
 
-  auto result = run_awaitable(adapter->publish_catalog(bot, catalog));
+  auto result =
+      run_awaitable(adapter->publish_catalog(&catalog_capability, catalog));
   EXPECT_TRUE(result.supported);
   EXPECT_TRUE(result.succeeded);
-  ASSERT_EQ(bot.calls.size(), 1U);
-  EXPECT_EQ(bot.calls.front(),
-            (std::vector<std::pair<std::string, std::string>>{
-                {"chat", "Chat"}, {"toggle_think", "Toggle thinking"}}));
+  ASSERT_EQ(catalog_capability.calls.size(), 1U);
+  EXPECT_EQ(catalog_capability.calls.front(), catalog);
 
-  bot.fail = true;
-  result = run_awaitable(adapter->publish_catalog(bot, catalog));
+  catalog_capability.fail = true;
+  result =
+      run_awaitable(adapter->publish_catalog(&catalog_capability, catalog));
   EXPECT_FALSE(result.succeeded);
   EXPECT_EQ(result.code, "command_catalog_publish_failed");
 }

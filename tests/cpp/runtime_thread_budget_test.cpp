@@ -1,4 +1,4 @@
-#include "core/runtime_thread_budget.hpp"
+#include "core/runtime/runtime_thread_budget.hpp"
 
 #include <gtest/gtest.h>
 

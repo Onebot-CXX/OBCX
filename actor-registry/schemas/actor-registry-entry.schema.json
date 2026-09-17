@@ -53,7 +53,7 @@
         "cpp_standard": {"const": 26},
         "compiler": {"const": "gcc>=16.1"},
         "reflection_macro": {"const": 202506},
-        "input_contract_schema": {"const": 1}
+        "input_contract_schema": {"const": 2}
       },
       "additionalProperties": false
     },

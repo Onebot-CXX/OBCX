@@ -69,51 +69,38 @@ jobs:
 
       - name: Prime dev shell
         run: |
-          nix develop --command bash -c '
+          nix develop .#ci --command bash -euo pipefail <<'EOF'
             echo "IN_NIX_SHELL=$IN_NIX_SHELL"
             test -n "$IN_NIX_SHELL"
             echo "CC=$(command -v gcc)"
             echo "CXX=$(command -v g++)"
             g++ --version
             printf '#include <meta>\n' | g++ -std=c++26 -freflection -x c++ -E - >/dev/null
-            echo "CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH"
-          '
+          EOF
 
       - name: Validate actor registry
         run: |
-          nix develop --command python3 \
+          nix develop .#ci --command python3 \
             actor-registry/generate_actor_index.py validate
-          nix develop --command python3 \
+          nix develop .#ci --command python3 \
             actor-registry/generate_actor_index.py generate --check
 
       - name: Configure
         run: |
-          nix develop --command cmake -G Ninja -B build -S . \
+          nix develop .#ci --command cmake -G Ninja -B build -S . \
             -DCMAKE_BUILD_TYPE=Release \
             -DOBCX_BUILD_TESTS=ON \
-            -DOBCX_BUILD_BENCHMARKS=OFF \
-            -DOBCX_ENABLE_CROSS_REPO_ACTOR_TESTS=ON
+            -DOBCX_BUILD_BENCHMARKS=OFF
 
       - name: Build
-        run: nix develop --command cmake --build build --parallel
-
-      - name: Install actor SDK
-        run: |
-          nix develop --command cmake --install build \
-            --prefix build/actor-sdk-install
+        run: nix develop .#ci --command cmake --build build --parallel
 
       - name: Generate actor-only API documentation
         run: |
-          nix develop --command python3 scripts/generate_api_docs.py
+          nix develop .#ci --command python3 scripts/generate_api_docs.py
 
       - name: Run full core tests
         working-directory: build
         run: >-
-          nix develop --command ctest --output-on-failure --parallel 2
-          -LE 'conformance|slow'
-
-      - name: Run standalone actor conformance
-        working-directory: build
-        run: >-
-          nix develop --command ctest --output-on-failure --parallel 2
-          -L conformance
+          nix develop .#ci --command ctest --output-on-failure --parallel 2
+          --label-exclude installed-sdk

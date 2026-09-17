@@ -1,4 +1,4 @@
-#include "core/native_actor_scheduler.hpp"
+#include "core/actor/native_actor_scheduler.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -19,8 +19,6 @@
 
 namespace obcx::core {
 namespace {
-
-using namespace std::chrono_literals;
 
 class ImmediateExternalAwaiter {
 public:
@@ -132,7 +130,7 @@ auto wait_until(const std::function<bool()> &predicate,
     if (std::chrono::steady_clock::now() >= deadline) {
       return false;
     }
-    std::this_thread::sleep_for(1ms);
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
   }
   return true;
 }
@@ -192,7 +190,8 @@ auto run_transition_stress(const size_t invocation_count,
       }
     }
 
-    if (ready.wait_for(30s) != std::future_status::ready) {
+    if (ready.wait_for(std::chrono::seconds{30}) !=
+        std::future_status::ready) {
       throw std::runtime_error("stress batch timed out");
     }
   }
@@ -252,7 +251,7 @@ auto run_cancellation_stress(const size_t invocation_count)
             [&scheduler, invocation_count] {
               return scheduler.metrics().suspended == invocation_count;
             },
-            30s)) {
+            std::chrono::seconds{30})) {
       throw std::runtime_error("cancellation tasks did not all suspend");
     }
     scheduler.shutdown(ActorExecutorShutdownMode::Cancel);

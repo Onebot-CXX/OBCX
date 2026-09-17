@@ -1,4 +1,4 @@
-#include "core/reflected_actor.hpp"
+#include "core/actor/reflected_actor.hpp"
 
 namespace obcx::tests::events {
 struct MultipleInheritanceProbe {};

@@ -43,7 +43,7 @@ metadata under `share/obcx/actors/<actor-id>/actor.toml`.
 ## C++ contract
 
 ```cpp
-#include <core/reflected_actor.hpp>
+#include <core/actor/reflected_actor.hpp>
 
 namespace example::events {
 struct Requested { std::string text; };
@@ -73,7 +73,7 @@ OBCX_ACTOR_EXPORT_V2(ExampleActor)
 ```
 
 The export macro supplies the numeric ABI, factory, destructor, name, version,
-and generated schema-1 input contract. The compiler rejects inherited,
+and generated schema-2 input contract. The compiler rejects inherited,
 non-public, malformed, duplicate, or JSON-inconvertible handler inputs. Wire
 identity is exactly the fully qualified C++ type name; aliases are removed.
 Do not export a second factory or hand-written contract from the same library.
@@ -135,10 +135,10 @@ timeouts.
 
 ## Services and protocol capabilities
 
-Resolve shared runtime services with `context.get_service<T>()`. Bot-specific
-features use installed capability interfaces such as `IQQBot` and
-`ITelegramBot`; actor packages must not include concrete bot or connection
-manager implementation headers.
+Resolve shared runtime services with `context.get_service<T>()`. Bot egress
+uses the installed `BotOperationGateway` plus data-only operation contracts;
+actor packages must not include process component, provider, transport, or
+connection-manager implementation headers.
 
 Database-aware actors read `context.db_instance()` and
 `context.db_namespace()`. Pipeline partition keys determine the mailbox

@@ -231,10 +231,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         actor_inputs: list[tuple[dict[str, Any], Path, Path]] = []
         actors = (
-            ("bridge", SOURCE_ROOT / "local_actor" / "obcx-actor-bridge"),
+            ("bridge", SOURCE_ROOT / "local_actor" / "obcx-message-bridge"),
             (
                 "message_store",
-                SOURCE_ROOT / "local_actor" / "obcx-actor-message-store",
+                SOURCE_ROOT / "local_actor" / "obcx-message-store",
             ),
         )
         for artifact_stem, source in actors:

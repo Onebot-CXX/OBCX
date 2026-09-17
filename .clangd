@@ -1,0 +1,19 @@
+CompileFlags:
+  # compile_commands.json is generated for GCC 16. Remove GCC-specific
+  # dependency-scanning/module flags before clangd parses each command.
+  Remove:
+    - -fmodules-ts
+    - "-fmodule-mapper=*"
+    - "-fdeps-format=*"
+  # Bloomberg clang-p2996 implements these features but does not publish the
+  # GCC feature-test macros. Expansion statements also require their own flag.
+  Add:
+    - -fexpansion-statements
+    - -D__cpp_impl_reflection=202603L
+    - -D__cpp_expansion_statements=202506L
+
+Diagnostics:
+  # GCC 16's <meta> uses the adopted consteval virtual override semantics;
+  # clang-p2996 diagnoses that declaration but still builds the usable AST.
+  Suppress:
+    - consteval_override

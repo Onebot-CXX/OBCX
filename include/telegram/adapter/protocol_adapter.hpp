@@ -1,8 +1,8 @@
-#pragma once
+#ifndef OBCX_INCLUDE_TELEGRAM_ADAPTER_PROTOCOL_ADAPTER_HPP_
+#define OBCX_INCLUDE_TELEGRAM_ADAPTER_PROTOCOL_ADAPTER_HPP_
 
 #include "common/message_type.hpp"
-#include "interfaces/protocol_adapter.hpp"
-#include "interfaces/telegram_bot.hpp"
+#include "telegram/provider_types.hpp"
 
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -24,10 +24,9 @@ enum class MessageType : uint8_t {
  * @brief Telegram协议适配器
  *
  * 协调Telegram Bot API和内部模型之间转换的顶层类。
- * 它继承自 BaseProtocolAdapter，实现了统一的接口，并提供了 Telegram
- * 特有的功能。
+ * 它作为 Telegram 具体协议 capability 提供序列化与事件解析。
  */
-class ProtocolAdapter : public BaseProtocolAdapter {
+class ProtocolAdapter {
 public:
   ProtocolAdapter() = default;
 
@@ -37,8 +36,7 @@ public:
    * @return 如果是有效事件，则返回转换后的内部 Event 对象；否则返回
    * std::nullopt。
    */
-  auto parse_event(std::string_view json_str)
-      -> std::optional<common::Event> override;
+  auto parse_event(std::string_view json_str) -> std::optional<common::Event>;
 
 private:
   /**
@@ -93,8 +91,7 @@ public:
   auto serialize_send_message_request(
       std::string_view target_id, const common::Message &message,
       const std::optional<uint64_t> &echo = std::nullopt,
-      const std::optional<uint8_t> &message_type = std::nullopt)
-      -> std::string override;
+      const std::optional<uint8_t> &message_type = std::nullopt) -> std::string;
 
   /**
    * @brief 将"发送消息到指定topic"动作序列化为Telegram API兼容的JSON字符串。
@@ -118,8 +115,7 @@ public:
    */
   auto serialize_delete_message_request(
       std::string_view chat_id, std::string_view message_id,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"获取机器人信息"动作序列化为Telegram API兼容的JSON字符串。
@@ -127,8 +123,7 @@ public:
    * @return 用于动作请求的JSON字符串负载。
    */
   auto serialize_get_self_info_request(
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"获取聊天成员信息"动作序列化为Telegram API兼容的JSON字符串。
@@ -140,8 +135,7 @@ public:
    */
   auto serialize_get_user_info_request(
       std::string_view chat_id, std::string_view user_id, bool no_cache = false,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"获取聊天信息"动作序列化为Telegram API兼容的JSON字符串。
@@ -152,8 +146,7 @@ public:
    */
   auto serialize_get_chat_info_request(
       std::string_view chat_id, bool no_cache = false,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"获取聊天成员信息"动作序列化为Telegram API兼容的JSON字符串。
@@ -165,8 +158,7 @@ public:
    */
   auto serialize_get_chat_member_info_request(
       std::string_view chat_id, std::string_view user_id, bool no_cache = false,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"获取聊天成员列表"动作序列化为Telegram API兼容的JSON字符串。
@@ -176,8 +168,7 @@ public:
    */
   auto serialize_get_chat_admins_request(
       std::string_view chat_id,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"踢出聊天成员"动作序列化为Telegram API兼容的JSON字符串。
@@ -191,8 +182,7 @@ public:
   auto serialize_kick_chat_member_request(
       std::string_view chat_id, std::string_view user_id,
       bool reject_add_request = false, bool revoke_messages = false,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"限制聊天成员"动作序列化为Telegram API兼容的JSON字符串。
@@ -204,8 +194,7 @@ public:
    */
   auto serialize_ban_chat_member_request(
       std::string_view chat_id, std::string_view user_id, int32_t duration,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"限制聊天成员"动作序列化为Telegram
@@ -217,8 +206,7 @@ public:
    */
   auto serialize_unban_chat_member_request(
       std::string_view chat_id, std::string_view user_id,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"设置聊天权限"动作序列化为Telegram
@@ -230,8 +218,7 @@ public:
    */
   auto serialize_ban_all_members_request(
       std::string_view chat_id, bool enable = true,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"设置聊天标题"动作序列化为Telegram API兼容的JSON字符串。
@@ -242,8 +229,7 @@ public:
    */
   auto serialize_set_chat_title_request(
       std::string_view chat_id, std::string_view title,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"设置聊天头像"动作序列化为Telegram API兼容的JSON字符串。
@@ -255,8 +241,7 @@ public:
    */
   auto serialize_set_chat_photo_request(
       std::string_view chat_id, std::string_view file, bool cache,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"提升聊天成员"动作序列化为Telegram API兼容的JSON字符串。
@@ -268,8 +253,7 @@ public:
    */
   auto serialize_set_chat_admin_request(
       std::string_view chat_id, std::string_view user_id, bool is_admin = true,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"离开聊天"动作序列化为Telegram API兼容的JSON字符串。
@@ -280,8 +264,7 @@ public:
    */
   auto serialize_leave_chat_request(
       std::string_view chat_id, bool is_dismiss = false,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"处理聊天加入请求"动作序列化为Telegram API兼容的JSON字符串。
@@ -295,8 +278,7 @@ public:
   auto serialize_handle_join_request(
       const common::RequestEvent &request_event, bool approve = true,
       std::string_view reason = "", std::string_view remark = "",
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * @brief 将"获取文件"动作序列化为Telegram API兼容的JSON字符串。
@@ -306,8 +288,7 @@ public:
    */
   auto serialize_download_file_request(
       std::string_view file_id,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   // --- Telegram 特有接口 ---
 
@@ -447,3 +428,5 @@ public:
 };
 
 } // namespace obcx::adapter::telegram
+
+#endif // OBCX_INCLUDE_TELEGRAM_ADAPTER_PROTOCOL_ADAPTER_HPP_

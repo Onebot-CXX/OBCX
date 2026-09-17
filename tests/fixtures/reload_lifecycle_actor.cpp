@@ -1,5 +1,5 @@
-#include "core/actor_messages.hpp"
-#include "core/reflected_actor.hpp"
+#include "core/actor/actor_messages.hpp"
+#include "core/actor/reflected_actor.hpp"
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>

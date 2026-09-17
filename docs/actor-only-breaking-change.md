@@ -1,5 +1,9 @@
 # Actor-Only Runtime Breaking Change
 
+> Historical SDK note: this document records the earlier migration. References
+> to `BotOperationClient` or schema-1 input contracts describe the retired SDK;
+> see the [current modular SDK migration](architecture/modular-bot-sdk-migration.md) for schema 2.
+
 Applies to: OBCX C++26 reflected-actor cutover
 
 Date: 2026-07-30
@@ -143,8 +147,8 @@ mode = "await"
 
 ## Verification and recovery
 
-Use `actor_sdk_v2_smoke`, `actor_architecture_test`, and the standalone
-repository conformance test before deployment. Operational rollback means
+Use the complete root suite and `actor_sdk_v2_smoke` before deployment.
+Standalone actor repositories run their own release gates. Operational rollback means
 deploying the preceding OBCX release together with its matching configuration
 and extension binaries; it does not mean switching the actor-only executable
 to another runtime path.

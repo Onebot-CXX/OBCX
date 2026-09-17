@@ -52,3 +52,5 @@ obcx_add_reflection_compile_test(empty_command_pattern 18 FALSE
                                  OBCX_COMMAND_MATCHER_PATTERN_EMPTY)
 obcx_add_reflection_compile_test(invalid_pattern_command_name 19 FALSE
                                  OBCX_COMMAND_INVALID_NAME)
+obcx_add_reflection_compile_test(reserved_command_name 20 FALSE
+                                 OBCX_COMMAND_RESERVED_NAME)

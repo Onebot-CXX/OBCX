@@ -14,6 +14,10 @@
 #include "common/message_type.hpp"
 #include "network/http_client.hpp"
 #include "network/proxy_http_client.hpp"
+#include "onebot11/adapter/protocol_adapter.hpp"
+#include "onebot11/network/http/connection_manager.hpp"
+#include "telegram/adapter/protocol_adapter.hpp"
+#include "telegram/network/connection_manager.hpp"
 // NOLINTBEGIN
 
 namespace beast = boost::beast;
@@ -123,6 +127,7 @@ public:
   void set_chunked_response(bool chunked) { chunked_response_ = chunked; }
 
   [[nodiscard]] auto get_port() const -> uint16_t { return endpoint_.port(); }
+  [[nodiscard]] auto requests() const -> int { return requests_.load(); }
 
 private:
   void do_accept() {
@@ -152,6 +157,7 @@ private:
             return;
           }
 
+          ++requests_;
           OBCX_DEBUG("Received request: {} {}", req->method_string(),
                      req->target());
 
@@ -212,6 +218,7 @@ private:
   asio::executor_work_guard<asio::io_context::executor_type> work_guard_;
   std::thread thread_;
 
+  std::atomic_int requests_{0};
   std::atomic<std::chrono::milliseconds> response_delay_{
       std::chrono::milliseconds(0)};
   std::atomic<bool> should_respond_{true};
@@ -331,6 +338,283 @@ private:
   std::atomic_int connect_requests_{0};
 };
 
+TEST(HttpClientActorExecutorTest, DirectRequestAndBodyLimitOnThreadPool) {
+  common::Logger::initialize(spdlog::level::err);
+  MockHttpServer server("127.0.0.1");
+  server.set_response_body("actor-response");
+  server.set_response_delay(std::chrono::milliseconds(0));
+  server.start();
+  asio::thread_pool pool(1);
+  common::ConnectionConfig config;
+  config.host = "127.0.0.1";
+  config.port = server.get_port();
+  config.use_ssl = false;
+  config.connect_timeout = SHORT_TIMEOUT;
+  network::HttpClient client(pool.get_executor(), config);
+  client.set_response_body_limit(1024);
+  const std::map<std::string, std::string> headers;
+  auto response =
+      asio::co_spawn(pool, client.get("/", headers), asio::use_future);
+  EXPECT_EQ(response.get().body, "actor-response");
+  auto oversized =
+      asio::co_spawn(pool, client.get("/", headers, 4), asio::use_future);
+  EXPECT_THROW(oversized.get(), network::HttpClientError);
+  pool.join();
+}
+
+TEST(HttpClientActorExecutorTest, ProxyRequestAndBodyLimitOnThreadPool) {
+  common::Logger::initialize(spdlog::level::err);
+  MockConnectProxy proxy("actor-proxy-response");
+  proxy.start();
+  asio::thread_pool pool(1);
+  common::ConnectionConfig config;
+  config.host = "target.invalid";
+  config.port = 80;
+  config.use_ssl = false;
+  config.connect_timeout = SHORT_TIMEOUT;
+  const network::ProxyConfig proxy_config{.type = network::ProxyType::HTTP,
+                                          .host = "127.0.0.1",
+                                          .port = proxy.port(),
+                                          .username = std::nullopt,
+                                          .password = std::nullopt};
+  network::ProxyHttpClient client(pool.get_executor(), proxy_config, config);
+  client.set_response_body_limit(1024);
+  const std::map<std::string, std::string> headers;
+  auto response =
+      asio::co_spawn(pool, client.get("/", headers), asio::use_future);
+  EXPECT_EQ(response.get().body, "actor-proxy-response");
+  auto oversized =
+      asio::co_spawn(pool, client.get("/", headers, 4), asio::use_future);
+  EXPECT_THROW(oversized.get(), network::HttpClientError);
+  EXPECT_EQ(proxy.connect_requests(), 2);
+  pool.join();
+}
+
+TEST(HttpClientActorExecutorTest, OwnerExecutorSurvivesCallerRetirement) {
+  common::Logger::initialize(spdlog::level::err);
+  for (const bool proxied : {false, true}) {
+    SCOPED_TRACE(proxied);
+    MockHttpServer server("127.0.0.1");
+    server.set_response_delay(std::chrono::milliseconds{0});
+    server.start();
+    MockConnectProxy proxy("proxy-response");
+    proxy.start();
+    asio::io_context owner;
+    auto guard = asio::make_work_guard(owner);
+    common::ConnectionConfig config;
+    config.host = proxied ? "target.invalid" : "127.0.0.1";
+    config.port = proxied ? 80 : server.get_port();
+    config.use_ssl = false;
+    config.connect_timeout = SHORT_TIMEOUT;
+    std::unique_ptr<network::HttpClient> client;
+    if (proxied) {
+      client = std::make_unique<network::ProxyHttpClient>(
+          owner,
+          network::ProxyConfig{.type = network::ProxyType::HTTP,
+                               .host = "127.0.0.1",
+                               .port = proxy.port(),
+                               .username = std::nullopt,
+                               .password = std::nullopt},
+          config);
+    } else {
+      client = std::make_unique<network::HttpClient>(owner, config);
+    }
+    std::thread owner_thread;
+    // Each completed caller pool is destroyed while the HTTP client survives.
+    for (int method = 0; method < 3; ++method) {
+      asio::thread_pool caller(1);
+      auto result = asio::co_spawn(
+          caller,
+          [&client, method]() -> asio::awaitable<bool> {
+            const auto before = std::this_thread::get_id();
+            network::HttpResponse response;
+            if (method == 0) {
+              response = co_await client->get("/get");
+            } else if (method == 1) {
+              response = co_await client->post("/post", "payload");
+            } else {
+              response = co_await client->head("/head");
+            }
+            co_return response.status_code == 200 &&
+                before == std::this_thread::get_id();
+          },
+          asio::use_future);
+      if (method == 0) {
+        EXPECT_EQ(result.wait_for(std::chrono::milliseconds{100}),
+                  std::future_status::timeout);
+        EXPECT_EQ(server.requests(), 0);
+        EXPECT_EQ(proxy.connect_requests(), 0);
+        owner_thread = std::thread([&owner] { owner.run(); });
+      }
+      EXPECT_TRUE(result.get());
+      caller.join();
+    }
+    client->close();
+    client->close();
+    client.reset();
+    guard.reset();
+    owner_thread.join();
+  }
+}
+
+TEST(HttpClientActorExecutorTest, CloseCancelsStalledPostAndRejectsNewWork) {
+  common::Logger::initialize(spdlog::level::err);
+  MockHttpServer server("127.0.0.1");
+  server.set_should_respond(false);
+  server.start();
+  asio::thread_pool owner(1);
+  asio::thread_pool caller(1);
+  common::ConnectionConfig config;
+  config.host = "127.0.0.1";
+  config.port = server.get_port();
+  config.use_ssl = false;
+  config.connect_timeout = std::chrono::seconds{30};
+  auto client =
+      std::make_unique<network::HttpClient>(owner.get_executor(), config);
+  auto result = asio::co_spawn(caller, client->post("/hang", "payload"),
+                               asio::use_future);
+  const auto deadline = std::chrono::steady_clock::now() + SHORT_TIMEOUT;
+  while (server.requests() == 0 &&
+         std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
+  EXPECT_EQ(server.requests(), 1);
+  client->close();
+  auto rejected =
+      asio::co_spawn(caller, client->get("/late"), asio::use_future);
+  client.reset(); // Admitted requests must not dereference a dead HttpClient.
+  EXPECT_EQ(result.wait_for(SHORT_TIMEOUT), std::future_status::ready);
+  try {
+    (void)result.get();
+    ADD_FAILURE() << "closed POST must be cancelled";
+  } catch (const network::HttpClientError &error) {
+    EXPECT_NE(std::string{error.what()}.find("cancelled"), std::string::npos);
+    EXPECT_EQ(error.submission_state(),
+              network::HttpRequestSubmissionState::PossiblySubmitted);
+  }
+  try {
+    (void)rejected.get();
+    ADD_FAILURE() << "closed client must reject new work";
+  } catch (const network::HttpClientError &error) {
+    EXPECT_EQ(error.submission_state(),
+              network::HttpRequestSubmissionState::DefinitelyNotSubmitted);
+  }
+  caller.join();
+  owner.join();
+  EXPECT_EQ(server.requests(), 1);
+}
+
+TEST(HttpClientActorExecutorTest,
+     LazyRequestRetainsStateButCannotReopenClosedClient) {
+  asio::io_context owner;
+  common::ConnectionConfig config;
+  config.host = "127.0.0.1";
+  config.port = 1;
+  config.use_ssl = false;
+  config.connect_timeout = SHORT_TIMEOUT;
+  auto client = std::make_unique<network::HttpClient>(owner, config);
+  auto operation = client->get(std::string{"/owned-path"});
+  client.reset();
+  auto result = asio::co_spawn(owner, std::move(operation), asio::use_future);
+  owner.run();
+  EXPECT_THROW((void)result.get(), network::HttpClientError);
+}
+
+TEST(HttpClientActorExecutorTest, HttpPollingDisconnectDrainsWithoutRetry) {
+  common::Logger::initialize(spdlog::level::err);
+  for (const bool telegram : {false, true}) {
+    SCOPED_TRACE(telegram);
+    MockHttpServer server("127.0.0.1");
+    server.set_should_respond(false);
+    server.start();
+    asio::io_context owner;
+    common::ConnectionConfig config;
+    config.host = "127.0.0.1";
+    config.port = server.get_port();
+    config.use_ssl = false;
+    config.connect_timeout = std::chrono::seconds{30};
+    config.poll_timeout = std::chrono::seconds{20};
+    config.poll_force_close = std::chrono::seconds{30};
+    config.poll_retry_interval = std::chrono::seconds{30};
+    adapter::telegram::ProtocolAdapter telegram_protocol;
+    adapter::onebot11::ProtocolAdapter onebot_protocol;
+    network::TelegramConnectionManager telegram_manager(owner,
+                                                        telegram_protocol);
+    network::HttpConnectionManager onebot_manager(owner, onebot_protocol);
+    onebot_manager.set_poll_interval(std::chrono::seconds{30});
+    if (telegram) {
+      telegram_manager.connect(config);
+    } else {
+      onebot_manager.connect(config);
+    }
+    std::promise<void> drained;
+    auto completed = drained.get_future();
+    std::thread runner([&] {
+      owner.run();
+      drained.set_value();
+    });
+    const auto deadline = std::chrono::steady_clock::now() + SHORT_TIMEOUT;
+    while (server.requests() == 0 &&
+           std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    EXPECT_EQ(server.requests(), 1);
+    telegram_manager.disconnect();
+    onebot_manager.disconnect();
+    const auto status = completed.wait_for(SHORT_TIMEOUT);
+    EXPECT_EQ(status, std::future_status::ready);
+    if (status != std::future_status::ready) {
+      owner.stop(); // Test failure escape, never the production shutdown path.
+    }
+    runner.join();
+    EXPECT_EQ(server.requests(), 1);
+  }
+}
+
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+TEST(HttpClientActorExecutorTest,
+     SynchronousCallsUseIsolatedContextAndPreserveProxy) {
+  common::Logger::initialize(spdlog::level::err);
+  MockHttpServer server("127.0.0.1");
+  server.set_response_delay(std::chrono::milliseconds{0});
+  server.set_response_body("sync-response");
+  server.start();
+  MockConnectProxy proxy("proxy-response");
+  proxy.start();
+  asio::io_context idle_owner;
+  common::ConnectionConfig config;
+  config.host = "127.0.0.1";
+  config.port = server.get_port();
+  config.use_ssl = false;
+  config.connect_timeout = SHORT_TIMEOUT;
+  network::HttpClient client(idle_owner, config);
+  EXPECT_EQ(client.get_sync("/get").body, "sync-response");
+  EXPECT_EQ(client.post_sync("/post", "body").status_code, 200U);
+  EXPECT_EQ(client.head_sync("/head").status_code, 200U);
+  client.set_response_body_limit(4);
+  EXPECT_THROW((void)client.get_sync("/too-large"), network::HttpClientError);
+  EXPECT_FALSE(client.is_connected());
+  network::ProxyHttpClient proxied(
+      idle_owner,
+      network::ProxyConfig{.type = network::ProxyType::HTTP,
+                           .host = "127.0.0.1",
+                           .port = proxy.port(),
+                           .username = std::nullopt,
+                           .password = std::nullopt},
+      config);
+  EXPECT_EQ(proxied.get_sync("/proxy").body, "proxy-response");
+  EXPECT_EQ(proxy.connect_requests(), 1);
+  client.close();
+  EXPECT_THROW((void)client.get_sync("/closed"), network::HttpClientError);
+  EXPECT_EQ(idle_owner.poll(), 0U);
+}
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
 class HttpClientTimeoutTest : public testing::Test {
 protected:
   void SetUp() override {
@@ -436,12 +720,14 @@ TEST_F(HttpClientTimeoutTest, PostTimeoutWhenServerDoesNotRespond) {
 
   auto start_time = std::chrono::steady_clock::now();
 
-  EXPECT_THROW(
-      {
-        [[maybe_unused]] auto response =
-            run_awaitable(ioc_, client->post("/test", "{}"));
-      },
-      network::HttpClientError);
+  try {
+    [[maybe_unused]] auto response =
+        run_awaitable(ioc_, client->post("/test", "{}"));
+    FAIL() << "POST should time out after request submission";
+  } catch (const network::HttpClientError &error) {
+    EXPECT_EQ(error.submission_state(),
+              network::HttpRequestSubmissionState::PossiblySubmitted);
+  }
 
   auto end_time = std::chrono::steady_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -537,6 +823,20 @@ TEST_F(HttpClientTimeoutTest, CustomResponseBodyLimitAcceptsLargerBody) {
   EXPECT_EQ(response.body.size(), kNineMiB);
 }
 
+TEST_F(HttpClientTimeoutTest, PerRequestBodyLimitOverridesClientDefault) {
+  constexpr std::uint64_t kTenMiB = 10ULL * 1024ULL * 1024ULL;
+  constexpr std::size_t kNineMiB = 9ULL * 1024ULL * 1024ULL;
+  server_->set_response_body(std::string(kNineMiB, 'x'));
+  auto client = create_client(EXTENDED_WAIT);
+
+  auto response =
+      run_awaitable(ioc_, client->get("/large-per-request", {}, kTenMiB));
+
+  EXPECT_EQ(response.body.size(), kNineMiB);
+  EXPECT_EQ(client->response_body_limit(),
+            network::HttpClient::kDefaultResponseBodyLimit);
+}
+
 TEST_F(HttpClientTimeoutTest, CustomResponseBodyLimitRejectsOneByteOver) {
   constexpr std::uint64_t kLimit = 1024;
   server_->set_response_body(std::string(kLimit + 1, 'x'));
@@ -579,14 +879,33 @@ TEST_F(HttpClientTimeoutTest, PostResponseUsesConfiguredBodyLimit) {
                network::HttpClientError);
 }
 
-TEST_F(HttpClientTimeoutTest, DeprecatedSynchronousGetUsesConfiguredLimit) {
-  constexpr std::uint64_t kLimit = 1024;
-  server_->set_response_body(std::string(kLimit + 1, 'x'));
-  auto client = create_client(EXTENDED_WAIT);
-  client->set_response_body_limit(kLimit);
+TEST(HttpClientSubmissionStateTest,
+     ProxyPostConnectionRefusedIsDefinitelyNotSubmitted) {
+  asio::io_context port_context;
+  tcp::acceptor reservation(port_context, {tcp::v4(), 0});
+  const auto refused_port = reservation.local_endpoint().port();
+  reservation.close();
 
-  EXPECT_THROW([[maybe_unused]] auto response = client->get_sync("/sync"),
-               network::HttpClientError);
+  asio::io_context ioc;
+  common::ConnectionConfig target;
+  target.host = "api.telegram.org";
+  target.port = 443;
+  target.use_ssl = true;
+  target.connect_timeout = SHORT_TIMEOUT;
+  network::ProxyConfig proxy_config;
+  proxy_config.type = network::ProxyType::SOCKS5;
+  proxy_config.host = "127.0.0.1";
+  proxy_config.port = refused_port;
+  network::ProxyHttpClient client(ioc, std::move(proxy_config), target);
+
+  try {
+    [[maybe_unused]] auto response =
+        run_awaitable(ioc, client.post("/bot-redacted/sendMessage", "{}"));
+    FAIL() << "POST through an unavailable proxy should fail";
+  } catch (const network::HttpClientError &error) {
+    EXPECT_EQ(error.submission_state(),
+              network::HttpRequestSubmissionState::DefinitelyNotSubmitted);
+  }
 }
 
 TEST(HttpClientResponseLimitTest, ProxyGetUsesConfiguredLimit) {
