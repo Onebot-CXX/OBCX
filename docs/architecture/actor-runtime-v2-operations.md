@@ -45,6 +45,22 @@ The executor exposes these counters through `BlockingExecutor::metrics()`.
 Startup and shutdown logs publish the same payload-free fields so operators can
 distinguish saturation, callable failures, and shutdown rejection.
 
+## Successful bot-operation observation
+
+The process-owned bot operation dispatcher may install one success handler
+before endpoint registration is sealed. It schedules that handler only after an
+endpoint returns a successful `OperationReply`; rejected, failed, uncertain,
+and malformed operations do not qualify. Observation receives only the typed
+installation and action identities, never the request or response payload, and
+runs asynchronously so observer failure cannot change an already completed
+provider operation.
+
+The application uses this hook for Telegram message-send actions and routes an
+`obcx::core::events::BotMessageSentEvent` through the active actor generation.
+This records transport-proven activity without representing Telegram as having
+a native heartbeat. Non-message Telegram operations and every OneBot operation
+are ignored by this observer.
+
 ## Generation preparation
 
 A reflected actor may implement synchronous
@@ -138,6 +154,21 @@ proof that the candidate is active.
   blocking work, retires actor instances while retaining their DSO leases,
   drains generation I/O callbacks and completion bridges, and only then
   releases those leases and unloads the DSOs.
+- Installation HTTP clients bind transport resources to their constructor
+  executor, not the actor executor awaiting a request. Completions return to
+  the caller, whose admitted work must drain before its generation retires.
+  Request-local actor clients (including bridge image probes/downloads and GIF
+  detection) must use the running coroutine executor, not a temporary
+  `io_context` that nobody runs; otherwise requests and their deadlines stall.
+- HTTP `close()` is terminal and idempotent: it rejects new requests and queues
+  owned curl cancellation/cleanup. Keep the owning executor running until that
+  work drains; reconnect by constructing a fresh client. Synchronous legacy
+  calls use an isolated temporary client/context and drain it before return.
+- Bot stop requests cancellation without forcibly stopping its `io_context`.
+  Join bot runner threads before destroying installations; component teardown
+  happens only after pending polling, timer, socket, and completion work drains.
+  The application's existing deadline bounds bot-thread joins only, after
+  runtime shutdown returns; it does not bound generation I/O drain.
 
 Slow-resume warnings identify cooperative actor code that holds a worker too
 long. Blocking calls should use `ActorContext::run_blocking`; waiting for

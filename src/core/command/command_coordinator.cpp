@@ -615,6 +615,13 @@ auto CommandRoutingTable::bots() const noexcept
   return bots_;
 }
 
+auto CommandRoutingTable::message_observers(const CommandBotKey &key)
+    const noexcept -> const std::vector<ActiveCommandMessageObserver> & {
+  static const std::vector<ActiveCommandMessageObserver> empty;
+  const auto observers = message_observers_.find(key);
+  return observers == message_observers_.end() ? empty : observers->second;
+}
+
 auto CommandRoutingTable::policy_for(const std::string_view canonical_command)
     const -> const ActiveCommandPolicy & {
   const auto override_policy =
@@ -682,30 +689,30 @@ auto build_command_routing_table(
     -> CommandRoutingBuildResult {
   auto table = std::make_shared<CommandRoutingTable>();
   const auto runtime = snapshot.get_command_runtime_config();
-  if (runtime.routes.empty()) {
-    return {.table = std::move(table)};
-  }
-  if (!runtime.help.page_bytes || !runtime.help.maximum_pages) {
-    return command_failure(
-        "command_help_configuration_missing",
-        "active command routes require explicit help bounds");
-  }
-  table->help_page_bytes_ = *runtime.help.page_bytes;
-  table->help_maximum_pages_ = *runtime.help.maximum_pages;
-  table->global_policy_ =
-      compile_command_policy(runtime.access.groups, runtime.access.users);
-  if (!table->global_policy_) {
-    return command_failure(
-        "command_access_configuration_invalid",
-        "active command routes require complete explicit access policies");
-  }
-  for (const auto &[actor, contract] : contracts) {
-    (void)actor;
-    if (std::ranges::any_of(contract.commands, [](const auto &registration) {
-          return registration.name == command::help_name;
-        })) {
-      return command_failure("command_reserved_name",
-                             "actor command contract uses reserved name help");
+  if (!runtime.routes.empty()) {
+    if (!runtime.help.page_bytes || !runtime.help.maximum_pages) {
+      return command_failure(
+          "command_help_configuration_missing",
+          "active command routes require explicit help bounds");
+    }
+    table->help_page_bytes_ = *runtime.help.page_bytes;
+    table->help_maximum_pages_ = *runtime.help.maximum_pages;
+    table->global_policy_ =
+        compile_command_policy(runtime.access.groups, runtime.access.users);
+    if (!table->global_policy_) {
+      return command_failure(
+          "command_access_configuration_invalid",
+          "active command routes require complete explicit access policies");
+    }
+    for (const auto &[actor, contract] : contracts) {
+      (void)actor;
+      if (std::ranges::any_of(contract.commands, [](const auto &registration) {
+            return registration.name == command::help_name;
+          })) {
+        return command_failure(
+            "command_reserved_name",
+            "actor command contract uses reserved name help");
+      }
     }
   }
 
@@ -726,6 +733,106 @@ auto build_command_routing_table(
       adapters.emplace(bot.installation_id, plan->command_adapter());
       bot_actions.emplace(bot.installation_id,
                           plan->recipe().advertised_actions);
+    }
+  }
+
+  const auto raw_message_type =
+      std::string{canonical_message_type_name<events::RawMessageEvent>()};
+  for (const auto &configured_observer : runtime.message_observers) {
+    if (configured_observer.actor.empty() ||
+        configured_observer.platforms.empty() ||
+        configured_observer.bots.empty()) {
+      return command_failure(
+          "command_message_observer_invalid",
+          "command message observer requires explicit actor, platforms, and "
+          "bots");
+    }
+    const auto actor = actors.find(configured_observer.actor);
+    const auto contract = contracts.find(configured_observer.actor);
+    if (actor == actors.end() || contract == contracts.end()) {
+      return command_failure(
+          "command_message_observer_actor_unavailable",
+          "command message observer references a missing or disabled actor: " +
+              configured_observer.actor);
+    }
+    if (!contract->second.accepted_input_set.contains(raw_message_type)) {
+      return command_failure(
+          "command_message_observer_input_unsupported",
+          "command message observer actor does not accept RawMessageEvent: " +
+              configured_observer.actor);
+    }
+    if (configured_observer.timeout_ms <
+            common::CommandRuntimeConfig::min_timeout_ms ||
+        configured_observer.timeout_ms >
+            common::CommandRuntimeConfig::max_timeout_ms) {
+      return command_failure(
+          "command_message_observer_timeout_invalid",
+          "command message observer timeout is outside the supported range");
+    }
+
+    std::set<std::string> platforms;
+    for (const auto &configured_platform : configured_observer.platforms) {
+      auto platform = normalize_command_platform(configured_platform);
+      if (!platforms.emplace(platform).second) {
+        return command_failure(
+            "command_message_observer_scope_duplicate",
+            "command message observer repeats a platform scope: " + platform);
+      }
+      if (!ProcessConfigAccess::catalog(snapshot)->supports_ingress(platform)) {
+        return command_failure(
+            "command_message_observer_platform_unavailable",
+            "command message observer platform has no ingress adapter: " +
+                platform);
+      }
+    }
+
+    std::set<std::string> selected_bots;
+    std::set<std::string> covered_platforms;
+    for (const auto &bot_name : configured_observer.bots) {
+      if (!selected_bots.emplace(bot_name).second) {
+        return command_failure(
+            "command_message_observer_scope_duplicate",
+            "command message observer repeats a bot scope: " + bot_name);
+      }
+      const auto configured_bot = bots.find(bot_name);
+      if (configured_bot == bots.end()) {
+        return command_failure(
+            "command_message_observer_bot_unavailable",
+            "command message observer references a missing or disabled bot: " +
+                bot_name);
+      }
+      const auto &platform = configured_bot->second.ingress_platform;
+      if (!platforms.contains(platform)) {
+        return command_failure(
+            "command_message_observer_bot_platform_mismatch",
+            "command message observer bot platform is outside the configured "
+            "scope: " +
+                bot_name);
+      }
+      covered_platforms.emplace(platform);
+      const CommandBotKey key{.platform = platform, .bot = bot_name};
+      auto &active = table->message_observers_[key];
+      if (std::ranges::any_of(active, [&](const auto &observer) {
+            return observer.actor == configured_observer.actor;
+          })) {
+        return command_failure(
+            "command_message_observer_conflict",
+            "command message observer actor is duplicated for a bot scope: " +
+                configured_observer.actor + ":" + bot_name);
+      }
+      active.push_back(ActiveCommandMessageObserver{
+          .key = key,
+          .actor = configured_observer.actor,
+          .partition_expression = actor->second.partition,
+          .db_instance = actor->second.db,
+          .db_namespace = actor->second.db_namespace,
+          .timeout = std::chrono::milliseconds{configured_observer.timeout_ms},
+      });
+    }
+    if (covered_platforms != platforms) {
+      return command_failure(
+          "command_message_observer_platform_scope_empty",
+          "each command message observer platform must have a selected bot");
     }
   }
 
@@ -969,6 +1076,74 @@ CommandCoordinator::CommandCoordinator(
   }
 }
 
+auto CommandCoordinator::observe_message(const MessageEnvelope &message)
+    -> boost::asio::awaitable<OrchestratorResult> {
+  OrchestratorResult result;
+  const auto &observers = routing_table_->message_observers(CommandBotKey{
+      .platform = normalize_command_platform(message.source_platform),
+      .bot = message.source_bot,
+  });
+  for (const auto &observer : observers) {
+    result.stages.push_back(OrchestratorStageExecution{
+        .pipeline = "$message_observer",
+        .name = "observe",
+        .actor = observer.actor,
+        .input = message.type,
+        .mode = "await",
+        .partition_key =
+            resolve_partition_key(observer.partition_expression, message),
+        .terminal_async = false,
+    });
+    auto call = co_await async_invoke_with_timeout(
+        scheduler_,
+        ActorInvocation{
+            .actor_id = observer.actor,
+            .partition_key = result.stages.back().partition_key,
+            .db_instance = observer.db_instance,
+            .db_namespace = observer.db_namespace,
+            .message = message,
+        },
+        observer.timeout, boost::asio::use_awaitable);
+    if (call.status == CommandCallStatus::TimedOut) {
+      result.failures.push_back(OrchestratorFailure{
+          .pipeline = "$message_observer",
+          .stage = "observe",
+          .actor = observer.actor,
+          .failure =
+              ActorFailure{
+                  .code = "message_observer_timeout",
+                  .message = "message observer actor invocation timed out",
+                  .retryable = true,
+              },
+      });
+      continue;
+    }
+    if (!call.result.ok()) {
+      result.failures.push_back(OrchestratorFailure{
+          .pipeline = "$message_observer",
+          .stage = "observe",
+          .actor = observer.actor,
+          .failure = *call.result.failure,
+      });
+      continue;
+    }
+    if (!call.result.emitted.empty()) {
+      result.failures.push_back(OrchestratorFailure{
+          .pipeline = "$message_observer",
+          .stage = "observe",
+          .actor = observer.actor,
+          .failure =
+              ActorFailure{
+                  .code = "message_observer_emission_unsupported",
+                  .message = "message observer actor must not emit messages",
+                  .retryable = false,
+              },
+      });
+    }
+  }
+  co_return result;
+}
+
 auto CommandCoordinator::process(MessageEnvelope message,
                                  std::shared_ptr<void> route_lifetime)
     -> boost::asio::awaitable<OrchestratorResult> {
@@ -981,23 +1156,27 @@ auto CommandCoordinator::process(MessageEnvelope message,
                                               std::move(route_lifetime));
   }
 
+  auto result = co_await observe_message(message);
   const CommandBotKey bot_key{
       .platform = normalize_command_platform(message.source_platform),
       .bot = message.source_bot,
   };
   const auto *bot = routing_table_->find_bot(bot_key);
   if (bot == nullptr) {
-    co_return co_await orchestrator_->process(std::move(message),
-                                              std::move(route_lifetime));
+    auto continued = co_await orchestrator_->process(std::move(message),
+                                                     std::move(route_lifetime));
+    merge_result(result, std::move(continued));
+    co_return result;
   }
   const auto detected = bot->adapter->detect(message);
   if (!detected) {
-    co_return co_await orchestrator_->process(std::move(message),
-                                              std::move(route_lifetime));
+    auto continued = co_await orchestrator_->process(std::move(message),
+                                                     std::move(route_lifetime));
+    merge_result(result, std::move(continued));
+    co_return result;
   }
   const auto subject = command_policy_subject(message, *bot);
   if (detected->name == command::help_name) {
-    OrchestratorResult result;
     if (!subject || !routing_table_->permits(command::help_name, *subject)) {
       add_core_command_failure(result, command::help_name,
                                "command_access_denied",
@@ -1058,7 +1237,6 @@ auto CommandCoordinator::process(MessageEnvelope message,
   const auto matched =
       match_command_route(*routing_table_, *bot, detected->name);
   if (matched.ambiguous) {
-    OrchestratorResult result;
     add_command_match_failure(
         result, "command_match_ambiguous",
         "command candidate matched multiple active command patterns");
@@ -1069,11 +1247,12 @@ auto CommandCoordinator::process(MessageEnvelope message,
   }
   const auto *route = matched.route;
   if (route == nullptr) {
-    co_return co_await orchestrator_->process(std::move(message),
-                                              std::move(route_lifetime));
+    auto continued = co_await orchestrator_->process(std::move(message),
+                                                     std::move(route_lifetime));
+    merge_result(result, std::move(continued));
+    co_return result;
   }
   if (!subject || !routing_table_->permits(route->key.command, *subject)) {
-    OrchestratorResult result;
     add_core_command_failure(result, route->key.command,
                              "command_access_denied",
                              "command access was denied");
@@ -1130,7 +1309,6 @@ auto CommandCoordinator::process(MessageEnvelope message,
       },
       route->timeout, boost::asio::use_awaitable);
 
-  OrchestratorResult result;
   std::vector<MessageEnvelope> completions;
   for (auto &emitted : call.result.emitted) {
     if (emitted.type ==

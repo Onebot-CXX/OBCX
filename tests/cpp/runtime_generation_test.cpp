@@ -747,6 +747,26 @@ TEST_F(RuntimeGenerationTest,
   EXPECT_EQ(database_result.failure->code, "reload_restart_required");
   EXPECT_EQ(database_result.failure->message, "database_instances");
 
+  // Constrained hosts can clamp different requests to the same mandatory
+  // one-worker-per-domain allocation. Only changes to the resolved budget are
+  // process-owned and require a restart.
+  const auto expect_restart_or_unchanged_resolved_budget =
+      [&](const obcx::core::RuntimeGenerationBuildResult &result) {
+        if (result.failure.has_value()) {
+          EXPECT_EQ(result.failure->code, "reload_restart_required");
+          EXPECT_EQ(result.failure->message, "runtime_thread_budget");
+          return;
+        }
+
+        ASSERT_TRUE(result.ready());
+        const auto &active_budget = active.generation->thread_budget();
+        const auto &candidate_budget = result.generation->thread_budget();
+        EXPECT_EQ(candidate_budget.actor_workers, active_budget.actor_workers);
+        EXPECT_EQ(candidate_budget.io_workers, active_budget.io_workers);
+        EXPECT_EQ(candidate_budget.blocking_workers,
+                  active_budget.blocking_workers);
+      };
+
   auto thread_request =
       request(obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate, 5,
               active_config, database, registry);
@@ -754,10 +774,8 @@ TEST_F(RuntimeGenerationTest,
   thread_request.active_process_owned_fingerprint =
       active.generation->process_owned_fingerprint();
   thread_request.blocking_executor = active.generation->blocking_executor();
-  auto thread_result = builder.build(std::move(thread_request));
-  ASSERT_TRUE(thread_result.failure.has_value());
-  EXPECT_EQ(thread_result.failure->code, "reload_restart_required");
-  EXPECT_EQ(thread_result.failure->message, "runtime_thread_budget");
+  const auto thread_result = builder.build(std::move(thread_request));
+  expect_restart_or_unchanged_resolved_budget(thread_result);
 
   auto blocking_document = valid_config(OBCX_TEST_ACTOR_V2_LIBRARY);
   const auto blocking_workers = blocking_document.find("blocking_workers = 1");
@@ -773,10 +791,8 @@ TEST_F(RuntimeGenerationTest,
   blocking_request.active_process_owned_fingerprint =
       active.generation->process_owned_fingerprint();
   blocking_request.blocking_executor = active.generation->blocking_executor();
-  auto blocking_result = builder.build(std::move(blocking_request));
-  ASSERT_TRUE(blocking_result.failure.has_value());
-  EXPECT_EQ(blocking_result.failure->code, "reload_restart_required");
-  EXPECT_EQ(blocking_result.failure->message, "runtime_thread_budget");
+  const auto blocking_result = builder.build(std::move(blocking_request));
+  expect_restart_or_unchanged_resolved_budget(blocking_result);
 }
 
 TEST_F(RuntimeGenerationTest,

@@ -29,12 +29,15 @@ public:
       const BotEventContext &, const common::MessageEvent &)>;
   using NoticeHandler = std::function<boost::asio::awaitable<void>(
       const BotEventContext &, const common::NoticeEvent &)>;
+  using HeartbeatHandler = std::function<boost::asio::awaitable<void>(
+      const BotEventContext &, const common::HeartbeatEvent &)>;
 
   BotEventCapability(boost::asio::any_io_executor executor,
                      BotEventContext context);
 
   void subscribe_messages(MessageHandler handler);
   void subscribe_notices(NoticeHandler handler);
+  void subscribe_heartbeats(HeartbeatHandler handler);
   void activate() noexcept;
   void close() noexcept;
   void publish(const common::Event &event) const;
@@ -52,6 +55,7 @@ private:
   mutable std::mutex mutex_;
   std::vector<MessageHandler> message_handlers_;
   std::vector<NoticeHandler> notice_handlers_;
+  std::vector<HeartbeatHandler> heartbeat_handlers_;
   std::atomic_bool active_{};
 };
 

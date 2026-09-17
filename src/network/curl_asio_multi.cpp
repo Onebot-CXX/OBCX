@@ -175,6 +175,10 @@ public:
   }
 
   ~Impl() {
+    // Fallback for a context that discards queued work during destruction.
+    // Never let libcurl callbacks rearm Asio resources during teardown.
+    shutting_down_ = true;
+    disable_multi_callbacks();
     try {
       (void)timer_.cancel();
     } catch (...) {
@@ -196,7 +200,11 @@ public:
 
   [[nodiscard]] auto perform(CurlRequest request)
       -> boost::asio::awaitable<CurlResponse> {
-    auto self = shared_from_this();
+    return perform_owned(shared_from_this(), std::move(request));
+  }
+
+  static auto perform_owned(std::shared_ptr<Impl> self, CurlRequest request)
+      -> boost::asio::awaitable<CurlResponse> {
     auto token = boost::asio::use_awaitable;
     co_return co_await boost::asio::async_initiate<
         decltype(token), void(boost::system::error_code, CurlResponse)>(
@@ -241,12 +249,12 @@ public:
   }
 
   void shutdown() noexcept {
-    auto weak = weak_from_this();
-    boost::asio::dispatch(strand_, [weak] {
-      if (auto self = weak.lock()) {
-        self->shutdown_on_strand();
-      }
-    });
+    if (shutdown_requested_.exchange(true)) {
+      return;
+    }
+    // A weak capture can lose the only cleanup owner before this runs.
+    boost::asio::dispatch(
+        strand_, [self = shared_from_this()] { self->shutdown_on_strand(); });
   }
 
 private:
@@ -510,7 +518,7 @@ private:
   }
 
   void start_transfer(const std::shared_ptr<Transfer> &transfer) {
-    if (shutting_down_) {
+    if (shutdown_requested_.load()) {
       complete_transfer(transfer, boost::asio::error::operation_aborted);
       return;
     }
@@ -720,11 +728,19 @@ private:
     check_completions();
   }
 
+  void disable_multi_callbacks() noexcept {
+    if (multi_ != nullptr) {
+      (void)curl_multi_setopt(multi_, CURLMOPT_SOCKETFUNCTION, nullptr);
+      (void)curl_multi_setopt(multi_, CURLMOPT_TIMERFUNCTION, nullptr);
+    }
+  }
+
   void shutdown_on_strand() {
     if (shutting_down_) {
       return;
     }
     shutting_down_ = true;
+    disable_multi_callbacks();
     ++timer_epoch_;
     try {
       (void)timer_.cancel();
@@ -740,6 +756,11 @@ private:
       (void)easy;
       complete_transfer(transfer, boost::asio::error::operation_aborted);
     }
+    active.clear();
+    if (multi_ != nullptr) {
+      curl_multi_cleanup(multi_);
+      multi_ = nullptr;
+    }
   }
 
   boost::asio::strand<boost::asio::any_io_executor> strand_;
@@ -749,6 +770,7 @@ private:
   std::unordered_map<CURL *, std::shared_ptr<Transfer>> transfers_;
   std::uint64_t timer_epoch_ = 0;
   bool shutting_down_ = false;
+  std::atomic_bool shutdown_requested_{false};
 };
 
 CurlAsioMulti::CurlAsioMulti(boost::asio::any_io_executor executor)
@@ -758,7 +780,7 @@ CurlAsioMulti::~CurlAsioMulti() { shutdown(); }
 
 auto CurlAsioMulti::perform(CurlRequest request)
     -> boost::asio::awaitable<CurlResponse> {
-  co_return co_await impl_->perform(std::move(request));
+  return impl_->perform(std::move(request));
 }
 
 void CurlAsioMulti::shutdown() noexcept {

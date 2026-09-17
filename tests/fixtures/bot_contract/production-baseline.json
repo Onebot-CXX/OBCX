@@ -662,6 +662,49 @@
           ]
         }
       }
+    },
+    "telegram.media.send_photo_upload": {
+      "request": {
+        "action": "telegram.media.send_photo_upload",
+        "caption": "test",
+        "maximum_bytes": 16,
+        "photo": {
+          "bytes": [
+            82,
+            73,
+            70,
+            70
+          ],
+          "filename": "thumbnail.webp",
+          "mime_type": "image/webp",
+          "type": "photo"
+        },
+        "target": {
+          "installation": {
+            "installation_id": "tg-main",
+            "surface": "telegram.bot_api"
+          },
+          "native_group_id": "-1001"
+        },
+        "topic_id": 7
+      },
+      "success": {
+        "ok": true,
+        "value": {
+          "messages": [
+            {
+              "group": {
+                "installation": {
+                  "installation_id": "tg-main",
+                  "surface": "telegram.bot_api"
+                },
+                "native_group_id": "-1001"
+              },
+              "native_message_id": "42"
+            }
+          ]
+        }
+      }
     }
   },
   "recipes": [
@@ -704,6 +747,7 @@
         "telegram.media.send_group_uploads",
         "telegram.media.send_group_urls",
         "telegram.media.send_photo",
+        "telegram.media.send_photo_upload",
         "telegram.message.edit_text",
         "telegram.message.send_topic"
       ],

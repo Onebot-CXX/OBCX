@@ -72,7 +72,9 @@ public:
   [[nodiscard]] auto perform(CurlRequest request)
       -> boost::asio::awaitable<CurlResponse>;
 
-  // Cancels every transfer. Completion handlers remain owned until they run.
+  // Terminal, idempotent cancellation. Cleanup retains state on the owning
+  // strand; keep that executor/context alive and runnable until work drains.
+  // Completion handlers remain owned until they run on their caller executor.
   void shutdown() noexcept;
 
 private:

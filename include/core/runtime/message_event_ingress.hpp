@@ -3,6 +3,7 @@
 
 #include "common/message_type.hpp"
 #include "core/actor/actor.hpp"
+#include "core/bot/ids.hpp"
 
 #include <string>
 
@@ -17,6 +18,15 @@ auto raw_notice_envelope_from_event(const std::string &source_platform,
                                     const std::string &source_bot,
                                     const common::NoticeEvent &event)
     -> MessageEnvelope;
+
+auto raw_heartbeat_envelope_from_event(const std::string &source_platform,
+                                       const std::string &source_bot,
+                                       const common::HeartbeatEvent &event)
+    -> MessageEnvelope;
+
+auto bot_message_sent_envelope(const std::string &source_platform,
+                               const std::string &source_bot,
+                               const bot::ActionId &action) -> MessageEnvelope;
 
 } // namespace obcx::core
 

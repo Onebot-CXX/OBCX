@@ -8,51 +8,91 @@
 #include <mutex>
 #include <optional>
 #include <utility>
-#include <vector>
 
 namespace obcx::network {
 
-struct HttpClient::Impl {
+struct HttpClientState {
+  struct Settings {
+    common::ConnectionConfig config;
+    std::optional<detail::CurlProxySettings> proxy;
+    std::uint64_t response_body_limit;
+  };
+
+  HttpClientState(asio::any_io_executor executor, common::ConnectionConfig cfg)
+      : config(std::move(cfg)), executor_(std::move(executor)) {}
+
+  ~HttpClientState() { close(); }
+
+  auto settings() const -> Settings {
+    std::lock_guard lock(mutex);
+    if (closed_) {
+      throw HttpClientError("HTTP client is closed",
+                            HttpRequestSubmissionState::DefinitelyNotSubmitted);
+    }
+    return {config, proxy, response_body_limit};
+  }
+
+  auto driver() -> std::shared_ptr<detail::CurlAsioMulti> {
+    std::lock_guard lock(mutex);
+    if (closed_) {
+      throw HttpClientError("HTTP client is closed",
+                            HttpRequestSubmissionState::DefinitelyNotSubmitted);
+    }
+    if (!driver_) {
+      driver_ = std::make_shared<detail::CurlAsioMulti>(executor_);
+    }
+    return driver_;
+  }
+
+  void mark_connected() {
+    std::lock_guard lock(mutex);
+    connected = !closed_;
+  }
+
+  void close() {
+    std::shared_ptr<detail::CurlAsioMulti> retired;
+    {
+      std::lock_guard lock(mutex);
+      closed_ = true;
+      connected = false;
+      retired = std::move(driver_);
+    }
+    if (retired) {
+      retired->shutdown();
+    }
+  }
+
+  static auto perform(std::shared_ptr<HttpClientState> self,
+                      detail::CurlHttpMethod method, std::string path,
+                      std::string body,
+                      std::map<std::string, std::string> headers,
+                      std::optional<std::uint64_t> response_body_limit)
+      -> asio::awaitable<HttpResponse>;
+  static auto perform_sync(std::shared_ptr<HttpClientState> self,
+                           detail::CurlHttpMethod method, std::string path,
+                           std::string body,
+                           std::map<std::string, std::string> headers)
+      -> HttpResponse;
+
+  mutable std::mutex mutex;
   common::ConnectionConfig config;
   std::atomic<bool> connected{false};
   std::uint64_t response_body_limit{HttpClient::kDefaultResponseBodyLimit};
   std::optional<detail::CurlProxySettings> proxy;
 
-  explicit Impl(common::ConnectionConfig cfg) : config(std::move(cfg)) {}
-
-  ~Impl() { close_drivers(); }
-
-  auto driver_for(const asio::any_io_executor &executor)
-      -> std::shared_ptr<detail::CurlAsioMulti> {
-    std::lock_guard lock(drivers_mutex);
-    for (const auto &[candidate, driver] : drivers) {
-      if (candidate == executor) {
-        return driver;
-      }
-    }
-    auto driver = std::make_shared<detail::CurlAsioMulti>(executor);
-    drivers.emplace_back(executor, driver);
-    return driver;
-  }
-
-  void close_drivers() {
-    std::vector<DriverEntry> current;
-    {
-      std::lock_guard lock(drivers_mutex);
-      current.swap(drivers);
-    }
-    for (const auto &[executor, driver] : current) {
-      (void)executor;
-      driver->shutdown();
-    }
-  }
-
 private:
-  using DriverEntry =
-      std::pair<asio::any_io_executor, std::shared_ptr<detail::CurlAsioMulti>>;
+  // This context belongs to the client owner, never to an awaiting caller.
+  const asio::any_io_executor executor_;
+  std::shared_ptr<detail::CurlAsioMulti> driver_;
+  bool closed_ = false;
+};
 
-  std::mutex drivers_mutex;
-  std::vector<DriverEntry> drivers;
+// Keep HttpClient's public single-pointer layout while requests lease state.
+struct HttpClient::Impl {
+  Impl(asio::any_io_executor executor, common::ConnectionConfig config)
+      : state(std::make_shared<HttpClientState>(std::move(executor),
+                                                std::move(config))) {}
+  std::shared_ptr<HttpClientState> state;
 };
 
 } // namespace obcx::network

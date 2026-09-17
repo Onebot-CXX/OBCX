@@ -247,6 +247,12 @@ entries = []
 mode = "unrestricted"
 entries = []
 
+[[command_runtime.message_observers]]
+actor = "bridge"
+platforms = ["telegram"]
+bots = ["telegram_bot"]
+timeout_ms = 1200
+
 [[command_runtime.routes]]
 actor = "chat_llm"
 commands = ["chat", "toggle_think"]
@@ -260,6 +266,12 @@ timeout_ms = 1500
   ASSERT_TRUE(built);
   const auto commands = built.snapshot->get_command_runtime_config();
   EXPECT_EQ(commands.timeout_ms, 6000);
+  ASSERT_EQ(commands.message_observers.size(), 1U);
+  const auto &observer = commands.message_observers.front();
+  EXPECT_EQ(observer.actor, "bridge");
+  EXPECT_EQ(observer.platforms, (std::vector<std::string>{"telegram"}));
+  EXPECT_EQ(observer.bots, (std::vector<std::string>{"telegram_bot"}));
+  EXPECT_EQ(observer.timeout_ms, 1200U);
   ASSERT_EQ(commands.routes.size(), 1);
   const auto &route = commands.routes.front();
   EXPECT_EQ(route.actor, "chat_llm");
@@ -269,6 +281,34 @@ timeout_ms = 1500
   EXPECT_EQ(route.fallback, CommandFallback::Consume);
   EXPECT_EQ(route.timeout_ms, 1500);
   EXPECT_TRUE(built.snapshot->validate_actor_runtime_config().empty());
+}
+
+TEST_F(ActorConfigTest, RejectsMalformedCommandMessageObservers) {
+  const auto built = ActorConfigSnapshotBuilder::build(
+      toml::parse(R"(
+[command_runtime]
+message_observers = [
+  { actor = "", platforms = [], bots = ["primary"] },
+  "invalid",
+]
+)"),
+      {{.installation_id = "primary",
+        .enabled = true,
+        .surface = obcx::bot::SurfaceId{"telegram.bot_api"},
+        .transport = "http",
+        .ingress_platform = "telegram",
+        .command_target = "fixture_bot"}},
+      "invalid-message-observers.toml");
+  ASSERT_TRUE(built);
+  const auto errors = built.snapshot->validate_actor_runtime_config();
+  const auto contains = [&errors](const std::string_view code) {
+    return std::ranges::any_of(
+        errors, [code](const auto &error) { return error.code == code; });
+  };
+  EXPECT_TRUE(contains("invalid_command_message_observer"));
+  EXPECT_TRUE(contains("invalid_command_message_observer_actor"));
+  EXPECT_TRUE(contains("invalid_command_message_observer_scope"));
+  EXPECT_TRUE(contains("invalid_command_message_observer_timeout"));
 }
 
 TEST_F(ActorConfigTest, ParsesExplicitAccessPoliciesAndOverrides) {
@@ -293,10 +333,17 @@ entries = [
   { platform = "telegram", bot = "primary", native_user_id = "7" },
 ]
 
-[[command_runtime.access.overrides]]
-command = "help"
+[command_runtime.access.overrides.help]
 groups = { mode = "unrestricted", entries = [] }
 users = { mode = "allowlist", entries = [{ platform = "telegram", bot = "primary", native_user_id = "8" }] }
+
+[command_runtime.access.overrides.chat.groups]
+mode = "allowlist"
+entries = [{ platform = "telegram", bot = "primary", native_group_id = "-1002" }]
+
+[command_runtime.access.overrides.chat.users]
+mode = "unrestricted"
+entries = []
 
 [[command_runtime.routes]]
 actor = "chat_llm"
@@ -321,10 +368,24 @@ fallback = "consume"
   ASSERT_EQ(runtime.access.groups.entries.size(), 1U);
   EXPECT_EQ(runtime.access.groups.entries.front().native_group_id, "-1001");
   ASSERT_EQ(runtime.access.users.mode, CommandAccessMode::Denylist);
-  ASSERT_EQ(runtime.access.overrides.size(), 1U);
-  EXPECT_EQ(runtime.access.overrides.front().command, "help");
-  EXPECT_EQ(runtime.access.overrides.front().users.mode,
-            CommandAccessMode::Allowlist);
+  EXPECT_TRUE(runtime.access.overrides_present);
+  ASSERT_EQ(runtime.access.overrides.size(), 2U);
+  const auto find_override = [&runtime](const std::string_view command) {
+    return std::ranges::find(runtime.access.overrides, command,
+                             &CommandAccessOverrideConfig::command);
+  };
+  const auto help = find_override("help");
+  ASSERT_NE(help, runtime.access.overrides.end());
+  EXPECT_EQ(help->groups.mode, CommandAccessMode::Unrestricted);
+  EXPECT_EQ(help->users.mode, CommandAccessMode::Allowlist);
+  ASSERT_EQ(help->users.entries.size(), 1U);
+  EXPECT_EQ(help->users.entries.front().native_user_id, "8");
+  const auto chat = find_override("chat");
+  ASSERT_NE(chat, runtime.access.overrides.end());
+  EXPECT_EQ(chat->groups.mode, CommandAccessMode::Allowlist);
+  ASSERT_EQ(chat->groups.entries.size(), 1U);
+  EXPECT_EQ(chat->groups.entries.front().native_group_id, "-1002");
+  EXPECT_EQ(chat->users.mode, CommandAccessMode::Unrestricted);
 }
 
 TEST_F(ActorConfigTest, RejectsMissingMalformedAndUnsafeAccessConfiguration) {
@@ -379,14 +440,9 @@ entries = [
   { platform = "telegram", bot = "primary", native_user_id = "7" },
   { platform = "telegram", bot = "primary", native_user_id = "7" },
 ]
-[[command_runtime.access.overrides]]
-command = "help"
+[command_runtime.access.overrides.help]
 groups = { mode = "invalid", entries = [] }
 users = { mode = "unrestricted", entries = [], native_user_id = "bad" }
-[[command_runtime.access.overrides]]
-command = "help"
-groups = { mode = "unrestricted", entries = [] }
-users = { mode = "unrestricted", entries = [] }
 [[command_runtime.routes]]
 actor = "actor"
 commands = ["test"]
@@ -401,11 +457,151 @@ unknown = "field"
   EXPECT_TRUE(contains(errors, "command_access_installation_mismatch"));
   EXPECT_TRUE(contains(errors, "duplicate_command_access_identity"));
   EXPECT_TRUE(contains(errors, "invalid_command_access_mode"));
-  EXPECT_TRUE(contains(errors, "duplicate_command_access_override"));
   for (const auto &error : errors) {
     EXPECT_EQ(error.message.find("secret-value-must-not-appear"),
               std::string::npos);
   }
+}
+
+TEST_F(ActorConfigTest, RejectsMalformedKeyedCommandAccessOverrides) {
+  const std::string global_policies = R"(
+[command_runtime.access.groups]
+mode = "unrestricted"
+entries = []
+[command_runtime.access.users]
+mode = "unrestricted"
+entries = []
+)";
+  struct InvalidOverride {
+    std::string document;
+    std::string code;
+    std::string dependency;
+  };
+  const std::vector<InvalidOverride> cases = {
+      {R"(
+[[command_runtime.access.overrides]]
+command = "help"
+groups = { mode = "unrestricted", entries = [] }
+users = { mode = "unrestricted", entries = [] }
+)",
+       "invalid_command_access_overrides", "command_runtime.access.overrides"},
+      {"[command_runtime.access]\noverrides = []\n",
+       "invalid_command_access_overrides", "command_runtime.access.overrides"},
+      {"[command_runtime.access]\noverrides = false\n",
+       "invalid_command_access_overrides", "command_runtime.access.overrides"},
+      {"[command_runtime.access.overrides]\nhelp = 7\n",
+       "invalid_command_access_override",
+       "command_runtime.access.overrides.help"},
+      {"[[command_runtime.access.overrides.help]]\n",
+       "invalid_command_access_override",
+       "command_runtime.access.overrides.help"},
+      {R"([command_runtime.access.overrides."Bad!"])",
+       "invalid_command_access_override_name",
+       "command_runtime.access.overrides.Bad!"},
+      {R"([command_runtime.access.overrides.""])",
+       "invalid_command_access_override_name",
+       "command_runtime.access.overrides."},
+      {R"([command_runtime.access.overrides."/help"])",
+       "invalid_command_access_override_name",
+       "command_runtime.access.overrides./help"},
+      {"[command_runtime.access.overrides." + std::string(33, 'a') + "]",
+       "invalid_command_access_override_name",
+       "command_runtime.access.overrides." + std::string(33, 'a')},
+      {"[command_runtime.access.overrides.help]\ncommand = 'test'\n",
+       "unknown_command_runtime_field",
+       "command_runtime.access.overrides.help.command"},
+      {"[command_runtime.access.overrides.help]\nactor = 'actor'\n",
+       "unknown_command_runtime_field",
+       "command_runtime.access.overrides.help.actor"},
+      {"[command_runtime.access.overrides.help]\nusers = { mode = "
+       "'unrestricted', entries = [] }\n",
+       "missing_command_access_policy",
+       "command_runtime.access.overrides.help.groups"},
+      {"[command_runtime.access.overrides.help]\ngroups = { mode = "
+       "'unrestricted', entries = [] }\n",
+       "missing_command_access_policy",
+       "command_runtime.access.overrides.help.users"},
+      {"[command_runtime.access.overrides.help.groups]\nentries = []\n",
+       "invalid_command_access_mode",
+       "command_runtime.access.overrides.help.groups.mode"},
+      {"[command_runtime.access.overrides.help.users]\nmode = 'unrestricted'\n",
+       "invalid_command_access_entries",
+       "command_runtime.access.overrides.help.users.entries"},
+  };
+  for (const auto &test : cases) {
+    SCOPED_TRACE(test.document);
+    const auto built = ActorConfigSnapshotBuilder::build(
+        toml::parse(global_policies + test.document), {},
+        "invalid-keyed-overrides.toml");
+    ASSERT_TRUE(built);
+    const auto errors = built.snapshot->validate_actor_runtime_config();
+    const auto found =
+        std::ranges::find(errors, test.code, &ConfigValidationError::code);
+    ASSERT_NE(found, errors.end());
+    EXPECT_EQ(found->dependency, test.dependency);
+    if (test.code == "invalid_command_access_overrides") {
+      EXPECT_NE(found->message.find(
+                    "[command_runtime.access.overrides.<command>.groups]"),
+                std::string::npos);
+    }
+  }
+}
+
+TEST_F(ActorConfigTest, RejectsDuplicateKeyedCommandOverrideTables) {
+  EXPECT_THROW((void)toml::parse(R"(
+[command_runtime.access.overrides.help]
+groups = { mode = "unrestricted", entries = [] }
+users = { mode = "unrestricted", entries = [] }
+[command_runtime.access.overrides.help]
+groups = { mode = "unrestricted", entries = [] }
+users = { mode = "unrestricted", entries = [] }
+)"),
+               toml::parse_error);
+  EXPECT_THROW((void)toml::parse(R"(
+[command_runtime.access.overrides.help.groups]
+mode = "unrestricted"
+entries = []
+[command_runtime.access.overrides.help.groups]
+mode = "allowlist"
+entries = []
+)"),
+               toml::parse_error);
+}
+
+TEST_F(ActorConfigTest, BoundsKeyedCommandAccessOverrides) {
+  std::string document = R"(
+[command_runtime.access.groups]
+mode = "unrestricted"
+entries = []
+[command_runtime.access.users]
+mode = "unrestricted"
+entries = []
+[command_runtime.access.overrides]
+)";
+  const auto validate = [&document]() {
+    const auto built = ActorConfigSnapshotBuilder::build(
+        toml::parse(document), {}, "bounded-keyed-overrides.toml");
+    EXPECT_TRUE(built);
+    return built.snapshot->validate_actor_runtime_config();
+  };
+  EXPECT_TRUE(validate().empty());
+  for (std::size_t index = 0;
+       index < CommandRuntimeConfig::max_access_overrides; ++index) {
+    document += "\n[command_runtime.access.overrides.cmd_" +
+                std::to_string(index) + "]\n" +
+                "groups = { mode = 'unrestricted', entries = [] }\n" +
+                "users = { mode = 'unrestricted', entries = [] }\n";
+  }
+  EXPECT_TRUE(validate().empty());
+  document += R"(
+[command_runtime.access.overrides.overflow]
+groups = { mode = "unrestricted", entries = [] }
+users = { mode = "unrestricted", entries = [] }
+)";
+  const auto errors = validate();
+  EXPECT_TRUE(std::ranges::any_of(errors, [](const auto &error) {
+    return error.code == "command_access_overrides_exceed_limit";
+  }));
 }
 
 TEST_F(ActorConfigTest, RejectsMalformedCommandRuntimeRoutes) {
@@ -916,6 +1112,46 @@ source = "obcx::core::events::RawNoticeEvent"
 name = "observe"
 actor = "bridge"
 input = "obcx::core::events::RawNoticeEvent"
+mode = "await"
+)");
+
+  const auto errors = loader_.validate_actor_pipeline_configs();
+  EXPECT_TRUE(errors.empty());
+}
+
+TEST_F(ActorConfigTest, AcceptsRawHeartbeatEventAsRuntimeIngress) {
+  create_test_config(R"(
+[actors.bridge]
+library = "bridge"
+enabled = true
+
+[pipelines.heartbeat]
+source = "obcx::core::events::RawHeartbeatEvent"
+
+[[pipelines.heartbeat.stages]]
+name = "observe"
+actor = "bridge"
+input = "obcx::core::events::RawHeartbeatEvent"
+mode = "await"
+)");
+
+  const auto errors = loader_.validate_actor_pipeline_configs();
+  EXPECT_TRUE(errors.empty());
+}
+
+TEST_F(ActorConfigTest, AcceptsBotMessageSentEventAsRuntimeIngress) {
+  create_test_config(R"(
+[actors.bridge]
+library = "bridge"
+enabled = true
+
+[pipelines.message_sent]
+source = "obcx::core::events::BotMessageSentEvent"
+
+[[pipelines.message_sent.stages]]
+name = "observe"
+actor = "bridge"
+input = "obcx::core::events::BotMessageSentEvent"
 mode = "await"
 )");
 

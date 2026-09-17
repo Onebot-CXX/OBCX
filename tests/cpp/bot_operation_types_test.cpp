@@ -39,6 +39,7 @@ TEST(BotOperationTypesTest, ProductionWireIdsDoNotDependOnAnEnumOrdinal) {
                                      "telegram.message.send_topic",
                                      "telegram.message.edit_text",
                                      "telegram.media.send_photo",
+                                     "telegram.media.send_photo_upload",
                                      "telegram.media.send_group_urls",
                                      "telegram.media.send_group_uploads",
                                      "telegram.media.fetch_file",
@@ -47,7 +48,7 @@ TEST(BotOperationTypesTest, ProductionWireIdsDoNotDependOnAnEnumOrdinal) {
                                      "onebot11.group_file.resolve",
                                      "onebot11.private_file.resolve",
                                      "onebot11.group.poke"};
-  EXPECT_EQ((std::set<std::string>{ids.begin(), ids.end()}).size(), 14U);
+  EXPECT_EQ((std::set<std::string>{ids.begin(), ids.end()}).size(), 15U);
   for (const auto &id : ids) {
     const ActionId action{id};
     EXPECT_EQ(nlohmann::json(action).get<ActionId>(), action);

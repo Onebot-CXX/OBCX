@@ -577,14 +577,14 @@ auto RuntimeConfigSnapshot::get_command_runtime_config() const
         parse_user_policy(access->get_as<toml::table>("users"));
     const auto *overrides_node = access->get("overrides");
     config.access.overrides_present = overrides_node != nullptr;
-    if (const auto *overrides = access->get_as<toml::array>("overrides")) {
-      for (const auto &node : *overrides) {
+    if (const auto *overrides = access->get_as<toml::table>("overrides")) {
+      for (const auto &[command, node] : *overrides) {
         const auto *override_table = node.as_table();
         if (override_table == nullptr) {
           continue;
         }
         config.access.overrides.push_back(CommandAccessOverrideConfig{
-            .command = get_string_value(*override_table, "command"),
+            .command = std::string{command.str()},
             .groups = parse_group_policy(
                 override_table->get_as<toml::table>("groups")),
             .users =
@@ -593,26 +593,39 @@ auto RuntimeConfigSnapshot::get_command_runtime_config() const
       }
     }
   }
-  const auto *routes = runtime->get_as<toml::array>("routes");
-  if (routes == nullptr) {
-    return config;
-  }
-  for (const auto &route_node : *routes) {
-    const auto *route = route_node.as_table();
-    if (route == nullptr) {
-      continue;
+  if (const auto *observers =
+          runtime->get_as<toml::array>("message_observers")) {
+    for (const auto &observer_node : *observers) {
+      const auto *observer = observer_node.as_table();
+      if (observer == nullptr) {
+        continue;
+      }
+      config.message_observers.push_back(CommandMessageObserverConfig{
+          .actor = get_string_value(*observer, "actor"),
+          .platforms = get_string_array(observer->get("platforms")),
+          .bots = get_string_array(observer->get("bots")),
+          .timeout_ms = get_non_negative_size(*observer, "timeout_ms", 0),
+      });
     }
-    CommandRouteConfig parsed;
-    parsed.actor = get_string_value(*route, "actor");
-    parsed.commands = get_string_array(route->get("commands"));
-    parsed.platforms = get_string_array(route->get("platforms"));
-    parsed.bots = get_string_array(route->get("bots"));
-    parsed.fallback =
-        get_string_value(*route, "fallback", "continue") == "consume"
-            ? CommandFallback::Consume
-            : CommandFallback::Continue;
-    parsed.timeout_ms = get_non_negative_size(*route, "timeout_ms", 0);
-    config.routes.push_back(std::move(parsed));
+  }
+  if (const auto *routes = runtime->get_as<toml::array>("routes")) {
+    for (const auto &route_node : *routes) {
+      const auto *route = route_node.as_table();
+      if (route == nullptr) {
+        continue;
+      }
+      CommandRouteConfig parsed;
+      parsed.actor = get_string_value(*route, "actor");
+      parsed.commands = get_string_array(route->get("commands"));
+      parsed.platforms = get_string_array(route->get("platforms"));
+      parsed.bots = get_string_array(route->get("bots"));
+      parsed.fallback =
+          get_string_value(*route, "fallback", "continue") == "consume"
+              ? CommandFallback::Consume
+              : CommandFallback::Continue;
+      parsed.timeout_ms = get_non_negative_size(*route, "timeout_ms", 0);
+      config.routes.push_back(std::move(parsed));
+    }
   }
   return config;
 }
@@ -695,9 +708,10 @@ auto RuntimeConfigSnapshot::validate_actor_runtime_config() const
   const auto *command_runtime =
       config_data_.get_as<toml::table>("command_runtime");
   if (command_runtime != nullptr) {
-    append_unknown_key_errors(*command_runtime,
-                              {"timeout_ms", "help", "access", "routes"},
-                              "command_runtime", errors);
+    append_unknown_key_errors(
+        *command_runtime,
+        {"timeout_ms", "help", "access", "message_observers", "routes"},
+        "command_runtime", errors);
     const auto *routes = command_runtime->get_as<toml::array>("routes");
     const auto routes_active = routes != nullptr && !routes->empty();
 
@@ -748,11 +762,13 @@ auto RuntimeConfigSnapshot::validate_actor_runtime_config() const
                               "command_runtime.access.users", bots_, errors);
       const auto *overrides_node = access->get("overrides");
       const auto *overrides =
-          overrides_node == nullptr ? nullptr : overrides_node->as_array();
+          overrides_node == nullptr ? nullptr : overrides_node->as_table();
       if (overrides_node != nullptr && overrides == nullptr) {
         errors.push_back(ConfigValidationError{
             .code = "invalid_command_access_overrides",
-            .message = "command access overrides must be an array of tables",
+            .message = "command access overrides must be keyed tables; use "
+                       "[command_runtime.access.overrides.<command>.groups] "
+                       "and .users instead of an array with command fields",
             .dependency = "command_runtime.access.overrides",
         });
       }
@@ -764,11 +780,17 @@ auto RuntimeConfigSnapshot::validate_actor_runtime_config() const
               .dependency = "command_runtime.access.overrides",
           });
         }
-        std::unordered_set<std::string> names;
-        std::size_t override_index = 0;
-        for (const auto &node : *overrides) {
-          const auto path = "command_runtime.access.overrides[" +
-                            std::to_string(override_index++) + "]";
+        for (const auto &[key, node] : *overrides) {
+          const auto command = std::string{key.str()};
+          const auto path = "command_runtime.access.overrides." + command;
+          if (!valid_command_name(command)) {
+            errors.push_back(ConfigValidationError{
+                .code = "invalid_command_access_override_name",
+                .message =
+                    "command access override key must be a canonical name",
+                .dependency = path,
+            });
+          }
           const auto *override_table = node.as_table();
           if (override_table == nullptr) {
             errors.push_back(ConfigValidationError{
@@ -778,23 +800,8 @@ auto RuntimeConfigSnapshot::validate_actor_runtime_config() const
             });
             continue;
           }
-          append_unknown_key_errors(
-              *override_table, {"command", "groups", "users"}, path, errors);
-          const auto command =
-              (*override_table)["command"].value<std::string>();
-          if (!command || !valid_command_name(*command)) {
-            errors.push_back(ConfigValidationError{
-                .code = "invalid_command_access_override_name",
-                .message = "command access override requires a canonical name",
-                .dependency = path + ".command",
-            });
-          } else if (!names.insert(*command).second) {
-            errors.push_back(ConfigValidationError{
-                .code = "duplicate_command_access_override",
-                .message = "command access override names must be unique",
-                .dependency = path + ".command",
-            });
-          }
+          append_unknown_key_errors(*override_table, {"groups", "users"}, path,
+                                    errors);
           validate_command_policy(override_table->get_as<toml::table>("groups"),
                                   true, path + ".groups", bots_, errors);
           validate_command_policy(override_table->get_as<toml::table>("users"),
@@ -818,6 +825,89 @@ auto RuntimeConfigSnapshot::validate_actor_runtime_config() const
         });
       }
     }
+    const auto *observers_node = command_runtime->get("message_observers");
+    if (observers_node != nullptr && observers_node->as_array() == nullptr) {
+      errors.push_back(ConfigValidationError{
+          .code = "invalid_command_message_observers",
+          .message =
+              "command_runtime.message_observers must be an array of tables",
+          .dependency = "command_runtime.message_observers",
+      });
+    }
+    if (const auto *observers =
+            command_runtime->get_as<toml::array>("message_observers")) {
+      if (observers->size() > CommandRuntimeConfig::max_message_observers) {
+        errors.push_back(ConfigValidationError{
+            .code = "command_message_observers_exceed_limit",
+            .message = "command message observers exceed the supported bound",
+            .dependency = "command_runtime.message_observers",
+        });
+      }
+      size_t observer_index = 0;
+      for (const auto &observer_node : *observers) {
+        const auto *observer = observer_node.as_table();
+        const auto observer_path = "command_runtime.message_observers[" +
+                                   std::to_string(observer_index++) + "]";
+        if (observer == nullptr) {
+          errors.push_back(ConfigValidationError{
+              .code = "invalid_command_message_observer",
+              .message = "command message observer must be a table",
+              .dependency = observer_path,
+          });
+          continue;
+        }
+        append_unknown_key_errors(*observer,
+                                  {"actor", "platforms", "bots", "timeout_ms"},
+                                  observer_path, errors);
+        const auto actor = observer->get("actor");
+        if (actor == nullptr || !actor->is_string() ||
+            actor->value_or<std::string>("").empty()) {
+          errors.push_back(ConfigValidationError{
+              .code = "invalid_command_message_observer_actor",
+              .message =
+                  "command message observer actor must be a non-empty string",
+              .dependency = observer_path + ".actor",
+          });
+        }
+        for (const auto key :
+             {std::string_view{"platforms"}, std::string_view{"bots"}}) {
+          const auto *node = observer->get(key);
+          const auto *array = node == nullptr ? nullptr : node->as_array();
+          if (array == nullptr || array->empty() ||
+              !std::ranges::all_of(*array, [](const auto &item) {
+                if (!item.is_string()) {
+                  return false;
+                }
+                const auto value = item.template value<std::string>();
+                return value && !value->empty();
+              })) {
+            errors.push_back(ConfigValidationError{
+                .code = "invalid_command_message_observer_scope",
+                .message = "command message observer platforms and bots must "
+                           "be non-empty string arrays",
+                .dependency = observer_path + "." + std::string{key},
+            });
+          }
+        }
+        const auto *timeout = observer->get("timeout_ms");
+        const auto timeout_value = timeout == nullptr
+                                       ? std::optional<int64_t>{}
+                                       : timeout->value<int64_t>();
+        if (!timeout_value ||
+            *timeout_value <
+                static_cast<int64_t>(CommandRuntimeConfig::min_timeout_ms) ||
+            *timeout_value >
+                static_cast<int64_t>(CommandRuntimeConfig::max_timeout_ms)) {
+          errors.push_back(ConfigValidationError{
+              .code = "invalid_command_message_observer_timeout",
+              .message = "command message observer timeout_ms must be "
+                         "specified within the supported range",
+              .dependency = observer_path + ".timeout_ms",
+          });
+        }
+      }
+    }
+
     const auto *routes_node = command_runtime->get("routes");
     if (routes_node != nullptr && routes_node->as_array() == nullptr) {
       errors.push_back(ConfigValidationError{
@@ -964,7 +1054,9 @@ auto RuntimeConfigSnapshot::validate_actor_pipeline_configs() const
 
   std::unordered_set<std::string> routable_sources{
       "obcx::core::events::RawMessageEvent",
-      "obcx::core::events::RawNoticeEvent", "ActorFailed"};
+      "obcx::core::events::RawNoticeEvent",
+      "obcx::core::events::RawHeartbeatEvent",
+      "obcx::core::events::BotMessageSentEvent", "ActorFailed"};
   for (const auto &pipeline : pipelines) {
     for (const auto &stage : pipeline.stages) {
       if (!stage.input.empty()) {

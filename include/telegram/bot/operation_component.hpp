@@ -18,6 +18,9 @@ public:
   virtual ~TelegramMediaUploader() = default;
 
   virtual auto upload(
+      const obcx::telegram::bot::SendTelegramPhotoUploadRequest &request)
+      -> boost::asio::awaitable<std::string> = 0;
+  virtual auto upload(
       const obcx::telegram::bot::SendTelegramMediaGroupUploadsRequest &request)
       -> boost::asio::awaitable<std::string> = 0;
 };

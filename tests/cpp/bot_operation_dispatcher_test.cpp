@@ -198,6 +198,38 @@ TEST(BotOperationDispatcherTest, DispatchesByExactInstallation) {
   EXPECT_EQ(endpoint->send_calls.load(), 1);
 }
 
+TEST(BotOperationDispatcherTest, ObservesOnlySuccessfulOperations) {
+  obcx::core::BotOperationDispatcher dispatcher{known_surface};
+  auto endpoint = std::make_shared<RecordingEndpoint>(
+      BotInstallationRef{.installation_id = "tg-main",
+                         .surface = SurfaceId{"telegram.bot_api"}},
+      std::vector{SendGroupMessageRequest::action});
+  dispatcher.register_endpoint(endpoint->registry());
+  std::vector<obcx::core::SuccessfulBotOperation> observed;
+  dispatcher.set_success_handler(
+      [&observed](obcx::core::SuccessfulBotOperation operation)
+          -> asio::awaitable<void> {
+        observed.push_back(std::move(operation));
+        co_return;
+      });
+
+  const SendGroupMessageRequest request{
+      .target = {.installation = endpoint->installation(),
+                 .native_group_id = "chat"},
+      .message = text_message(),
+  };
+  const auto succeeded = run(obcx::bot::invoke(dispatcher, request));
+  ASSERT_TRUE(succeeded.ok());
+  ASSERT_EQ(observed.size(), 1U);
+  EXPECT_EQ(observed.front().installation, endpoint->installation());
+  EXPECT_EQ(observed.front().action, SendGroupMessageRequest::action);
+
+  endpoint->send_exception = "send failed";
+  const auto failed = run(obcx::bot::invoke(dispatcher, request));
+  ASSERT_FALSE(failed.ok());
+  EXPECT_EQ(observed.size(), 1U);
+}
+
 TEST(BotOperationDispatcherTest, MissingWrongSurfaceAndUnsupportedDoNoIo) {
   obcx::core::BotOperationDispatcher dispatcher{known_surface};
   auto endpoint = std::make_shared<RecordingEndpoint>(

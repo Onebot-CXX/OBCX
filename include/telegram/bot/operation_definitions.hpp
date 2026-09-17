@@ -28,6 +28,8 @@ void for_each_operation(bool include_upload, Visitor visit) {
   if (include_upload) {
     auto upload_dependencies = dependencies;
     upload_dependencies.push_back("telegram.media-upload");
+    visit(core::OperationDefinition<SendTelegramPhotoUploadRequest>{
+        upload_dependencies});
     visit(core::OperationDefinition<SendTelegramMediaGroupUploadsRequest>{
         std::move(upload_dependencies)});
   }

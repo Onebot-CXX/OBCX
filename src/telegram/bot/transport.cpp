@@ -139,6 +139,17 @@ auto TelegramTransportCapability::download_file_content(
   co_return co_await impl_->manager->download_file_content(url, maximum_bytes);
 }
 
+auto TelegramTransportCapability::upload_photo(
+    const std::string_view chat_id, const TelegramMediaUpload &photo,
+    const std::string_view caption, const std::optional<std::int64_t> topic_id)
+    -> boost::asio::awaitable<std::string> {
+  if (impl_->manager == nullptr) {
+    throw BotComponentRuntimeError("Telegram transport is not configured");
+  }
+  co_return co_await impl_->manager->upload_photo_multipart(
+      chat_id, photo.data, photo.filename, photo.mime_type, caption, topic_id);
+}
+
 auto TelegramTransportCapability::upload_media_group(
     const std::string_view chat_id,
     const std::vector<TelegramMediaUpload> &media,

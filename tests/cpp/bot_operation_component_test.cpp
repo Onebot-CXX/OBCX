@@ -103,6 +103,16 @@ public:
     download_maximum_bytes = maximum_bytes;
     co_return file_content;
   }
+  auto upload_photo(std::string_view chat_id,
+                    const obcx::core::TelegramMediaUpload &photo,
+                    std::string_view, std::optional<std::int64_t>)
+      -> asio::awaitable<std::string> override {
+    ++photo_upload_calls;
+    upload_chat = chat_id;
+    upload_count = 1;
+    upload_bytes = photo.data.size();
+    co_return photo_upload_response;
+  }
   auto upload_media_group(
       std::string_view chat_id,
       const std::vector<obcx::core::TelegramMediaUpload> &media,
@@ -123,6 +133,8 @@ public:
   std::vector<std::string> payloads;
   std::string download_url = "https://api.telegram.test/file/bot-redacted/path";
   std::string file_content = "file-bytes";
+  std::string photo_upload_response =
+      R"({"ok":true,"result":{"message_id":70}})";
   std::string upload_response =
       R"({"ok":true,"result":[{"message_id":71},{"message_id":72}]})";
   std::string downloaded_file_id;
@@ -131,6 +143,7 @@ public:
   std::string upload_chat;
   std::size_t upload_count{};
   std::size_t upload_calls{};
+  std::size_t photo_upload_calls{};
   std::size_t upload_bytes{};
 
 private:
@@ -301,7 +314,7 @@ TEST(BotOperationComponentTest,
   const auto endpoint = installation.capability<BotOperationEndpoint>(
       CapabilityId{"bot.operations"});
   ASSERT_NE(endpoint, nullptr);
-  EXPECT_EQ(endpoint->declared_actions().size(), 9U);
+  EXPECT_EQ(endpoint->declared_actions().size(), 10U);
 
   const GroupTarget target{
       .installation = {.installation_id = "tg-main",
@@ -352,6 +365,16 @@ TEST(BotOperationComponentTest,
                           .media = {{.type = "photo", .source = "file-a"},
                                     {.type = "photo", .source = "file-b"}}}))
                   .ok());
+  const auto uploaded_photo = run(obcx::bot::invoke(
+      *endpoint, obcx::telegram::bot::SendTelegramPhotoUploadRequest{
+                     .target = target,
+                     .photo = {.type = "photo",
+                               .filename = "thumbnail.webp",
+                               .mime_type = "image/webp",
+                               .bytes = {1, 2, 3}},
+                     .maximum_bytes = 16}));
+  ASSERT_TRUE(uploaded_photo.ok());
+  EXPECT_EQ(transport->photo_upload_calls, 1U);
   const auto uploaded = run(obcx::bot::invoke(
       *endpoint, obcx::telegram::bot::SendTelegramMediaGroupUploadsRequest{
                      .target = target,
@@ -440,6 +463,10 @@ TEST(BotOperationComponentTest,
           actions,
           obcx::telegram::bot::SendTelegramMediaGroupUploadsRequest::action),
       actions.end());
+  EXPECT_EQ(
+      std::ranges::find(
+          actions, obcx::telegram::bot::SendTelegramPhotoUploadRequest::action),
+      actions.end());
 }
 
 TEST(BotOperationComponentTest,
@@ -451,6 +478,8 @@ TEST(BotOperationComponentTest,
       R"({"ok":true,"result":[{"message_id":32}]})",
       R"({"ok":true,"result":{"message_id":33}})",
   };
+  transport->photo_upload_response =
+      R"({"ok":true,"result":[{"message_id":34}]})";
   transport->upload_response = R"({"ok":true,"result":[{"message_id":34}]})";
   obcx::core::BotInstallation installation{
       "tg-shapes", obcx::bot::SurfaceId{"telegram.bot_api"}};
@@ -496,6 +525,14 @@ TEST(BotOperationComponentTest,
                      .target = target,
                      .media = {{.type = "photo", .source = "file-a"},
                                {.type = "photo", .source = "file-b"}}})));
+  expect_malformed(run(obcx::bot::invoke(
+      *endpoint, obcx::telegram::bot::SendTelegramPhotoUploadRequest{
+                     .target = target,
+                     .photo = {.type = "photo",
+                               .filename = "thumbnail.webp",
+                               .mime_type = "image/webp",
+                               .bytes = {1}},
+                     .maximum_bytes = 16})));
   expect_malformed(run(obcx::bot::invoke(
       *endpoint, obcx::telegram::bot::SendTelegramMediaGroupUploadsRequest{
                      .target = target,
@@ -555,6 +592,40 @@ auto production_operation_fixture() -> obcx::bot::Json {
     throw std::runtime_error("cannot open operation golden fixture");
   }
   return obcx::bot::Json::parse(input);
+}
+
+TEST(BotOperationComponentTest, BoundedPhotoReachesMultipartTransport) {
+  auto transport = std::make_shared<FakeTelegramTransport>();
+  obcx::core::BotInstallation installation{
+      "tg-main", obcx::bot::SurfaceId{"telegram.bot_api"}};
+  installation.add_component(
+      std::make_unique<obcx::core::TelegramProtocolComponent>());
+  installation.add_component(
+      std::make_unique<FakeTelegramTransportComponent>(transport));
+  installation.add_component(
+      std::make_unique<obcx::core::TelegramMediaUploadComponent>());
+  installation.add_component(
+      std::make_unique<obcx::core::TelegramOperationsComponent>("tg-main",
+                                                                true));
+  installation.start();
+  auto endpoint = installation.capability<BotOperationEndpoint>(
+      CapabilityId{"bot.operations"});
+  obcx::telegram::bot::SendTelegramPhotoUploadRequest request{
+      .target = {.installation = endpoint->installation(),
+                 .native_group_id = "-1001"},
+      .photo = {.type = "photo",
+                .filename = "thumbnail.webp",
+                .mime_type = "image/webp",
+                .bytes = {0x52, 0x49, 0x46, 0x46}},
+      .caption = "caption",
+      .topic_id = 7,
+      .maximum_bytes = 1024};
+  const auto result = run(obcx::bot::invoke(*endpoint, std::move(request)));
+  ASSERT_TRUE(result.ok());
+  EXPECT_EQ(transport->photo_upload_calls, 1U);
+  EXPECT_EQ(transport->upload_bytes, 4U);
+  EXPECT_EQ(transport->upload_count, 1U);
+  EXPECT_EQ(result.value->messages.size(), 1U);
 }
 
 TEST(BotOperationComponentTest, BoundedBinaryMediaReachesMultipartTransport) {
@@ -675,6 +746,10 @@ TEST(BotOperationComponentTest,
                         obcx::telegram::bot::FetchTelegramFileRequest>) {
         transport->download_url = malformed ? "https://example.test/file" : "";
         transport->file_content.clear();
+      } else if constexpr (std::is_same_v<Request,
+                                          obcx::telegram::bot::
+                                              SendTelegramPhotoUploadRequest>) {
+        transport->photo_upload_response = response;
       } else if constexpr (std::is_same_v<
                                Request,
                                obcx::telegram::bot::
@@ -696,6 +771,7 @@ TEST(BotOperationComponentTest,
   });
   EXPECT_EQ(transport->payloads.size(), 14U);
   EXPECT_EQ(transport->upload_calls, 2U);
+  EXPECT_EQ(transport->photo_upload_calls, 2U);
 }
 
 TEST(BotOperationComponentTest,

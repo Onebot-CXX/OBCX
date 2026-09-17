@@ -43,6 +43,18 @@ void BotEventCapability::subscribe_notices(NoticeHandler handler) {
   notice_handlers_.push_back(std::move(handler));
 }
 
+void BotEventCapability::subscribe_heartbeats(HeartbeatHandler handler) {
+  if (!handler) {
+    throw BotComponentRuntimeError("heartbeat event handler cannot be empty");
+  }
+  if (active()) {
+    throw BotComponentRuntimeError(
+        "heartbeat subscriptions must be installed before event activation");
+  }
+  std::scoped_lock lock(mutex_);
+  heartbeat_handlers_.push_back(std::move(handler));
+}
+
 void BotEventCapability::activate() noexcept {
   active_.store(true, std::memory_order_release);
 }
@@ -78,6 +90,21 @@ void BotEventCapability::publish(const common::Event &event) const {
           {
             std::scoped_lock lock(mutex_);
             handlers = notice_handlers_;
+          }
+          for (const auto &handler : handlers) {
+            boost::asio::co_spawn(
+                executor_,
+                [handler, context = context_,
+                 event = typed_event]() -> boost::asio::awaitable<void> {
+                  co_await handler(context, event);
+                },
+                boost::asio::detached);
+          }
+        } else if constexpr (std::is_same_v<Event, common::HeartbeatEvent>) {
+          std::vector<HeartbeatHandler> handlers;
+          {
+            std::scoped_lock lock(mutex_);
+            handlers = heartbeat_handlers_;
           }
           for (const auto &handler : handlers) {
             boost::asio::co_spawn(

@@ -74,6 +74,23 @@ TEST(MessageEventIngressTest, BuildsRawMessageEnvelopeFromMessageEvent) {
   EXPECT_EQ(envelope.raw["message"][0]["data"]["text"], "hello actor");
 }
 
+TEST(MessageEventIngressTest, BuildsSuccessfulMessageSendEnvelope) {
+  const auto before = std::chrono::system_clock::now();
+  const auto envelope = bot_message_sent_envelope(
+      "telegram", "telegram-main",
+      obcx::bot::ActionId{"telegram.media.send_photo"});
+  const auto after = std::chrono::system_clock::now();
+
+  EXPECT_EQ(envelope.type, "obcx::core::events::BotMessageSentEvent");
+  EXPECT_EQ(envelope.source_platform, "telegram");
+  EXPECT_EQ(envelope.source_bot, "telegram-main");
+  EXPECT_EQ(envelope.conversation_id, "global");
+  EXPECT_TRUE(envelope.id.starts_with("message-sent:telegram:telegram-main:"));
+  EXPECT_EQ(envelope.payload["action"], "telegram.media.send_photo");
+  EXPECT_GE(envelope.timestamp, before);
+  EXPECT_LE(envelope.timestamp, after);
+}
+
 TEST(MessageEventIngressTest, NormalizesTelegramChatTopicAndPrivateIdentity) {
   auto event = qq_message_event();
   event.self_id = "0";

@@ -69,6 +69,13 @@ struct CommandRouteConfig {
   size_t timeout_ms = 0; // 0 = inherit command_runtime.timeout_ms
 };
 
+struct CommandMessageObserverConfig {
+  std::string actor;
+  std::vector<std::string> platforms;
+  std::vector<std::string> bots;
+  size_t timeout_ms = 0;
+};
+
 enum class CommandAccessMode {
   Unrestricted,
   Allowlist,
@@ -129,10 +136,12 @@ struct CommandRuntimeConfig {
   static constexpr size_t max_help_pages = 100;
   static constexpr size_t max_access_entries = 10'000;
   static constexpr size_t max_access_overrides = 1'024;
+  static constexpr size_t max_message_observers = 1'024;
 
   size_t timeout_ms = default_timeout_ms;
   CommandHelpConfig help;
   CommandAccessConfig access;
+  std::vector<CommandMessageObserverConfig> message_observers;
   std::vector<CommandRouteConfig> routes;
 };
 

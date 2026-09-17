@@ -12,6 +12,12 @@
 - If a configuration default is desired, ask the user for explicit approval
   before adding or documenting it.
 
+## Build and Test Performance
+
+- Use at least 6 parallel workers for compilation and test execution.
+- When system load is low, use all available CPU cores to reduce build and test
+  time.
+
 ## Commit Checks
 
 - Before every commit, run `nix fmt` from the repository root. This formats the

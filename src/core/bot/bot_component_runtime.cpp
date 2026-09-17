@@ -205,6 +205,12 @@ BotInstallation::BotInstallation(std::string installation_id,
 
 BotInstallation::~BotInstallation() {
   stop();
+  // Runners must be joined before destruction. Drain any remaining stop work
+  // (including installations that were never run) while components are alive.
+  if (io_context_.stopped()) {
+    io_context_.restart();
+  }
+  io_context_.run();
   components_.clear();
   capabilities_.clear();
 }
@@ -298,7 +304,7 @@ void BotInstallation::rollback() noexcept {
     (void)io_context_.poll();
   } catch (...) { // NOLINT(bugprone-empty-catch)
   }
-  io_context_.stop();
+  // Pending cancellation work must be allowed to finish before destruction.
   state_.store(BotInstallationState::Failed, std::memory_order_release);
 }
 
@@ -333,7 +339,9 @@ void BotInstallation::stop() noexcept {
     (void)io_context_.poll();
   } catch (...) { // NOLINT(bugprone-empty-catch)
   }
-  io_context_.stop();
+  // Do not stop the context: a handler may still be executing on a runner and
+  // enqueue more cleanup after poll() returns. Joining runners is the drain
+  // barrier; the application bounds that join with its shutdown deadline.
   state_.store(BotInstallationState::Stopped, std::memory_order_release);
 }
 

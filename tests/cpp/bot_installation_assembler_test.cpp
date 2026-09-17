@@ -275,7 +275,7 @@ TEST(BotInstallationAssemblerTest,
                                    "telegram.command-catalog",
                                    "telegram.media-upload", "telegram.protocol",
                                    "telegram.transport"}));
-  EXPECT_EQ(telegram.advertised_actions.size(), 9U);
+  EXPECT_EQ(telegram.advertised_actions.size(), 10U);
 }
 
 TEST(BotInstallationAssemblerTest,
@@ -313,6 +313,8 @@ TEST(BotInstallationAssemblerTest,
   }
   std::erase(telegram.advertised_actions,
              ActionId{"telegram.media.send_group_uploads"});
+  std::erase(telegram.advertised_actions,
+             ActionId{"telegram.media.send_photo_upload"});
   EXPECT_NO_THROW(
       (void)obcx::core::validate_component_recipe(telegram.components));
   EXPECT_FALSE(

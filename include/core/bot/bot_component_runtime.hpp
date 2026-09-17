@@ -113,6 +113,8 @@ public:
   void add_component(std::unique_ptr<BotComponent> component);
   void assemble();
   void start();
+  // Request component cancellation without halting the executor. Join every
+  // run() thread before destruction so admitted completions can drain.
   void stop() noexcept;
   void run();
 

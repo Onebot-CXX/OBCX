@@ -67,6 +67,12 @@ entries = []
 mode = "unrestricted"
 entries = []
 
+[[command_runtime.message_observers]]
+actor = "activity_tracker"
+platforms = ["telegram"]
+bots = ["telegram_bot"]
+timeout_ms = 5000
+
 [[command_runtime.routes]]
 actor = "example"
 commands = ["ping"]
@@ -75,6 +81,14 @@ bots = ["telegram_bot", "qq_bot"]
 fallback = "continue"
 # timeout_ms = 10000 # optional route override
 ```
+
+A message observer receives the original `RawMessageEvent` before command
+detection, access checks, help handling, or command propagation. This allows
+installation-scoped activity tracking to include consumed and denied commands
+without passing those commands through the ordinary message pipeline. Observer
+actor, platform, bot, and timeout fields are all explicit. The actor must accept
+`RawMessageEvent` and must not emit messages. Observer failures are reported but
+do not suppress command handling or ordinary message routing.
 
 The runtime expands each route to immutable
 `(platform, bot, command) -> (actor, request_type)` entries for one generation.
@@ -95,24 +109,34 @@ empty `entries` array. Group entries use exact `platform`, `bot`, and
 `native_group_id`; user entries use exact `platform`, `bot`, and
 `native_user_id`. A bot is
 an installation ID, not a provider-wide identity. Per-command overrides are
-complete replacements for both global dimensions:
+keyed by canonical command name and completely replace both global dimensions:
 
 ```toml
-[[command_runtime.access.overrides]]
-command = "ping"
-
-[command_runtime.access.overrides.groups]
+[command_runtime.access.overrides.ping.groups]
 mode = "allowlist"
 entries = [
   { platform = "telegram", bot = "telegram_bot", native_group_id = "-100123" },
 ]
 
-[command_runtime.access.overrides.users]
+[command_runtime.access.overrides.ping.users]
 mode = "allowlist"
 entries = [
   { platform = "telegram", bot = "telegram_bot", native_user_id = "456" },
 ]
 ```
+
+Here `ping` identifies the command, not its actor. Its route determines the
+actor; other commands handled by that actor are unaffected. Use another key,
+such as `[command_runtime.access.overrides.help.groups]`, for a separate command.
+Both `groups` and `users` must specify `mode` and `entries`; nothing is inherited
+from the global policy within an override.
+
+To migrate the old array syntax, replace
+`[[command_runtime.access.overrides]]` plus `command = "ping"` with
+`[command_runtime.access.overrides.ping]`, or add `.ping` to each nested policy
+heading as above. Remove the redundant `command` field. Legacy override arrays
+are rejected with a migration diagnostic. Validate the configuration before
+reloading or restarting with the updated binary.
 
 Override names must be active canonical command names or `help`; aliases do not
 name policies. In a group, both effective group and user policies must permit

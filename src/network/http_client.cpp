@@ -4,7 +4,6 @@
 #include "curl_asio_multi.hpp"
 #include "http_client_impl.hpp"
 
-#include <boost/asio/this_coro.hpp>
 #include <boost/system/system_error.hpp>
 #include <cctype>
 #include <limits>
@@ -190,101 +189,73 @@ HttpClient::HttpClient(asio::io_context &ioc,
 
 HttpClient::HttpClient(asio::any_io_executor executor,
                        const common::ConnectionConfig &config)
-    : pimpl_(std::make_unique<Impl>(config)) {
-  (void)executor;
-}
+    : pimpl_(std::make_unique<Impl>(std::move(executor), config)) {}
 
-HttpClient::~HttpClient() = default;
+HttpClient::~HttpClient() { pimpl_->state->close(); }
 
 auto HttpClient::post(std::string_view path, std::string_view body,
                       const std::map<std::string, std::string> &headers)
     -> asio::awaitable<HttpResponse> {
-  auto executor = co_await asio::this_coro::executor;
-  auto driver = pimpl_->driver_for(executor);
-  auto value =
-      curl_request(pimpl_->config, pimpl_->proxy, detail::CurlHttpMethod::Post,
-                   path, body, headers, pimpl_->response_body_limit);
-  try {
-    auto response = co_await driver->perform(std::move(value));
-    pimpl_->connected = true;
-    co_return make_response(std::move(response));
-  } catch (const boost::system::system_error &error) {
-    pimpl_->connected = false;
-    OBCX_WARN("HTTP POST request failed");
-    const auto submission_state =
-        detail::curl_error_definitely_not_submitted(error.code())
-            ? HttpRequestSubmissionState::DefinitelyNotSubmitted
-            : HttpRequestSubmissionState::PossiblySubmitted;
-    throw_request_error("POST", error.code(), submission_state);
-  } catch (const HttpClientError &) {
-    pimpl_->connected = false;
-    throw;
-  } catch (const std::exception &) {
-    pimpl_->connected = false;
-    OBCX_WARN("HTTP POST request could not be prepared");
-    throw HttpClientError("HTTP POST request could not be prepared",
-                          HttpRequestSubmissionState::DefinitelyNotSubmitted);
-  }
+  return HttpClientState::perform(pimpl_->state, detail::CurlHttpMethod::Post,
+                                  std::string{path}, std::string{body}, headers,
+                                  std::nullopt);
 }
 
 auto HttpClient::get(std::string_view path,
                      const std::map<std::string, std::string> &headers,
                      const std::optional<std::uint64_t> response_body_limit)
     -> asio::awaitable<HttpResponse> {
-  const auto selected_limit =
-      response_body_limit.value_or(pimpl_->response_body_limit);
-  if (selected_limit == 0) {
-    throw std::invalid_argument("HTTP response body limit must be positive");
-  }
-  auto executor = co_await asio::this_coro::executor;
-  auto driver = pimpl_->driver_for(executor);
-  auto value =
-      curl_request(pimpl_->config, pimpl_->proxy, detail::CurlHttpMethod::Get,
-                   path, {}, headers, selected_limit);
-  try {
-    auto response = co_await driver->perform(std::move(value));
-    pimpl_->connected = true;
-    co_return make_response(std::move(response));
-  } catch (const boost::system::system_error &error) {
-    pimpl_->connected = false;
-    OBCX_WARN("HTTP GET request failed");
-    throw_request_error("GET", error.code(),
-                        HttpRequestSubmissionState::PossiblySubmitted);
-  } catch (const HttpClientError &) {
-    pimpl_->connected = false;
-    throw;
-  } catch (const std::exception &) {
-    pimpl_->connected = false;
-    OBCX_WARN("HTTP GET request could not be prepared");
-    throw HttpClientError("HTTP GET request could not be prepared",
-                          HttpRequestSubmissionState::DefinitelyNotSubmitted);
-  }
+  return HttpClientState::perform(pimpl_->state, detail::CurlHttpMethod::Get,
+                                  std::string{path}, {}, headers,
+                                  response_body_limit);
 }
 
 auto HttpClient::head(std::string_view path,
                       const std::map<std::string, std::string> &headers)
     -> asio::awaitable<HttpResponse> {
-  auto executor = co_await asio::this_coro::executor;
-  auto driver = pimpl_->driver_for(executor);
-  auto value =
-      curl_request(pimpl_->config, pimpl_->proxy, detail::CurlHttpMethod::Head,
-                   path, {}, headers, pimpl_->response_body_limit);
+  return HttpClientState::perform(pimpl_->state, detail::CurlHttpMethod::Head,
+                                  std::string{path}, {}, headers, std::nullopt);
+}
+
+auto HttpClientState::perform(
+    std::shared_ptr<HttpClientState> self, const detail::CurlHttpMethod method,
+    std::string path, std::string body,
+    std::map<std::string, std::string> headers,
+    const std::optional<std::uint64_t> response_body_limit)
+    -> asio::awaitable<HttpResponse> {
+  const auto settings = self->settings();
+  const auto selected_limit =
+      response_body_limit.value_or(settings.response_body_limit);
+  if (selected_limit == 0) {
+    throw std::invalid_argument("HTTP response body limit must be positive");
+  }
+  auto driver = self->driver();
+  auto value = curl_request(settings.config, settings.proxy, method, path, body,
+                            headers, selected_limit);
+  const std::string_view method_name =
+      method == detail::CurlHttpMethod::Post  ? "POST"
+      : method == detail::CurlHttpMethod::Get ? "GET"
+                                              : "HEAD";
   try {
     auto response = co_await driver->perform(std::move(value));
-    pimpl_->connected = true;
+    self->mark_connected();
     co_return make_response(std::move(response));
   } catch (const boost::system::system_error &error) {
-    pimpl_->connected = false;
-    OBCX_WARN("HTTP HEAD request failed");
-    throw_request_error("HEAD", error.code(),
-                        HttpRequestSubmissionState::PossiblySubmitted);
+    self->connected = false;
+    OBCX_WARN("HTTP {} request failed", method_name);
+    const auto submission_state =
+        method == detail::CurlHttpMethod::Post &&
+                detail::curl_error_definitely_not_submitted(error.code())
+            ? HttpRequestSubmissionState::DefinitelyNotSubmitted
+            : HttpRequestSubmissionState::PossiblySubmitted;
+    throw_request_error(method_name, error.code(), submission_state);
   } catch (const HttpClientError &) {
-    pimpl_->connected = false;
+    self->connected = false;
     throw;
   } catch (const std::exception &) {
-    pimpl_->connected = false;
-    OBCX_WARN("HTTP HEAD request could not be prepared");
-    throw HttpClientError("HTTP HEAD request could not be prepared",
+    self->connected = false;
+    throw HttpClientError("HTTP " + std::string{method_name} +
+                              " request could not be prepared",
                           HttpRequestSubmissionState::DefinitelyNotSubmitted);
   }
 }
@@ -293,45 +264,48 @@ void HttpClient::set_timeout(const std::chrono::milliseconds timeout) {
   if (timeout.count() <= 0) {
     throw std::invalid_argument("HTTP timeout must be positive");
   }
-  pimpl_->config.connect_timeout = timeout;
+  std::lock_guard lock(pimpl_->state->mutex);
+  pimpl_->state->config.connect_timeout = timeout;
 }
 
 void HttpClient::set_response_body_limit(const std::uint64_t bytes) {
   if (bytes == 0) {
     throw std::invalid_argument("HTTP response body limit must be positive");
   }
-  pimpl_->response_body_limit = bytes;
+  std::lock_guard lock(pimpl_->state->mutex);
+  pimpl_->state->response_body_limit = bytes;
 }
 
 auto HttpClient::response_body_limit() const -> std::uint64_t {
-  return pimpl_->response_body_limit;
+  std::lock_guard lock(pimpl_->state->mutex);
+  return pimpl_->state->response_body_limit;
 }
 
 auto HttpClient::is_connected() const -> bool {
-  return pimpl_->connected.load();
+  return pimpl_->state->connected.load();
 }
 
 auto HttpClient::get_timeout() const -> std::chrono::milliseconds {
-  return pimpl_->config.connect_timeout;
+  std::lock_guard lock(pimpl_->state->mutex);
+  return pimpl_->state->config.connect_timeout;
 }
 
 auto HttpClient::get_host() const -> const std::string & {
-  return pimpl_->config.host;
+  return pimpl_->state->config.host;
 }
 
 auto HttpClient::get_port() const -> std::uint16_t {
-  return pimpl_->config.port;
+  return pimpl_->state->config.port;
 }
 
 auto HttpClient::use_ssl() const -> bool {
-  return pimpl_->config.port == 443 || pimpl_->config.use_ssl;
+  return pimpl_->state->config.port == 443 || pimpl_->state->config.use_ssl;
 }
 
 auto HttpClient::get_ssl_context() const -> ssl::context * { return nullptr; }
 
 void HttpClient::close() {
-  pimpl_->connected = false;
-  pimpl_->close_drivers();
+  pimpl_->state->close();
   OBCX_INFO("HTTP client closed");
 }
 

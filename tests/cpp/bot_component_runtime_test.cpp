@@ -1,6 +1,7 @@
 #include "core/bot/bot_component_runtime.hpp"
 
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -405,6 +406,68 @@ TEST(BotComponentRuntimeTest, ConcurrentStopDoesNotHaltCancellationDrainOwner) {
             std::future_status::ready);
   EXPECT_TRUE(operation_future.get());
   EXPECT_EQ(runtime.state(), BotInstallationState::Stopped);
+}
+
+TEST(BotComponentRuntimeTest, StopDoesNotAbandonCleanupQueuedByRunningHandler) {
+  auto runtime = installation();
+  runtime.start();
+  boost::asio::steady_timer timer(runtime.executor());
+  std::promise<void> entered;
+  auto entered_future = entered.get_future();
+  std::promise<void> release;
+  auto release_future = release.get_future();
+  std::promise<void> retired;
+  auto retired_future = retired.get_future();
+  boost::asio::post(runtime.executor(), [&] {
+    entered.set_value();
+    release_future.wait();
+    timer.expires_after(std::chrono::milliseconds{10});
+    timer.async_wait(
+        [&](const boost::system::error_code &) { retired.set_value(); });
+  });
+  std::thread runner([&] { runtime.run(); });
+  entered_future.wait();
+  runtime.stop();
+  EXPECT_FALSE(runtime.executor().stopped());
+  release.set_value();
+  runner.join();
+  EXPECT_EQ(retired_future.wait_for(std::chrono::seconds{1}),
+            std::future_status::ready);
+}
+
+TEST(BotComponentRuntimeTest, DestructorDrainsBeforeReleasingComponents) {
+  class DeferredStopComponent final : public BotComponent {
+  public:
+    DeferredStopComponent(boost::asio::io_context &io, bool &safe)
+        : timer_(io), safe_(safe) {}
+    ~DeferredStopComponent() override { safe_ = retired_; }
+    auto descriptor() const -> ComponentDescriptor override {
+      return {
+          .id = ComponentId{"deferred-stop"}, .provides = {}, .required = {}};
+    }
+    void install_capabilities(CapabilityRegistry &) override {}
+    void prepare(const CapabilityRegistry &) override {}
+    void start() override {}
+    void stop() override {
+      timer_.expires_after(std::chrono::milliseconds{10});
+      timer_.async_wait(
+          [this](const boost::system::error_code &) { retired_ = true; });
+    }
+
+  private:
+    boost::asio::steady_timer timer_;
+    bool &safe_;
+    bool retired_ = false;
+  };
+  bool safe = false;
+  {
+    auto runtime = installation();
+    runtime.add_component(
+        std::make_unique<DeferredStopComponent>(runtime.executor(), safe));
+    runtime.start();
+    runtime.executor().poll(); // An already-idle context must also be drained.
+  }
+  EXPECT_TRUE(safe);
 }
 
 TEST(BotComponentRuntimeTest, CapabilitiesAreInstallationScoped) {

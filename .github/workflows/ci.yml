@@ -103,3 +103,4 @@ jobs:
         working-directory: build
         run: >-
           nix develop .#ci --command ctest --output-on-failure --parallel 2
+          --label-exclude installed-sdk

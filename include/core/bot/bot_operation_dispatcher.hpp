@@ -10,14 +10,22 @@ namespace obcx::core {
 
 using BotOperationEndpoint = OperationRegistry;
 
+struct SuccessfulBotOperation {
+  bot::BotInstallationRef installation;
+  bot::ActionId action;
+};
+
 class BotOperationDispatcher final : public bot::BotOperationGateway {
 public:
   using SurfaceValidator = std::function<bool(const bot::SurfaceId &)>;
+  using SuccessHandler = std::function<boost::asio::awaitable<void>(
+      SuccessfulBotOperation operation)>;
 
   explicit BotOperationDispatcher(SurfaceValidator surface_registered);
   ~BotOperationDispatcher() override;
 
   void register_endpoint(std::shared_ptr<OperationRegistry> endpoint);
+  void set_success_handler(SuccessHandler handler);
   void seal_registrations();
   void clear_endpoints() noexcept;
   [[nodiscard]] auto endpoint_count() const noexcept -> std::size_t;

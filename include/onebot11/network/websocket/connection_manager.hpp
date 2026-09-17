@@ -91,7 +91,7 @@ private:
   uint16_t port_{0};
   std::string access_token_;
   std::chrono::milliseconds action_timeout_{30000};
-  bool is_running_ = false;
+  std::atomic_bool is_running_{false};
 
   std::shared_ptr<detail::ActionRequestTracker> action_requests_;
 

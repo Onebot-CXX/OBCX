@@ -29,6 +29,22 @@ namespace obcx::tests::command_runtime {
 
 struct TestCommand final : obcx::command::RequestMessage<TestCommand> {};
 
+class MessageObserverActor final
+    : public obcx::core::ReflectedActor<MessageObserverActor> {
+public:
+  static constexpr std::string_view actor_name = "message_observer";
+  static constexpr std::string_view actor_version = "1.0.0";
+
+  auto handle(const obcx::core::events::RawMessageEvent &,
+              const obcx::core::MessageEnvelope &, obcx::core::ActorContext &)
+      -> obcx::core::ActorResult {
+    ++message_count;
+    return obcx::core::ActorResult::success();
+  }
+
+  std::atomic_int message_count = 0;
+};
+
 class CommandActor final : public obcx::core::ReflectedActor<CommandActor> {
 public:
   static constexpr std::string_view actor_name = "command_actor";
@@ -141,6 +157,17 @@ auto run_awaitable(asio::io_context &ioc, asio::awaitable<T> awaitable) -> T {
     std::rethrow_exception(exception);
   }
   return std::move(*result);
+}
+
+auto message_observer_contract() -> obcx::core::ActorInputContract {
+  const auto input = std::string{obcx::core::canonical_message_type_name<
+      obcx::core::events::RawMessageEvent>()};
+  return obcx::core::ActorInputContract{
+      .schema_version = 2,
+      .actor = "message_observer",
+      .accepted_inputs = {input},
+      .accepted_input_set = {input},
+  };
 }
 
 auto command_contract(const bool accept_request = true,
@@ -348,6 +375,8 @@ protected:
     std::shared_ptr<obcx::core::NativeActorScheduler> scheduler;
     std::shared_ptr<obcx::core::Orchestrator> orchestrator;
     std::shared_ptr<obcx::tests::command_runtime::CommandActor> actor;
+    std::shared_ptr<obcx::tests::command_runtime::MessageObserverActor>
+        message_observer;
     std::shared_ptr<RecordingGateway> gateway;
     std::shared_ptr<obcx::core::CommandCoordinator> coordinator;
 
@@ -372,7 +401,10 @@ protected:
     auto orchestrator =
         std::make_shared<obcx::core::Orchestrator>(scheduler, services);
     auto actor = std::make_shared<obcx::tests::command_runtime::CommandActor>();
+    auto message_observer =
+        std::make_shared<obcx::tests::command_runtime::MessageObserverActor>();
     orchestrator->register_actor(actor);
+    orchestrator->register_actor(message_observer);
     orchestrator->configure_actors(config->get_actor_configs());
     orchestrator->configure_pipelines(
         {{.name = "raw",
@@ -393,6 +425,7 @@ protected:
         .scheduler = std::move(scheduler),
         .orchestrator = std::move(orchestrator),
         .actor = std::move(actor),
+        .message_observer = std::move(message_observer),
         .gateway = std::move(gateway),
         .coordinator = std::move(coordinator),
     };
@@ -643,6 +676,77 @@ TEST_F(CommandCoordinatorTest,
 }
 
 TEST_F(CommandCoordinatorTest,
+       InvokesMessageObserverBeforeHelpAndConsumedCommandRouting) {
+  auto document = config_document("consume");
+  document += "\n[actors.message_observer]\n"
+              "enabled = true\n"
+              "partition = \"source_bot\"\n\n"
+              "[[command_runtime.message_observers]]\n"
+              "actor = \"message_observer\"\n"
+              "platforms = [\"qq\"]\n"
+              "bots = [\"primary\"]\n"
+              "timeout_ms = 100\n";
+  const auto config = snapshot("message-observer.toml", document);
+  const auto built = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", command_contract()},
+                {"message_observer", message_observer_contract()}});
+  ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
+  ASSERT_EQ(built.table
+                ->message_observers(obcx::core::CommandBotKey{.platform = "qq",
+                                                              .bot = "primary"})
+                .size(),
+            1U);
+
+  auto active = runtime(config, built.table);
+  asio::io_context ioc;
+  const auto help = run_awaitable(
+      ioc, active.coordinator->process(raw_command("help", ""),
+                                       std::make_shared<int>(12)));
+  EXPECT_TRUE(help.ok());
+  EXPECT_EQ(active.message_observer->message_count, 1);
+  EXPECT_EQ(active.actor->raw_count, 0);
+
+  const auto consumed = run_awaitable(
+      ioc,
+      active.coordinator->process(raw("consume"), std::make_shared<int>(13)));
+  EXPECT_TRUE(consumed.ok());
+  EXPECT_EQ(active.message_observer->message_count, 2);
+  EXPECT_EQ(active.actor->command_count, 1);
+  EXPECT_EQ(active.actor->raw_count, 0);
+}
+
+TEST_F(CommandCoordinatorTest, InvokesMessageObserverBeforeAccessDenial) {
+  auto document = config_document("consume");
+  replace_policy(
+      document, "groups", "allowlist",
+      R"([{ platform = "qq", bot = "primary", native_group_id = "99" }])");
+  document += "\n[actors.message_observer]\n"
+              "enabled = true\n"
+              "partition = \"source_bot\"\n\n"
+              "[[command_runtime.message_observers]]\n"
+              "actor = \"message_observer\"\n"
+              "platforms = [\"qq\"]\n"
+              "bots = [\"primary\"]\n"
+              "timeout_ms = 100\n";
+  const auto config = snapshot("denied-message-observer.toml", document);
+  const auto built = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", command_contract()},
+                {"message_observer", message_observer_contract()}});
+  ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
+
+  auto active = runtime(config, built.table);
+  asio::io_context ioc;
+  const auto denied = run_awaitable(
+      ioc,
+      active.coordinator->process(raw("consume"), std::make_shared<int>(14)));
+  ASSERT_EQ(denied.failures.size(), 1U);
+  EXPECT_EQ(denied.failures.front().failure.code, "command_access_denied");
+  EXPECT_EQ(active.message_observer->message_count, 1);
+  EXPECT_EQ(active.actor->command_count, 0);
+  EXPECT_EQ(active.actor->raw_count, 0);
+}
+
+TEST_F(CommandCoordinatorTest,
        RoutesTypedCompletionAndAppliesContinueOrConsumeOnce) {
   const auto config = snapshot("routing.toml", config_document());
   auto active = runtime(config);
@@ -819,15 +923,37 @@ TEST_F(CommandCoordinatorTest, CanonicalOverrideReplacesBothGlobalPolicies) {
       R"([{ platform = "qq", bot = "primary", native_user_id = "7" }])");
   document += R"(
 
-[[command_runtime.access.overrides]]
-command = "test"
-groups = { mode = "allowlist", entries = [{ platform = "qq", bot = "primary", native_group_id = "42" }] }
-users = { mode = "allowlist", entries = [{ platform = "qq", bot = "primary", native_user_id = "7" }] }
+[command_runtime.access.overrides.test.groups]
+mode = "allowlist"
+entries = [{ platform = "qq", bot = "primary", native_group_id = "42" }]
+[command_runtime.access.overrides.test.users]
+mode = "allowlist"
+entries = [{ platform = "qq", bot = "primary", native_user_id = "7" }]
+
+[command_runtime.access.overrides.help.groups]
+mode = "unrestricted"
+entries = []
+[command_runtime.access.overrides.help.users]
+mode = "allowlist"
+entries = [{ platform = "qq", bot = "primary", native_user_id = "8" }]
 )";
   const auto config = snapshot("override.toml", document);
   const auto built = obcx::core::build_command_routing_table(
       *config, {{"command_actor", command_contract(true, R"(^alias$)")}});
   ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
+  obcx::core::CommandPolicySubject subject{
+      .platform = "qq",
+      .bot = "primary",
+      .conversation = obcx::core::CommandConversationKind::Group,
+      .group_id = "42",
+      .user_id = "7",
+      .topic_id = std::nullopt,
+  };
+  EXPECT_TRUE(built.table->permits("test", subject));
+  EXPECT_FALSE(built.table->permits("help", subject));
+  subject.user_id = "8";
+  EXPECT_FALSE(built.table->permits("test", subject));
+  EXPECT_TRUE(built.table->permits("help", subject));
   auto active = runtime(config, built.table);
   asio::io_context ioc;
   const auto result = run_awaitable(
@@ -839,8 +965,7 @@ users = { mode = "allowlist", entries = [{ platform = "qq", bot = "primary", nat
   auto inactive_document = config_document();
   inactive_document += R"(
 
-[[command_runtime.access.overrides]]
-command = "inactive"
+[command_runtime.access.overrides.inactive]
 groups = { mode = "unrestricted", entries = [] }
 users = { mode = "unrestricted", entries = [] }
 )";
@@ -858,8 +983,7 @@ TEST_F(CommandCoordinatorTest,
       R"([{ platform = "qq", bot = "primary", native_group_id = "42" }])");
   document += R"(
 
-[[command_runtime.access.overrides]]
-command = "help"
+[command_runtime.access.overrides.help]
 groups = { mode = "unrestricted", entries = [] }
 users = { mode = "unrestricted", entries = [] }
 )";

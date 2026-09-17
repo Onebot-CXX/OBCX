@@ -76,8 +76,9 @@ public:
   explicit HttpClient(asio::io_context &ioc,
                       const common::ConnectionConfig &config);
 
-  // Actor runtimes expose an executor, not necessarily an io_context.
-  // Asynchronous operations use their awaiting coroutine's executor.
+  // Transport resources use this owning executor; completions resume on the
+  // awaiting coroutine's executor. Keep the owning context alive and running
+  // through close/drain and destroy the client before destroying that context.
   explicit HttpClient(asio::any_io_executor executor,
                       const common::ConnectionConfig &config);
 
@@ -85,6 +86,8 @@ public:
    * @brief 析构函数
    */
   virtual ~HttpClient();
+  HttpClient(const HttpClient &) = delete;
+  auto operator=(const HttpClient &) -> HttpClient & = delete;
 
   /**
    * @brief 异步发送POST请求（协程版本）
@@ -167,7 +170,8 @@ public:
   [[nodiscard]] auto is_connected() const -> bool;
 
   /**
-   * @brief 关闭连接
+   * @brief Close admission and request cancellation (idempotent, terminal).
+   * Keep the owning executor running until queued cleanup/completions drain.
    */
   virtual void close();
 

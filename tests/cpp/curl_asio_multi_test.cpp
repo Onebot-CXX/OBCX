@@ -981,6 +981,65 @@ TEST(CurlAsioMultiTest, BoundsPlainBodyAndResponseHeaders) {
   pool.join();
 }
 
+TEST(CurlAsioMultiTest, QueuedShutdownOwnsStateBeforeLazyRequestStarts) {
+  asio::io_context owner;
+  auto driver = std::make_shared<obcx::network::detail::CurlAsioMulti>(
+      owner.get_executor());
+  auto operation = driver->perform(request("http://127.0.0.1:1/unused"));
+  owner.stop();
+  driver->shutdown();
+  driver->shutdown();
+  driver.reset();
+  auto result = asio::co_spawn(owner, std::move(operation), asio::use_future);
+  owner.restart();
+  owner.run();
+  try {
+    (void)result.get();
+    ADD_FAILURE() << "request queued after shutdown must be cancelled";
+  } catch (const boost::system::system_error &error) {
+    EXPECT_EQ(error.code(), asio::error::operation_aborted);
+  }
+}
+
+TEST(CurlAsioMultiTest, QueuedShutdownCancelsAfterExternalOwnerIsReleased) {
+  LocalHttpServer server;
+  server.start();
+  asio::thread_pool owner(1);
+  asio::thread_pool caller(1);
+  auto driver = std::make_shared<obcx::network::detail::CurlAsioMulti>(
+      owner.get_executor());
+  auto result = asio::co_spawn(
+      caller, driver->perform(request(server.url("/hang"))), asio::use_future);
+  const auto deadline = std::chrono::steady_clock::now() + 2s;
+  while (server.requests() == 0 &&
+         std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(1ms);
+  }
+  EXPECT_EQ(server.requests(), 1);
+  std::promise<void> entered;
+  auto entered_future = entered.get_future();
+  std::promise<void> release;
+  auto release_future = release.get_future();
+  asio::post(owner, [&] {
+    entered.set_value();
+    release_future.wait();
+  });
+  entered_future.wait();
+  driver->shutdown();
+  driver->shutdown();
+  driver.reset();
+  release.set_value();
+  EXPECT_EQ(result.wait_for(2s), std::future_status::ready);
+  try {
+    (void)result.get();
+    ADD_FAILURE() << "shutdown must complete an admitted transfer";
+  } catch (const boost::system::system_error &error) {
+    EXPECT_EQ(error.code(), asio::error::operation_aborted);
+  }
+  caller.join();
+  owner.join();
+}
+
 TEST(CurlAsioMultiTest, CancellationCompletesOnceAndReleasesTransfer) {
   LocalHttpServer server;
   server.start();

@@ -37,6 +37,41 @@ inline void to_json(common::json &document, const RawNoticeEvent &notice) {
   document = notice.payload;
 }
 
+struct BotMessageSentEvent {
+  common::json payload = common::json::object();
+};
+
+inline void from_json(const common::json &document,
+                      BotMessageSentEvent &message_sent) {
+  if (!document.is_object()) {
+    throw std::invalid_argument(
+        "BotMessageSentEvent payload must be an object");
+  }
+  message_sent.payload = document;
+}
+
+inline void to_json(common::json &document,
+                    const BotMessageSentEvent &message_sent) {
+  document = message_sent.payload;
+}
+
+struct RawHeartbeatEvent {
+  common::json payload = common::json::object();
+};
+
+inline void from_json(const common::json &document,
+                      RawHeartbeatEvent &heartbeat) {
+  if (!document.is_object()) {
+    throw std::invalid_argument("RawHeartbeatEvent payload must be an object");
+  }
+  heartbeat.payload = document;
+}
+
+inline void to_json(common::json &document,
+                    const RawHeartbeatEvent &heartbeat) {
+  document = heartbeat.payload;
+}
+
 } // namespace obcx::core::events
 
 namespace obcx::message_store::events {

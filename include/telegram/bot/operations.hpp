@@ -199,6 +199,89 @@ inline auto SendTelegramPhotoRequest::from_json(const Json &document)
   return result;
 }
 
+struct SendTelegramPhotoUploadRequest {
+  using obcx_bot_json_factory = void;
+  static auto from_json(const Json &document) -> SendTelegramPhotoUploadRequest;
+
+  inline static const auto &action = actions::send_photo_upload;
+
+  GroupTarget target;
+  TelegramMediaUpload photo;
+  std::string caption;
+  std::optional<std::int64_t> topic_id;
+  std::size_t maximum_bytes{maximum_actor_media_bytes};
+
+  void validate() const {
+    target.validate();
+    detail::require_telegram(target.installation,
+                             "SendTelegramPhotoUploadRequest");
+    detail::validate_media_bound(maximum_bytes,
+                                 "SendTelegramPhotoUploadRequest");
+    photo.validate(maximum_bytes);
+    if (photo.type != "photo") {
+      throw std::invalid_argument(
+          "Telegram photo upload requires photo media type");
+    }
+    if (caption.size() > 65536U) {
+      throw std::invalid_argument(
+          "Telegram photo upload caption exceeds SDK bound");
+    }
+    detail::validate_optional_topic(topic_id, "SendTelegramPhotoUploadRequest");
+  }
+};
+
+inline void to_json(Json &document,
+                    const SendTelegramPhotoUploadRequest &request) {
+  request.validate();
+  document = {{"action", request.action},
+              {"target", request.target},
+              {"photo", request.photo},
+              {"caption", request.caption},
+              {"maximum_bytes", request.maximum_bytes}};
+  if (request.topic_id.has_value()) {
+    document["topic_id"] = *request.topic_id;
+  }
+}
+
+inline void from_json(const Json &document,
+                      SendTelegramPhotoUploadRequest &request) {
+  detail::require_object(document, "SendTelegramPhotoUploadRequest");
+  if (document.contains("action") &&
+      document.at("action").get<obcx::bot::ActionId>() != request.action) {
+    throw std::invalid_argument(
+        "SendTelegramPhotoUploadRequest action mismatch");
+  }
+  if (!document.contains("target") || !document.contains("photo") ||
+      !document.contains("maximum_bytes") ||
+      !document.at("maximum_bytes").is_number_unsigned()) {
+    throw std::invalid_argument("SendTelegramPhotoUploadRequest requires "
+                                "target, photo, and maximum_bytes");
+  }
+  request.target = document.at("target").get<GroupTarget>();
+  request.photo = document.at("photo").get<TelegramMediaUpload>();
+  request.caption.clear();
+  if (document.contains("caption")) {
+    request.caption = detail::require_string(document, "caption",
+                                             "SendTelegramPhotoUploadRequest");
+  }
+  request.topic_id = detail::optional_topic_from_json(document);
+  request.maximum_bytes = document.at("maximum_bytes").get<std::size_t>();
+  request.validate();
+}
+
+inline auto SendTelegramPhotoUploadRequest::from_json(const Json &document)
+    -> SendTelegramPhotoUploadRequest {
+  detail::require_object(document, "SendTelegramPhotoUploadRequest");
+  if (!document.contains("target")) {
+    throw std::invalid_argument(
+        "SendTelegramPhotoUploadRequest requires target");
+  }
+  SendTelegramPhotoUploadRequest result{
+      .target = document.at("target").get<GroupTarget>()};
+  obcx::telegram::bot::from_json(document, result);
+  return result;
+}
+
 struct SendTelegramMediaGroupUrlsRequest {
   using obcx_bot_json_factory = void;
   static auto from_json(const Json &document)
@@ -548,6 +631,28 @@ struct OperationTraits<telegram::bot::SendTelegramPhotoRequest>
 };
 
 template <>
+struct OperationTraits<telegram::bot::SendTelegramPhotoUploadRequest>
+    : OperationContract<telegram::bot::SendTelegramPhotoUploadRequest,
+                        obcx::bot::SendMessageResult, true> {
+  static auto supports_surface(const SurfaceId &surface) -> bool {
+    return surface == telegram::bot::surface;
+  }
+  static auto installation(const request_type &request)
+      -> const BotInstallationRef & {
+    return request.target.installation;
+  }
+  static void validate_result(const request_type &request,
+                              const result_type &result) {
+    result.validate();
+    if (result.messages.size() != 1U ||
+        result.primary().group != request.target) {
+      throw std::invalid_argument(
+          "Telegram result does not match its requested scope or bound");
+    }
+  }
+};
+
+template <>
 struct OperationTraits<telegram::bot::SendTelegramMediaGroupUrlsRequest>
     : OperationContract<telegram::bot::SendTelegramMediaGroupUrlsRequest,
                         obcx::bot::SendMessageResult, true> {
@@ -617,6 +722,53 @@ struct OperationTraits<telegram::bot::FetchTelegramFileRequest>
 } // namespace obcx::bot
 
 namespace obcx::bot {
+
+template <> struct GatewayCodec<telegram::bot::SendTelegramPhotoUploadRequest> {
+  using Value = telegram::bot::SendTelegramPhotoUploadRequest;
+
+  static auto encode(Value &value) -> Json {
+    value.validate();
+    Json payload{{"action", value.action},
+                 {"target", value.target},
+                 {"caption", value.caption},
+                 {"maximum_bytes", value.maximum_bytes}};
+    if (value.topic_id) {
+      payload["topic_id"] = *value.topic_id;
+    }
+    payload["photo"] =
+        GatewayCodec<telegram::bot::TelegramMediaUpload>::encode(value.photo);
+    return payload;
+  }
+
+  static auto decode(Json payload) -> Value {
+    detail::require_object(payload, "Telegram photo upload gateway payload");
+    if (payload.contains("action") &&
+        payload.at("action").get<ActionId>() != Value::action) {
+      throw std::invalid_argument(
+          "Telegram photo upload gateway action mismatch");
+    }
+    if (!payload.contains("maximum_bytes") ||
+        !payload.at("maximum_bytes").is_number_unsigned() ||
+        !payload.contains("photo")) {
+      throw std::invalid_argument("Telegram photo upload gateway requires "
+                                  "photo and maximum_bytes");
+    }
+    const auto maximum = payload.at("maximum_bytes").get<std::size_t>();
+    telegram::bot::detail::validate_media_bound(
+        maximum, "Telegram photo upload gateway");
+    (void)telegram::bot::detail::gateway_binary_size(payload.at("photo"),
+                                                     "bytes", maximum);
+    Value result{
+        .target = payload.at("target").get<GroupTarget>(),
+        .photo = GatewayCodec<telegram::bot::TelegramMediaUpload>::decode(
+            std::move(payload.at("photo"))),
+        .caption = payload.value("caption", std::string{}),
+        .topic_id = telegram::bot::detail::optional_topic_from_json(payload),
+        .maximum_bytes = maximum};
+    result.validate();
+    return result;
+  }
+};
 
 template <>
 struct GatewayCodec<telegram::bot::SendTelegramMediaGroupUploadsRequest> {

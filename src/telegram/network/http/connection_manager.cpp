@@ -5,6 +5,8 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/strand.hpp>
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -146,7 +148,7 @@ auto build_telegram_media_group_multipart_with_entities(
 
 TelegramConnectionManager::TelegramConnectionManager(
     asio::io_context &ioc, adapter::telegram::ProtocolAdapter &adapter)
-    : ioc_(ioc), adapter_(adapter), poll_timer_(ioc) {
+    : ioc_(ioc), adapter_(adapter), poll_timer_(asio::make_strand(ioc)) {
   OBCX_INFO("Connection established to {}:{}", "TelegramConnectionManager",
             "initialized");
 }
@@ -210,6 +212,9 @@ void TelegramConnectionManager::disconnect() { shutdown(); }
 void TelegramConnectionManager::shutdown() {
   stop_polling();
   is_connected_ = false;
+  if (http_client_) {
+    http_client_->close();
+  }
 
   OBCX_INFO("Connection closed");
 }
@@ -455,15 +460,17 @@ auto TelegramConnectionManager::upload_media_group_multipart_with_entities(
 
 void TelegramConnectionManager::start_polling() {
   if (is_polling_.exchange(true) == false) {
-    asio::co_spawn(ioc_, poll_updates(), asio::detached);
+    asio::co_spawn(poll_timer_.get_executor(), poll_updates(), asio::detached);
     OBCX_INFO("Start polling, interval: {}ms", config_.poll_timeout.count());
   }
 }
 
 void TelegramConnectionManager::stop_polling() {
-  is_polling_ = false;
-  poll_timer_.cancel();
-  OBCX_INFO("Stop polling");
+  if (is_polling_.exchange(false)) {
+    // Serialize timer cancellation with polling's expires_after/async_wait.
+    asio::post(poll_timer_.get_executor(), [this] { poll_timer_.cancel(); });
+    OBCX_INFO("Stop polling");
+  }
 }
 
 auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
@@ -507,6 +514,9 @@ auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
       HttpResponse response =
           co_await http_client_->post(updates_path, body, headers);
 
+      if (!is_polling_) {
+        break;
+      }
       if (response.is_success() && !response.body.empty()) {
         process_updates(response.body);
       }
@@ -515,6 +525,9 @@ auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
       // success we immediately reissue getUpdates with the advanced offset.
 
     } catch (const std::exception &e) {
+      if (!is_polling_) {
+        break;
+      }
       OBCX_WARN("Polling failed: {}", e.what());
       should_delay = true;
     }

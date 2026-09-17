@@ -916,16 +916,18 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
   auto actor_configs = request.snapshot->get_actor_configs();
   auto pipelines = request.snapshot->get_pipeline_configs();
   const auto command_runtime = request.snapshot->get_command_runtime_config();
-  const auto has_command_routes = !command_runtime.routes.empty();
+  const auto has_command_runtime = !command_runtime.routes.empty() ||
+                                   !command_runtime.message_observers.empty();
   std::erase_if(actor_configs,
                 [](const auto &actor) { return !actor.enabled; });
-  if (actor_configs.empty() && pipelines.empty() && !has_command_routes) {
+  if (actor_configs.empty() && pipelines.empty() && !has_command_runtime) {
     return {.status = RuntimeGenerationBuildStatus::NotConfigured};
   }
-  if (actor_configs.empty() || (pipelines.empty() && !has_command_routes)) {
-    return failed("reload_actor_graph_invalid",
-                  "actor runtime requires enabled actors and either pipelines "
-                  "or command routes");
+  if (actor_configs.empty() || (pipelines.empty() && !has_command_runtime)) {
+    return failed(
+        "reload_actor_graph_invalid",
+        "actor runtime requires enabled actors and either pipelines, command "
+        "routes, or command message observers");
   }
   if (!request.db_manager) {
     return failed("reload_process_service_missing",

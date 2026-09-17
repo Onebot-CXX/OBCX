@@ -195,4 +195,50 @@ auto raw_notice_envelope_from_event(const std::string &source_platform,
   return envelope;
 }
 
+auto raw_heartbeat_envelope_from_event(const std::string &source_platform,
+                                       const std::string &source_bot,
+                                       const common::HeartbeatEvent &event)
+    -> MessageEnvelope {
+  static std::atomic_uint64_t next_heartbeat_id{1};
+
+  const auto bot_id = source_bot.empty() ? event.self_id : source_bot;
+  const auto sequence =
+      next_heartbeat_id.fetch_add(1, std::memory_order_relaxed);
+
+  MessageEnvelope envelope;
+  envelope.id = "heartbeat:" + source_platform + ":" + bot_id + ":" +
+                std::to_string(sequence);
+  envelope.type = canonical_message_type_name<events::RawHeartbeatEvent>();
+  envelope.source_platform = source_platform;
+  envelope.source_bot = bot_id;
+  envelope.conversation_id = "global";
+  envelope.correlation_id = envelope.id;
+  envelope.timestamp = event.time;
+  envelope.payload = {
+      {"interval_ms", event.interval},
+      {"source_bot_configured", !source_bot.empty()},
+  };
+  return envelope;
+}
+
+auto bot_message_sent_envelope(const std::string &source_platform,
+                               const std::string &source_bot,
+                               const bot::ActionId &action) -> MessageEnvelope {
+  static std::atomic_uint64_t next_message_sent_id{1};
+
+  const auto sequence =
+      next_message_sent_id.fetch_add(1, std::memory_order_relaxed);
+  MessageEnvelope envelope;
+  envelope.id = "message-sent:" + source_platform + ":" + source_bot + ":" +
+                std::to_string(sequence);
+  envelope.type = canonical_message_type_name<events::BotMessageSentEvent>();
+  envelope.source_platform = source_platform;
+  envelope.source_bot = source_bot;
+  envelope.conversation_id = "global";
+  envelope.correlation_id = envelope.id;
+  envelope.timestamp = std::chrono::system_clock::now();
+  envelope.payload = {{"action", action.value()}};
+  return envelope;
+}
+
 } // namespace obcx::core

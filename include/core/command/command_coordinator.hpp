@@ -110,6 +110,15 @@ struct ActiveCommandPattern {
   std::shared_ptr<const re2::RE2> compiled;
 };
 
+struct ActiveCommandMessageObserver {
+  CommandBotKey key;
+  std::string actor;
+  std::string partition_expression;
+  std::string db_instance;
+  std::string db_namespace;
+  std::chrono::milliseconds timeout;
+};
+
 struct ActiveCommandBot {
   CommandBotKey key;
   bot::BotInstallationRef installation;
@@ -130,6 +139,8 @@ public:
       -> const std::map<CommandRouteKey, ActiveCommandRoute> &;
   [[nodiscard]] auto bots() const noexcept
       -> const std::map<CommandBotKey, ActiveCommandBot> &;
+  [[nodiscard]] auto message_observers(const CommandBotKey &key) const noexcept
+      -> const std::vector<ActiveCommandMessageObserver> &;
   [[nodiscard]] auto policy_for(std::string_view canonical_command) const
       -> const ActiveCommandPolicy &;
   [[nodiscard]] auto permits(std::string_view canonical_command,
@@ -149,6 +160,8 @@ private:
 
   std::map<CommandRouteKey, ActiveCommandRoute> routes_;
   std::map<CommandBotKey, ActiveCommandBot> bots_;
+  std::map<CommandBotKey, std::vector<ActiveCommandMessageObserver>>
+      message_observers_;
   std::optional<ActiveCommandPolicy> global_policy_;
   std::map<std::string, ActiveCommandPolicy> policy_overrides_;
   std::size_t help_page_bytes_ = 0;
@@ -192,6 +205,9 @@ public:
   void shutdown() noexcept;
 
 private:
+  auto observe_message(const MessageEnvelope &message)
+      -> boost::asio::awaitable<OrchestratorResult>;
+
   std::uint64_t generation_id_ = 0;
   std::shared_ptr<const CommandRoutingTable> routing_table_;
   std::shared_ptr<NativeActorScheduler> scheduler_;

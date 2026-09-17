@@ -63,6 +63,8 @@ TEST(BotOperationGoldenTest, TelegramMessagingAndMedia) {
       "telegram.message.edit_text");
   replay<SendTelegramPhotoRequest, SendMessageResult>(
       "telegram.media.send_photo");
+  replay<SendTelegramPhotoUploadRequest, SendMessageResult>(
+      "telegram.media.send_photo_upload");
   replay<SendTelegramMediaGroupUrlsRequest, SendMessageResult>(
       "telegram.media.send_group_urls");
   replay<SendTelegramMediaGroupUploadsRequest, SendMessageResult>(
@@ -104,7 +106,7 @@ TEST(BotOperationGoldenTest, ProductionRecipeManifests) {
     surfaces.insert(fixture.at("surface").get<std::string>());
   }
   EXPECT_EQ(Json(surfaces), baseline().at("surfaces"));
-  EXPECT_EQ(union_actions.size(), 14U);
+  EXPECT_EQ(union_actions.size(), 15U);
   EXPECT_EQ(baseline().at("operations").size(), union_actions.size());
   for (const auto &action : union_actions) {
     EXPECT_TRUE(baseline().at("operations").contains(action));
@@ -115,6 +117,7 @@ TEST(BotOperationGoldenTest, ProductionRecipeManifests) {
                        .at("actions")
                        .get<std::vector<std::string>>();
   std::erase(no_upload, "telegram.media.send_group_uploads");
+  std::erase(no_upload, "telegram.media.send_photo_upload");
   EXPECT_EQ(Json(no_upload), baseline().at("telegram_without_uploader"));
 }
 

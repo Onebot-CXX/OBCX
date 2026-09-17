@@ -34,6 +34,11 @@ public:
   virtual auto download_file_content(std::string_view url,
                                      std::size_t maximum_bytes)
       -> boost::asio::awaitable<std::string> = 0;
+  virtual auto upload_photo(std::string_view chat_id,
+                            const TelegramMediaUpload &photo,
+                            std::string_view caption,
+                            std::optional<std::int64_t> topic_id)
+      -> boost::asio::awaitable<std::string> = 0;
   virtual auto upload_media_group(
       std::string_view chat_id, const std::vector<TelegramMediaUpload> &media,
       std::string_view caption, std::optional<std::int64_t> topic_id,
@@ -66,6 +71,10 @@ public:
   auto download_file(std::string file_id)
       -> boost::asio::awaitable<std::string> override;
   auto download_file_content(std::string_view url, std::size_t maximum_bytes)
+      -> boost::asio::awaitable<std::string> override;
+  auto upload_photo(std::string_view chat_id, const TelegramMediaUpload &photo,
+                    std::string_view caption,
+                    std::optional<std::int64_t> topic_id)
       -> boost::asio::awaitable<std::string> override;
   auto upload_media_group(
       std::string_view chat_id, const std::vector<TelegramMediaUpload> &media,

@@ -6,6 +6,7 @@
 #include "core/bot/bot_installation_assembler.hpp"
 #include "core/bot/bot_installation_directory.hpp"
 #include "core/bot/bot_operation_dispatcher.hpp"
+#include "core/bot/messaging.hpp"
 #include "core/infrastructure/db_manager.hpp"
 #include "core/runtime/actor_runtime_reload_controller.hpp"
 #include "core/runtime/message_event_ingress.hpp"
@@ -13,6 +14,7 @@
 #include "core/runtime/process_configuration.hpp"
 #include "core/runtime/runtime_generation.hpp"
 #include "core/runtime/runtime_thread_budget.hpp"
+#include "telegram/bot/actions.hpp"
 #include "tui/tui_app.hpp"
 
 #include <algorithm>
@@ -48,6 +50,17 @@ std::mutex g_stop_mtx;
 std::condition_variable g_stop_cv;
 
 constexpr int BOT_SHUTDOWN_TIMEOUT_SECONDS = 5;
+
+auto is_telegram_message_send_action(const obcx::bot::ActionId &action)
+    -> bool {
+  return action == obcx::bot::SendGroupMessageRequest::action ||
+         action == obcx::bot::SendPrivateMessageRequest::action ||
+         action == obcx::telegram::bot::actions::send_topic ||
+         action == obcx::telegram::bot::actions::send_photo ||
+         action == obcx::telegram::bot::actions::send_photo_upload ||
+         action == obcx::telegram::bot::actions::send_group_urls ||
+         action == obcx::telegram::bot::actions::send_group_uploads;
+}
 
 class SignalMonitor final {
 public:
@@ -335,6 +348,46 @@ public:
         actor_runtime ? std::make_shared<core::ActorRuntimeReloadController>(
                             actor_runtime)
                       : nullptr;
+    if (reload_controller) {
+      process_bot_operation_dispatcher->set_success_handler(
+          [weak_controller =
+               std::weak_ptr<core::ActorRuntimeReloadController>{
+                   reload_controller}](core::SuccessfulBotOperation operation)
+              -> boost::asio::awaitable<void> {
+            if (operation.installation.surface !=
+                    obcx::telegram::bot::surface ||
+                !is_telegram_message_send_action(operation.action)) {
+              co_return;
+            }
+            const auto controller = weak_controller.lock();
+            if (!controller) {
+              co_return;
+            }
+            try {
+              const auto result =
+                  co_await controller->process(core::bot_message_sent_envelope(
+                      "telegram", operation.installation.installation_id,
+                      operation.action));
+              if (!result.ok()) {
+                const auto &first = result.failures.front();
+                OBCX_ERROR(
+                    "Actor runtime message-sent observation failed bot={} "
+                    "action={} failures={} pipeline={} stage={} actor={} "
+                    "code={} retryable={} message={}",
+                    operation.installation.installation_id,
+                    operation.action.value(), result.failures.size(),
+                    first.pipeline, first.stage, first.actor,
+                    first.failure.code, first.failure.retryable,
+                    first.failure.message);
+              }
+            } catch (const std::exception &error) {
+              OBCX_ERROR(
+                  "Actor runtime failed to process successful Telegram send: "
+                  "{}",
+                  error.what());
+            }
+          });
+    }
     // From this point the controller is the sole owner of the active slot.
     // Route leases retain retired generations until their final descendant.
     actor_runtime.reset();
@@ -394,6 +447,15 @@ public:
                 co_await process_actor_event(
                     "notice",
                     core::raw_notice_envelope_from_event(
+                        context.platform, context.installation_id, event));
+              });
+          events->subscribe_heartbeats(
+              [process_actor_event](const core::BotEventContext &context,
+                                    const common::HeartbeatEvent &event)
+                  -> boost::asio::awaitable<void> {
+                co_await process_actor_event(
+                    "heartbeat",
+                    core::raw_heartbeat_envelope_from_event(
                         context.platform, context.installation_id, event));
               });
         }

@@ -34,6 +34,14 @@ TEST(BotEventComponentTest,
                            ":notice:" + event.notice_type);
         co_return;
       });
+  events.subscribe_heartbeats(
+      [&observed](const obcx::core::BotEventContext &context,
+                  const obcx::common::HeartbeatEvent &event)
+          -> boost::asio::awaitable<void> {
+        observed.push_back(context.installation_id +
+                           ":heartbeat:" + std::to_string(event.interval));
+        co_return;
+      });
   events.activate();
   EXPECT_THROW(events.subscribe_messages({}),
                obcx::core::BotComponentRuntimeError);
@@ -42,20 +50,24 @@ TEST(BotEventComponentTest,
   message.message_id = "42";
   obcx::common::NoticeEvent notice;
   notice.notice_type = "member_join";
+  obcx::common::HeartbeatEvent heartbeat;
+  heartbeat.interval = 30000;
   events.publish(message);
   events.publish(notice);
+  events.publish(heartbeat);
   events.publish(obcx::common::RequestEvent{});
   io.run();
-  EXPECT_EQ(observed, (std::vector<std::string>{
-                          "telegram-secondary:message:42",
-                          "telegram-secondary:notice:member_join"}));
+  EXPECT_EQ(observed,
+            (std::vector<std::string>{"telegram-secondary:message:42",
+                                      "telegram-secondary:notice:member_join",
+                                      "telegram-secondary:heartbeat:30000"}));
 
   events.close();
   io.restart();
   message.message_id = "43";
   events.publish(message);
   io.run();
-  EXPECT_EQ(observed.size(), 2U);
+  EXPECT_EQ(observed.size(), 3U);
 }
 
 } // namespace

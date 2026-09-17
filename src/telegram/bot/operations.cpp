@@ -99,6 +99,24 @@ public:
   }
 
   auto upload(
+      const obcx::telegram::bot::SendTelegramPhotoUploadRequest &request)
+      -> boost::asio::awaitable<std::string> override {
+    if (transport_ == nullptr) {
+      throw BotComponentRuntimeError("Telegram media uploader is not prepared");
+    }
+    const TelegramMediaUpload photo{
+        .type = request.photo.type,
+        .filename = request.photo.filename,
+        .mime_type = request.photo.mime_type,
+        .data = std::string{
+            reinterpret_cast<const char *>(request.photo.bytes.data()),
+            request.photo.bytes.size()}};
+    co_return co_await transport_->upload_photo(request.target.native_group_id,
+                                                photo, request.caption,
+                                                request.topic_id);
+  }
+
+  auto upload(
       const obcx::telegram::bot::SendTelegramMediaGroupUploadsRequest &request)
       -> boost::asio::awaitable<std::string> override {
     if (transport_ == nullptr) {
@@ -308,6 +326,23 @@ public:
         parse_telegram_operation_response(response, true), request.target,
         "Telegram URL media-group send", TelegramSendResultShape::MediaGroup,
         request.media.size());
+  }
+
+  auto execute(
+      const obcx::telegram::bot::SendTelegramPhotoUploadRequest &request)
+      -> boost::asio::awaitable<
+          bot::BotOperationResult<bot::SendMessageResult>> {
+    if (uploader_ == nullptr) {
+      co_return bot::failed_operation<bot::SendMessageResult>(
+          bot::BotOperationErrorCode::UnsupportedAction,
+          "Telegram multipart photo upload is unavailable");
+    }
+    const auto response = // NOLINT(clang-analyzer-core.CallAndMessage)
+        co_await uploader_->upload(request);
+    co_return telegram_send_result(
+        parse_telegram_operation_response(response, true), request.target,
+        "Telegram multipart photo send",
+        TelegramSendResultShape::SingleMessage);
   }
 
   auto execute(

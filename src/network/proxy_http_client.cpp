@@ -32,7 +32,7 @@ ProxyHttpClient::ProxyHttpClient(asio::any_io_executor executor,
                                  ProxyConfig proxy_config,
                                  const common::ConnectionConfig &config)
     : HttpClient(std::move(executor), config) {
-  pimpl_->proxy = detail::CurlProxySettings{
+  pimpl_->state->proxy = detail::CurlProxySettings{
       .kind = curl_proxy_kind(proxy_config.type),
       .host = std::move(proxy_config.host),
       .port = proxy_config.port,

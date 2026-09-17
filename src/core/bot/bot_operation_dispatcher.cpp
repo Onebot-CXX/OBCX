@@ -1,5 +1,9 @@
 #include "core/bot/bot_operation_dispatcher.hpp"
 
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/this_coro.hpp>
+
 #include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
@@ -25,6 +29,7 @@ struct BotOperationDispatcher::State {
   const SurfaceValidator surface_registered;
   mutable std::shared_mutex mutex;
   std::unordered_map<std::string, std::shared_ptr<OperationRegistry>> endpoints;
+  SuccessHandler success_handler;
   bool sealed = false;
   bool closed = false;
 };
@@ -66,6 +71,21 @@ void BotOperationDispatcher::register_endpoint(
            .second) {
     throw std::invalid_argument("duplicate operation installation id");
   }
+}
+
+void BotOperationDispatcher::set_success_handler(SuccessHandler handler) {
+  if (!handler) {
+    throw std::invalid_argument("operation success handler cannot be empty");
+  }
+  std::unique_lock lock(state_->mutex);
+  if (state_->sealed || state_->closed) {
+    throw std::logic_error(
+        "operation success handler must be set before sealing");
+  }
+  if (state_->success_handler) {
+    throw std::logic_error("operation success handler is already set");
+  }
+  state_->success_handler = std::move(handler);
 }
 
 void BotOperationDispatcher::seal_registrations() {
@@ -137,7 +157,12 @@ auto BotOperationDispatcher::invoke_owned(std::shared_ptr<State> state,
     co_return reject<bot::Json>(bot::BotOperationErrorCode::InvalidRequest,
                                 "operation envelope is invalid");
   }
+  const SuccessfulBotOperation completed{
+      .installation = envelope.installation,
+      .action = envelope.action,
+  };
   std::shared_ptr<OperationRegistry> endpoint;
+  SuccessHandler success_handler;
   {
     std::shared_lock lock(state->mutex);
     if (state->closed) {
@@ -151,8 +176,19 @@ auto BotOperationDispatcher::invoke_owned(std::shared_ptr<State> state,
                                   "operation installation was not found");
     }
     endpoint = found->second;
+    success_handler = state->success_handler;
   }
-  co_return co_await endpoint->invoke(std::move(envelope));
+  auto reply = co_await endpoint->invoke(std::move(envelope));
+  if (reply.ok() && success_handler) {
+    auto executor = co_await boost::asio::this_coro::executor;
+    try {
+      boost::asio::co_spawn(executor, success_handler(completed),
+                            boost::asio::detached);
+    } catch (...) {
+      // Observation is best effort and cannot change a completed operation.
+    }
+  }
+  co_return reply;
 }
 
 } // namespace obcx::core
