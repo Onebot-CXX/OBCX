@@ -13,6 +13,12 @@
       "binaryDir": "${sourceDir}/build/actor-dev",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "OBCX_PACKAGES_WORKSPACE": "${sourceDir}/packages.toml",
+        "OBCX_PACKAGES_LOCK": "${sourceDir}/packages.lock",
+        "OBCX_PACKAGES_GRAPH": "${sourceDir}/build/actor-dev/package-state/resolved-packages.json",
+        "OBCX_PACKAGES_CACHE": "${sourceDir}/build/actor-dev/package-state/sources",
+        "OBCX_PACKAGES_STATE_DIR": "${sourceDir}/build/actor-dev/package-state/cmake",
+        "OBCX_PACKAGES_MODE": "development",
         "OBCX_BUILD_TESTS": "ON",
         "OBCX_BUILD_BENCHMARKS": "OFF"
       }
@@ -24,6 +30,12 @@
       "binaryDir": "${sourceDir}/build/actor-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "OBCX_PACKAGES_WORKSPACE": "${sourceDir}/packages.toml",
+        "OBCX_PACKAGES_LOCK": "${sourceDir}/packages.lock",
+        "OBCX_PACKAGES_GRAPH": "${sourceDir}/build/actor-release/package-state/resolved-packages.json",
+        "OBCX_PACKAGES_CACHE": "${sourceDir}/build/actor-release/package-state/sources",
+        "OBCX_PACKAGES_STATE_DIR": "${sourceDir}/build/actor-release/package-state/cmake",
+        "OBCX_PACKAGES_MODE": "development",
         "OBCX_BUILD_TESTS": "ON",
         "OBCX_BUILD_BENCHMARKS": "ON"
       }

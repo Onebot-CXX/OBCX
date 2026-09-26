@@ -179,34 +179,39 @@ network or timer operations should use `ActorContext::await_asio`.
 Run the standard checks with:
 
 ```bash
-ctest --test-dir build --output-on-failure
-ctest --test-dir build -L actor-runtime --output-on-failure
-ctest --test-dir build -R '^actor_sdk_v2_smoke$' --output-on-failure
+ctest --test-dir build --parallel 20 --output-on-failure
+ctest --test-dir build --parallel 20 -L actor-runtime --output-on-failure
+ctest --test-dir build --parallel 20 -R '^actor_sdk_v2_smoke$' --output-on-failure
 ```
 
 The clean external SDK and installed-surface check is `actor_sdk_v2_smoke`.
-Root verification uses only root-owned source and generic actor fixtures;
-standalone actor repositories own and run their separate release and
-integration suites.
+That SDK smoke uses root-owned generic actor fixtures. Selected workspace
+packages contribute their own tests; this does not establish a coordinated
+standalone release.
 
-Run the isolated release install and continuous pipeline soak from an empty
-build/install root with:
+### Historical release commands — unavailable after package-v2 cutover
+
+The scripts below describe the pre-v2 release workflow, **not runnable current
+release instructions**. Their orchestration still assumes hardcoded actors,
+removed conformance targets and incomplete single-DSO archives. The CLI now
+refuses these operations before changing directories or producing release
+assets. Inventory/closure-based replacement is deferred; use the workspace
+build and SDK/stager regressions above in the meantime.
+
+The historical isolated install/soak command was:
 
 ```bash
 nix develop --ignore-environment --command \
   python3 scripts/verify_actor_release.py \
     --work-dir /tmp/obcx-actor-release-verification \
-    --soak-messages 100000 --jobs 2
+    --soak-messages 100000 --jobs 20
 ```
 
-The command removes loader-path overrides, performs a Release configure and
-build, installs core and all actor packages into one prefix, starts the
-installed application, and runs the installed message-store-to-bridge
-pipeline. `scripts/rehearse_actor_release_rollback.py` rehearses an atomic
+The old command removed loader-path overrides, built and installed core with
+hardcoded actor packages, and ran an installed message-store-to-bridge pipeline. `scripts/rehearse_actor_release_rollback.py` rehearses an atomic
 deployment-link switch between immutable candidate and previous install roots.
 
-After all source gates are green, prepare deterministic coordinated artifacts
-without publishing them:
+The retired coordinated-artifact command was:
 
 ```bash
 python3 scripts/package_actor_release.py \
@@ -215,8 +220,8 @@ python3 scripts/package_actor_release.py \
 sha256sum --check /tmp/obcx-actor-release-artifacts/SHA256SUMS
 ```
 
-The generated manifest remains `prepared-not-published`; repository rename,
-tagging, and upload are separate external release actions.
+Historical manifests used `prepared-not-published`; the current CLI does not
+generate one. Tagging and upload remain separate, unauthorized external actions.
 
 ## Failure handling
 

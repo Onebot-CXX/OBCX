@@ -1,0 +1,10 @@
+# Explicit SDK/core-only workspace. Add roots, source bindings and verified
+# providers together to select actors/libraries; no registry lookup or defaults.
+schema_version = 2
+sources = []
+providers = []
+
+[workspace]
+roots = []
+platform = "linux-x86_64"
+profile = "tests"

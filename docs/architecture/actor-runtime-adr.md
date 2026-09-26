@@ -124,9 +124,10 @@ are fingerprinted and require restart when changed.
 
 ## Package boundary
 
-Every standalone package owns one canonical `actor.toml`, uses
-`OBCXActor.cmake`, and exports the symbols emitted by
-`OBCX_ACTOR_EXPORT_V2`. The manager requires an explicit numeric ABI value of
+Every package owns one canonical schema-v2 `package.toml` and uses
+`OBCXPackages.cmake` with an explicit workspace, source lock, and dependency
+graph (see [package builds](package-cmake.md)). Only actor-kind packages export
+the symbols emitted by `OBCX_ACTOR_EXPORT_V2`; ordinary libraries do not. The manager requires an explicit numeric ABI value of
 2 before looking up the V2 factory, destructor, name, version, and input
 contract symbols. GCC 16.1+, C++26 reflection, and Linux x86_64/arm64 are the
 only supported authoring and deployment baseline.

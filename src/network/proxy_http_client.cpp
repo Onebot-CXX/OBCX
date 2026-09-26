@@ -43,10 +43,12 @@ ProxyHttpClient::ProxyHttpClient(asio::any_io_executor executor,
   OBCX_INFO("HTTP proxy client configured");
 }
 
-auto ProxyHttpClient::post(std::string_view path, std::string_view body,
-                           const std::map<std::string, std::string> &headers)
+auto ProxyHttpClient::post(
+    std::string_view path, std::string_view body,
+    const std::map<std::string, std::string> &headers,
+    const std::optional<std::uint64_t> response_body_limit)
     -> asio::awaitable<HttpResponse> {
-  return HttpClient::post(path, body, headers);
+  return HttpClient::post(path, body, headers, response_body_limit);
 }
 
 auto ProxyHttpClient::get(

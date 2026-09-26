@@ -16,11 +16,13 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import tomllib
 from typing import Any, Iterable, Sequence
 
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SOURCE_ROOT / "cmake"))
+from obcx_package import PackageError
+from obcx_package.io import metadata as read_metadata
 ARCHITECTURE_ALIASES = {
     "amd64": "x86_64",
     "x86_64": "x86_64",
@@ -117,7 +119,7 @@ def deployment_members(
             continue
         if relative.parts[:3] in {
             ("lib", "obcx", "actors"),
-            ("share", "obcx", "actors"),
+            ("share", "obcx", "packages"),
         }:
             continue
         result.append((path, str(Path(prefix) / relative)))
@@ -157,23 +159,17 @@ def release_platform_name(
 
 
 def actor_metadata(path: Path) -> dict[str, Any]:
-    with path.open("rb") as stream:
-        metadata = tomllib.load(stream)
-    try:
-        actor = metadata["actor"]
-        artifact = metadata["artifact"]
-        publication = metadata["publication"]
-        return {
-            "id": actor["id"],
-            "name": actor["name"],
-            "version": actor["version"],
-            "abi": actor["abi"],
-            "artifact": artifact["name"],
-            "platforms": artifact["platforms"],
-            "repository": publication["repository"],
-        }
-    except (KeyError, TypeError) as error:
-        raise PackagingFailure(f"invalid actor metadata {path}: {error}") from error
+    document = read_metadata(path, "package")
+    if document["package"]["kind"] != "actor":
+        raise PackagingFailure("actor archive requires actor package metadata")
+    # Do not pretend the old, single-DSO archive is a verified v2 closure.
+    # Inventory-driven release packaging remains a separate implementation.
+    if document["dependencies"]["libraries"]:
+        raise PackagingFailure("declared libraries require v2 inventory/closure packaging, not a single-DSO archive")
+    return {"id": document["package"]["id"], "name": document["package"]["name"],
+            "version": document["package"]["version"], "abi": document["actor"]["abi"],
+            "artifact": document["artifact"]["name"], "platforms": document["artifact"]["platforms"],
+            "repository": document["publication"]["repository"]}
 
 
 def core_version(deployment: Path) -> str:
@@ -211,17 +207,26 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         recorded_date = validate_recorded_date(args.recorded_date)
+        # Keep the archive primitives and their safety regressions, but do not
+        # execute the historical coordinator against schema-v2 packages.
+        raise PackagingFailure(
+            "coordinated releases are unavailable after package-v2 cutover; "
+            "inventory/closure packaging is deferred (see "
+            "docs/architecture/actor-runtime-v2-operations.md)"
+        )
+
+        # Historical pre-v2 orchestration; not current release evidence.
         clean_output_directory(output, deployment, args.clean)
 
         run_check(
-            [sys.executable, "actor-registry/generate_actor_index.py", "validate"]
+            [sys.executable, "cmake/package_tool.py", "registry-validate", "--entries", "actor-registry/entries"]
         )
         run_check(
             [
                 sys.executable,
-                "actor-registry/generate_actor_index.py",
-                "generate",
-                "--check",
+                "cmake/package_tool.py", "registry-index",
+                "--entries", "actor-registry/entries",
+                "--output", "actor-registry/index/packages.json", "--check",
             ]
         )
 
@@ -238,7 +243,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
         )
         for artifact_stem, source in actors:
-            metadata_path = source / "actor.toml"
+            metadata_path = source / "package.toml"
             metadata = actor_metadata(metadata_path)
             if platform_name not in metadata["platforms"]:
                 raise PackagingFailure(
@@ -249,9 +254,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 deployment
                 / "share"
                 / "obcx"
-                / "actors"
+                / "packages"
                 / metadata["id"]
-                / "actor.toml"
+                / "package.toml"
             )
             if metadata_path.read_bytes() != installed_metadata.read_bytes():
                 raise PackagingFailure(
@@ -293,9 +298,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     (
                         installed_metadata,
                         str(
-                            Path("share/obcx/actors")
+                            Path("share/obcx/packages")
                             / metadata["id"]
-                            / "actor.toml"
+                            / "package.toml"
                         ),
                     ),
                 ],
@@ -376,7 +381,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         print(f"prepared {len(artifacts)} coordinated artifacts in {output}")
         return 0
-    except (OSError, PackagingFailure, json.JSONDecodeError) as error:
+    except (OSError, PackagingFailure, PackageError, json.JSONDecodeError) as error:
         print(f"release packaging failed: {error}", file=sys.stderr)
         return 1
 

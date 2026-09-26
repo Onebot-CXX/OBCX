@@ -1,0 +1,46 @@
+schema_version = 2
+
+[package]
+id = "example.actor"
+name = "example_actor"
+version = "0.2.0"
+kind = "actor"
+
+[actor]
+name = "example_actor"
+abi = 2
+entrypoint = "obcx_create_actor_v2"
+input_contract_schema = 2
+
+[artifact]
+kind = "shared-library"
+name = "example_actor"
+target = "example_actor"
+export_target = "example::actor"
+platforms = ["linux-x86_64"]
+
+[dependencies]
+libraries = [{ id = "example.mapping", version = ">=0.1.0,<0.2.0", target = "example::mapping", visibility = "private" }]
+actors = []
+system = [{ id = "obcx-sdk", version = ">=1.1.0,<2.0.0", targets = ["obcx::obcx_core"], visibility = "private" }]
+
+[test_dependencies]
+libraries = []
+system = []
+
+[compatibility]
+cpp_standard = 26
+compiler = { id = "GNU", version = ">=16.1.0" }
+stdlib = "libstdc++"
+cxx11_abi = 1
+pic = true
+obcx = ">=1.1.0,<2.0.0"
+actor_abi_min = 2
+actor_abi_max = 2
+reflection_macro = 202506
+
+[publication]
+repository = "https://example.invalid/actor"
+homepage = "https://example.invalid/actor"
+license = "MIT"
+description = "Offline ABI V2 contract fixture, not a deployable actor"

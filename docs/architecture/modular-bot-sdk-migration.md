@@ -11,8 +11,8 @@ exact installation/conversation routing and Bridge schema-3 state.
 | --- | --- |
 | Actor numeric dispatch ABI | `2` (unchanged) |
 | Generated `obcx_get_actor_contract().schema_version` | `2` |
-| `actor.toml` `[compatibility].input_contract_schema` | `2` |
-| `actor.toml` document `schema_version` | `1` (unchanged) |
+| `package.toml` `[actor].input_contract_schema` | `2` |
+| `package.toml` document `schema_version` | `2` |
 | Current Bridge database schema | `3` (unchanged) |
 
 A schema-1 Actor is rejected before factory/preparation during startup,
@@ -28,9 +28,10 @@ Message Store and template Actors that never send a Bot operation.
 2. Obtain `BotOperationGateway` from `ActorContext`; use `obcx::bot::invoke` or
    `MessagingClient` / the platform's `Client`. Keep request/result pairing and
    tracked `await_asio` ownership; never add detached gateway work.
-3. Link `obcx::bot_common_sdk`, `obcx::bot_onebot11_sdk`, or
-   `obcx::bot_telegram_sdk` as appropriate, alongside the existing Actor framework
-   SDK. Platform targets do not require the peer platform's headers.
+3. Declare SDK dependencies in `package.toml` and authorize their targets in
+   the workspace's `obcx-sdk` binding; do not add undeclared CMake links.
+   Platform-specific SDK targets do not require the peer platform's headers.
+   See [package builds](package-cmake.md) for the explicit graph and lock inputs.
 4. Declare exact expected surface strings (`onebot11.qq`, `telegram.bot_api`) in
    scalar and collection bot-reference contracts. Existing ingress/command route
    strings remain `qq` and `telegram`; they are not surface aliases.

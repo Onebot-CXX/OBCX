@@ -2,16 +2,19 @@
 #define OBCX_INCLUDE_ONEBOT11_BOT_CLIENT_HPP_
 
 #include "core/bot/typed_operation.hpp"
+#include "onebot11/bot/group_forward.hpp"
 #include "onebot11/bot/operations.hpp"
 
 namespace obcx::onebot11::bot {
 
 template <typename Request>
-concept OwnedRequest = std::same_as<Request, GetOneBotGroupMemberRequest> ||
-                       std::same_as<Request, GetOneBotForwardMessageRequest> ||
-                       std::same_as<Request, ResolveOneBotGroupFileRequest> ||
-                       std::same_as<Request, ResolveOneBotPrivateFileRequest> ||
-                       std::same_as<Request, PokeOneBotGroupRequest>;
+concept OwnedRequest =
+    std::same_as<Request, SendOneBotGroupForwardMessageRequest> ||
+    std::same_as<Request, GetOneBotGroupMemberRequest> ||
+    std::same_as<Request, GetOneBotForwardMessageRequest> ||
+    std::same_as<Request, ResolveOneBotGroupFileRequest> ||
+    std::same_as<Request, ResolveOneBotPrivateFileRequest> ||
+    std::same_as<Request, PokeOneBotGroupRequest>;
 
 class Client {
 public:

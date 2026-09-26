@@ -738,7 +738,9 @@ auto ProtocolAdapter::serialize_send_group_forward_msg_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request: {}", j.dump());
+  // Forward nodes can contain private descriptions and complete base64 images.
+  // Keep their content out of diagnostics even when trace logging is enabled.
+  OBCX_DEBUG("Serialized group forward request: nodes={}", messages.size());
   return j.dump();
 }
 

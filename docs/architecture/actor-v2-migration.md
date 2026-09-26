@@ -8,37 +8,43 @@ A standalone package contains one canonical metadata document, a CMake entry,
 and actor sources:
 
 ```text
-actor.toml
+package.toml
 CMakeLists.txt
 src/example_actor.hpp
 src/example_actor.cpp
 tests/...
 ```
 
-Start from `local_actor/obcx-actor-template`. `actor.toml` declares identity,
-semantic version, ABI 2, artifact/target names, package and actor
-dependencies, supported OBCX range, repository, license, description, and only
-the release platforms whose binaries were built and verified. Unknown or
-missing fields fail validation; an undeclared platform cannot resolve from the
-actor registry.
+Start from `local_actor/obcx-actor-template`. V2 `package.toml` declares identity,
+semantic version, ABI 2, artifact/target names, typed library/actor/system
+dependencies, test dependencies, compatibility and publication information.
+Unknown or missing fields fail validation. The development registry records
+metadata only; a declared platform does not manufacture a verified download.
 
 ## CMake contract
 
 ```cmake
 cmake_minimum_required(VERSION 3.30)
-project(example_actor VERSION 0.1.0 LANGUAGES CXX)
+if(NOT DEFINED OBCX_CURRENT_PACKAGE)
+  project(example_actor VERSION 0.1.0 LANGUAGES CXX)
+  find_package(obcx-sdk CONFIG REQUIRED GLOBAL)
+  include(OBCXPackages)
+  obcx_load_configured_workspace()
+  return()
+endif()
 
-find_package(obcx-sdk CONFIG REQUIRED)
-include(OBCXActor)
-
-obcx_add_actor(example
-  SOURCES src/example_actor.cpp
-  OUTPUT_NAME example)
+obcx_add_actor(SOURCES src/example_actor.cpp)
 ```
 
-`artifact.target` must equal `example_actor`, and `artifact.name` must equal
-`example`. Installation places the library under `lib/obcx/actors` and
-metadata under `share/obcx/actors/<actor-id>/actor.toml`.
+Target, export and artifact names come from metadata, as do external links.
+Register internal and test targets with an explicit `obcx_package_target` role.
+Installation places the library under `lib/obcx/actors` and metadata under
+`share/obcx/packages/<package-id>/package.toml`.
+
+The bootstrap requires all six `OBCX_PACKAGES_WORKSPACE/LOCK/GRAPH/CACHE/MODE/STATE_DIR`
+values and an explicit configuration. Prepare the frozen graph first; see
+[package CMake](package-cmake.md). Core workspace development is the current
+acceptance scope; expanded standalone distribution remains deferred.
 
 ## C++ contract
 
@@ -197,10 +203,11 @@ Run the same test against a clean installed SDK and installed actor artifacts.
 
 ## Package verification
 
+After configuring with the explicit workspace inputs described above:
+
 ```bash
-cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/obcx/install
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
+cmake --build build --parallel 20
+ctest --test-dir build --parallel 20 --output-on-failure
 cmake --install build --prefix /tmp/example-package
 ```
 

@@ -12,8 +12,9 @@ Compose 和包含凭据的本地配置位于 `dev/onebot/`，不属于测试门�
   configuration、OneBot/Telegram protocol/transport/ingress/operation 组件；
 - CLI、数据库、metadata、registry、packaging、安装后 SDK 与通用 fixture actor。
 
-根测试不得包含生产 actor 的私有头文件、实现源码或业务断言，也不得遍历、
-构建或校验 `local_actor/` 下的独立仓库。Bot component DAG、recipe、严格配置、
+根仓库自有测试不得包含生产 actor 的私有头文件、实现源码或业务断言，也不得
+遍历全部 `local_actor/`。工作区 tests profile 可加载明确选中的包，并注册由各包
+自己拥有的业务测试；这不改变测试源码的所有权。Bot component DAG、recipe、严格配置、
 ingress、operation endpoint、通用 ABI、same-SONAME staging、dependency
 isolation 和 generation cutover 使用根仓库自有源码与通用 fixture 验证。每个
 独立 actor 仓库自行拥有并执行其 standalone build、安装、业务测试和跨 actor
@@ -21,11 +22,21 @@ isolation 和 generation cutover 使用根仓库自有源码与通用 fixture �
 
 ## 目录职责
 
-- `cpp/`：GoogleTest 单元与小型集成测试。
-- `python/`：Python `unittest` metadata、packaging 与根仓库模块化约束。
-- `cmake/`：由 CTest 调用的 SDK、CLI 与根仓库集成脚本。
-- `compile/`：C++ 正向与负向反射编译契约。
-- `fixtures/`：根 runtime 专用的通用 actor DSO 与 standalone SDK consumer。
+测试源码按功能归类，不按 C++、Python 或测试执行方式拆分：
+
+- `actor/`：actor API、配置、协程、调度、加载、staging、热重载与反射编译契约。
+- `bot/`：bot SDK、组件、平台协议、操作、消息入口，以及 Python 平台依赖边界检查。
+- `command/`：命令协调与平台适配。
+- `network/`：HTTP、curl、WebSocket、超时与取消。
+- `package/`：包契约、解析、来源、provider、registry、CMake 集成与发布工具。
+- `cli/`：命令行处理。
+- `database/`：数据库。
+- `tui/`：终端界面布局。
+
+共享测试基础设施单独保留：
+
+- `cmake/`：测试注册模块，以及由 CTest 调用的 SDK、CLI 与根仓库集成脚本。
+- `fixtures/`：通用 actor DSO、standalone SDK consumer 与静态测试数据。
 - `support/`：多个根测试共享的辅助代码。
 
 `CMakeLists.txt` 只负责引入注册模块：
@@ -38,7 +49,7 @@ isolation 和 generation cutover 使用根仓库自有源码与通用 fixture �
 
 ## 测试层级
 
-快速根测试，不执行 compile/package 门禁：
+先按根 README 准备 v2 workspace、冻结锁和解析图。快速根测试，不执行 compile/package 门禁：
 
 ```bash
 cmake --preset actor-dev
@@ -70,9 +81,14 @@ completion signal，不使用 startup sleep。
 Python 测试也可以直接运行，例如：
 
 ```bash
-python3 -m unittest -v tests/python/actor_metadata_test.py
+ctest --test-dir build --parallel 20 --output-on-failure -R '^package_.*_test$'
 ```
 
-新增 C++ 测试时，使用 `cmake/unit_tests.cmake` 中的 `obcx_add_gtest`
-注册 target 与职责标签。Python 产生的 `__pycache__`、本地 bot 环境和 build
-outputs 必须保持 ignored，不属于测试源码。
+新增测试时，将源码放入对应功能目录。C++ 测试在 `cmake/unit_tests.cmake`
+中使用 `obcx_add_gtest(功能目录/名称.cpp "标签")` 注册；Python 测试在
+`cmake/python_tests.cmake` 中使用
+`obcx_add_python_unittest(功能目录/名称.py "标签")` 注册。target/CTest 名称
+由文件名推导，不包含目录；迁移目录不改变测试名称与标签。
+
+Python 产生的 `__pycache__`、本地 bot 环境和 build outputs 必须保持 ignored，
+不属于测试源码。

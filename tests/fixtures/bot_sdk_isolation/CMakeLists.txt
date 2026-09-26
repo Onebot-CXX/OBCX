@@ -10,15 +10,15 @@ include(GoogleTest)
 
 if(OBCX_BOT_SDK_KIND STREQUAL "common")
   set(_target obcx::bot_common_sdk)
-  set(_sources ${OBCX_TEST_ROOT}/cpp/bot_common_contract_test.cpp
-               ${OBCX_TEST_ROOT}/cpp/bot_ids_test.cpp common_gateway.cpp)
+  set(_sources ${OBCX_TEST_ROOT}/bot/bot_common_contract_test.cpp
+               ${OBCX_TEST_ROOT}/bot/bot_ids_test.cpp common_gateway.cpp)
 elseif(OBCX_BOT_SDK_KIND STREQUAL "onebot11")
   set(_target obcx::bot_onebot11_sdk)
-  set(_sources ${OBCX_TEST_ROOT}/cpp/bot_onebot_contract_test.cpp)
+  set(_sources ${OBCX_TEST_ROOT}/bot/bot_onebot_contract_test.cpp)
 elseif(OBCX_BOT_SDK_KIND STREQUAL "telegram")
   set(_target obcx::bot_telegram_sdk)
-  set(_sources ${OBCX_TEST_ROOT}/cpp/bot_telegram_contract_test.cpp
-               ${OBCX_TEST_ROOT}/cpp/bot_gateway_media_test.cpp)
+  set(_sources ${OBCX_TEST_ROOT}/bot/bot_telegram_contract_test.cpp
+               ${OBCX_TEST_ROOT}/bot/bot_gateway_media_test.cpp)
 else()
   message(FATAL_ERROR "unknown SDK isolation fixture")
 endif()

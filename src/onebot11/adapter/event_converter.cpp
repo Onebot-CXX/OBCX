@@ -49,7 +49,7 @@ auto ProtocolAdapter::parse_event(std::string_view json_str)
       if (meta_event_type == "heartbeat") {
         common::HeartbeatEvent event;
         event.from_json(j);
-        OBCX_DEBUG("OneBot ProtocolAdapter: Received heartbeat, interval: {}ms",
+        OBCX_TRACE("OneBot ProtocolAdapter: Received heartbeat, interval: {}ms",
                    event.interval);
         return event;
       } else {
@@ -65,7 +65,7 @@ auto ProtocolAdapter::parse_event(std::string_view json_str)
     return std::nullopt;
   }
 
-  OBCX_DEBUG("OneBot ProtocolAdapter: Unknown post_type '{}'", post_type);
+  OBCX_TRACE("OneBot ProtocolAdapter: Unknown post_type '{}'", post_type);
   return std::nullopt;
 }
 

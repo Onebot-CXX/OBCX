@@ -66,6 +66,45 @@ public:
              {.group = request.target, .native_message_id = *message_id}}});
   }
 
+  auto execute(
+      const obcx::onebot11::bot::SendOneBotGroupForwardMessageRequest &request)
+      -> boost::asio::awaitable<bot::BotOperationResult<
+          obcx::onebot11::bot::OneBotGroupForwardMessageResult>> {
+    using Result = obcx::onebot11::bot::OneBotGroupForwardMessageResult;
+    const auto echo = next_echo();
+    // Reuse the existing OneBot11 action. No private extension or fallback.
+    const auto response = co_await transport().send_action(
+        protocol().serialize_send_group_forward_msg_request(
+            request.target.native_group_id, request.messages, echo),
+        echo);
+    auto parsed = parse_onebot11_operation_response(response, true);
+    if (!parsed.ok()) {
+      // LLOneBot can return an error after uploading/sending a forward. Its
+      // generic error envelope does not prove that nothing was submitted.
+      if (parsed.error) {
+        parsed.error->submission_safety =
+            bot::SubmissionSafety::PossiblySubmitted;
+        parsed.error->retryable = false;
+      }
+      co_return provider_failure<Result>(parsed);
+    }
+    const auto message_id = provider_id(parsed_value(parsed), "message_id");
+    const auto forward_id = optional_string(parsed_value(parsed), "forward_id");
+    if (!message_id || forward_id.empty()) {
+      co_return malformed_side_effect<Result>(
+          "Group forward response is missing message_id or forward_id");
+    }
+    Result result{.target = request.target,
+                  .message_id = *message_id,
+                  .forward_id = forward_id};
+    try {
+      result.validate();
+    } catch (const std::exception &) {
+      co_return malformed_side_effect<Result>("Invalid group forward receipt");
+    }
+    co_return bot::BotOperationResult<Result>::success(std::move(result));
+  }
+
   auto execute(const bot::SendPrivateMessageRequest &request)
       -> boost::asio::awaitable<
           bot::BotOperationResult<bot::SendPrivateMessageResult>> {

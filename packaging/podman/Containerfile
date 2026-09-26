@@ -1,3 +1,7 @@
+# HISTORICAL PRE-V2 RECIPE — NOT A SUPPORTED CURRENT BUILD.
+# Missing explicit v2 workspace/lock/graph inputs and inventory-driven actor
+# installation. scripts/build-podman-image.sh refuses this recipe; see README.md.
+# The commands below record the old workflow, not v2 release instructions.
 # Build an x86_64 or arm64 Linux OBCX runtime image using the admitted GCC 16
 # Nix flake dev shell.
 #

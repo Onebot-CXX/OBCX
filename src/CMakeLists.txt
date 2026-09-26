@@ -165,6 +165,8 @@ endif()
 # Enable position independent code for shared library compatibility
 set_target_properties(
   obcx_core PROPERTIES POSITION_INDEPENDENT_CODE ON
+                       OBCX_SDK_VERSION "${PROJECT_VERSION}"
+                       EXPORT_PROPERTIES OBCX_SDK_VERSION
                        INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Alias target for consistent usage (in-tree and installed)
@@ -244,6 +246,7 @@ install(FILES
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/types.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/operations.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/client.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/group_forward.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obcx/onebot11/bot)
 
 install(FILES
@@ -291,8 +294,22 @@ install(FILES
 
 # Install build helper modules alongside the SDK
 install(FILES
-    ${CMAKE_SOURCE_DIR}/cmake/OBCXActor.cmake
-    ${CMAKE_SOURCE_DIR}/cmake/actor_metadata.py
+    ${CMAKE_SOURCE_DIR}/cmake/OBCXPackages.cmake
+    ${CMAKE_SOURCE_DIR}/cmake/OBCXPackageProviders.cmake
+    ${CMAKE_SOURCE_DIR}/cmake/package_cmake.py
+    ${CMAKE_SOURCE_DIR}/cmake/package_tool.py
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/obcx-sdk)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/cmake/obcx_package
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/obcx-sdk
+    FILES_MATCHING PATTERN "*.py" PATTERN "__pycache__" EXCLUDE)
+install(FILES
+    ${CMAKE_SOURCE_DIR}/schemas/package.schema.json
+    ${CMAKE_SOURCE_DIR}/schemas/workspace.schema.json
+    ${CMAKE_SOURCE_DIR}/schemas/packages-lock.schema.json
+    ${CMAKE_SOURCE_DIR}/schemas/resolved-packages.schema.json
+    ${CMAKE_SOURCE_DIR}/schemas/package-build-receipt.schema.json
+    ${CMAKE_SOURCE_DIR}/schemas/provider-environment.schema.json
+    ${CMAKE_SOURCE_DIR}/schemas/provider-receipt.schema.json
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/obcx/schemas)
 
 add_subdirectory(app)

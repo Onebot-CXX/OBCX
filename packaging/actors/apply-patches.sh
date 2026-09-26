@@ -1,8 +1,10 @@
 #!/bin/sh
+# Historical pre-v2 bundle inspection only; not a v2 metadata migration tool.
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-actor_root=${OBCX_ACTOR_SOURCE_ROOT:-local_actor}
+: "${OBCX_ACTOR_SOURCE_ROOT:?Set an explicit directory for historical bundle inspection; do not use maintained v2 checkouts}"
+actor_root=$OBCX_ACTOR_SOURCE_ROOT
 
 apply_actor_patch() {
   actor=$1

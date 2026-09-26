@@ -16,9 +16,14 @@ Actor 看不到 installation、transport、token 或进程 capability registry�
 
 ```bash
 nix develop
+# 首次创建显式 workspace；不要覆盖已有的本地选择。
+cp packages-example.toml packages.toml
+python3 cmake/package_tool.py lock --workspace packages.toml --lock packages.lock \
+  --graph build/actor-dev/package-state/resolved-packages.json \
+  --cache build/actor-dev/package-state/sources --mode development --network deny
 cmake --preset actor-dev
-cmake --build --preset actor-dev --parallel
-ctest --preset actor-dev
+cmake --build --preset actor-dev --parallel "$(nproc)"
+ctest --preset actor-dev --parallel "$(nproc)"
 ```
 
 也可以在系统环境中构建；需要 Linux x86_64/arm64、CMake 3.30、GCC 16.1+
@@ -34,37 +39,31 @@ cmake --install build/actor-dev --prefix "$HOME/.local/obcx"
 
 ## 选择 actor package
 
-`actors.toml` 只负责选择参与构建的 package；package 自身的身份、ABI、依赖、
-兼容范围与发布信息只来自 package 内唯一的 `actor.toml`。可复制
-[actors-example.toml](actors-example.toml) 后按需选择本地 package：
+根构建现在只消费 v2 `packages.toml`、`packages.lock` 与预解析图；包内
+`package.toml` 是身份、artifact、依赖和兼容范围的唯一声明。示例
+[packages-example.toml](packages-example.toml) 显式选择空 roots，只构建 core/SDK。
+选择 actor/library 时必须同时提供 roots、来源以及有环境证据的 provider bindings。
+本地选择、锁和 `.package-state/` 环境记录不纳入版本控制。
 
-```toml
-schema_version = 1
+路径映射库 `obcx.path-mapping` 在独立 Git 仓库
+`local_library/obcx-path-mapping/` 中维护，不属于 core 源码，也不是 submodule。
+`local_library/` 与 `local_actor/` 一样由 core 忽略；选择 Bridge 或 ExHentai
+时，须在 workspace 显式绑定该库来源，不能依赖 core 自动附带或下载它。
+此处是本地开发目录约定，尚未配置远程发行地址。
 
-[[actors]]
-path = "local_actor/obcx-message-store"
-enabled = true
+`lock` 是唯一更新锁的命令；已有锁时使用相同参数的 `resolve` 导出冻结图。
+源码实现修改不要求重新锁定元数据。Git 来源必须绑定完整 commit，configure
+不下载、不重新选版本，也不再读取旧 `actors.toml`。
 
-[[actors]]
-path = "local_actor/obcx-message-bridge"
-enabled = true
-```
+CMake presets 明确选择 development 来源模式；`actor-release` 仅选择优化的
+编译配置，不代表已完成正式发行验证。非 preset 构建必须显式传入
+`OBCX_PACKAGES_WORKSPACE/LOCK/GRAPH/CACHE/MODE/STATE_DIR` 和构建配置。
+详见 [CMake 接入](docs/architecture/package-cmake.md) 与
+[provider 证据](docs/architecture/package-providers.md)。
 
-远程 package 使用 `repository` 与 `revision`；`revision` 必须是不可变 tag 或完整
-commit revision，不能依赖会移动的分支名。配置阶段会通过
-`OBCXActorLoader.cmake` 加载所选 package。配置完成后，依照实际 preset 的 binary
-directory 合并 vcpkg 依赖：
-
-```bash
-python3 cmake/gen_vcpkg_manifest.py actors.toml --binary-dir build/actor-dev
-python3 cmake/gen_vcpkg_manifest.py actors.toml --binary-dir build/actor-dev --list
-```
-
-仓库内四个固定版本的 standalone actor 源码可在无网络环境恢复：
-
-```bash
-sh packaging/actors/restore-sources.sh
-```
+> 旧格式 reader 已删除，registry 本地检查统一使用 core 工具；当前索引只登记源码
+> 元数据，不宣称已有可下载的 v2 发行物。发布脚本/旧源码快照的完整迁移仍待完成，
+> 不要将旧归档恢复流程当作 v2 workspace 的准备入口。没有 v1 fallback。
 
 ## 运行配置
 
@@ -231,20 +230,21 @@ actor 依赖与数据库选择以本页的当前运行配置为准。
 ## 编写 standalone actor
 
 推荐从 [obcx-actor-template](local_actor/obcx-actor-template) 开始。Package 的
-`actor.toml` 是唯一 metadata 来源，必须声明 identity、ABI 2、artifact、依赖、
+`package.toml` 是唯一 metadata 来源，必须声明 identity、ABI 2、artifact、依赖、
 兼容范围、发布信息，以及确实完成构建和验证的 `artifact.platforms`。registry 不会
 为未声明的平台虚构下载。最小 CMake 入口如下：
 
 ```cmake
 cmake_minimum_required(VERSION 3.30)
-project(example_actor LANGUAGES CXX)
+if(NOT DEFINED OBCX_CURRENT_PACKAGE)
+  project(example_actor LANGUAGES CXX)
+  find_package(obcx-sdk CONFIG REQUIRED GLOBAL)
+  include(OBCXPackages)
+  obcx_load_configured_workspace() # 六个 OBCX_PACKAGES_* 参数全部显式提供
+  return()
+endif()
 
-find_package(obcx-sdk CONFIG REQUIRED)
-include(OBCXActor)
-
-obcx_add_actor(example
-  SOURCES src/example_actor.cpp
-  OUTPUT_NAME example)
+obcx_add_actor(SOURCES src/example_actor.cpp) # 名称、输出和外部链接来自 TOML
 ```
 
 Actor library 继承 `ReflectedActor<Derived>`，公开精确的同步或异步 `handle`
@@ -268,20 +268,21 @@ message type，配置再按 platform/bot scope 激活路由；平台适配器不
 ctest --preset actor-dev -R '^actor_sdk_v2_smoke$'
 ```
 
-独立 actor 仓库各自负责其 standalone build、安装、业务测试和跨 actor 集成；
-根测试不会遍历或构建 `local_actor/` 下的外部仓库。
+独立 actor 仓库各自负责其业务测试和跨 actor 集成；根构建只加载 workspace
+明确选中的包，tests profile 注册这些包的测试，不遍历全部 `local_actor/`。
 
-## Actor registry
+## Package registry
 
-`actor-registry/` 保存 actor-only entry schema、确定性索引生成器与 bridge、
-message-store 发布项：
+`actor-registry/` 是独立 registry 的开发期检查快照，actor/library 均读取同一份
+v2 元数据规则。当前只登记元数据，不根据版本号猜测下载地址：
 
 ```bash
-python3 actor-registry/generate_actor_index.py validate
-python3 actor-registry/generate_actor_index.py generate --check
-python3 actor-registry/generate_actor_index.py resolve \
-  --id vollate.bridge --version 0.1.0 --platform linux-x86_64
+python3 cmake/package_tool.py registry-validate --entries actor-registry/entries
+python3 cmake/package_tool.py registry-index --entries actor-registry/entries \
+  --output actor-registry/index/packages.json --check
 ```
+
+经验证的发行物、发布工具的正式版本固定和远程发布仍后置。
 
 ## 验证与文档
 

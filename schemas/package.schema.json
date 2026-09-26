@@ -1,0 +1,862 @@
+{
+  "$id": "https://onebot-cxx.github.io/obcx/schemas/package.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "additionalProperties": false,
+          "properties": {
+            "abi": {
+              "const": 2,
+              "type": "integer"
+            },
+            "entrypoint": {
+              "enum": [
+                "obcx_create_actor_v2"
+              ],
+              "type": "string"
+            },
+            "input_contract_schema": {
+              "const": 2,
+              "type": "integer"
+            },
+            "name": {
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "abi",
+            "entrypoint",
+            "input_contract_schema"
+          ],
+          "type": "object"
+        },
+        "artifact": {
+          "additionalProperties": false,
+          "properties": {
+            "export_target": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "shared-library"
+              ],
+              "type": "string"
+            },
+            "name": {
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            "platforms": {
+              "items": {
+                "enum": [
+                  "linux-x86_64",
+                  "linux-arm64"
+                ],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "target": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "target",
+            "export_target",
+            "platforms"
+          ],
+          "type": "object"
+        },
+        "compatibility": {
+          "additionalProperties": false,
+          "properties": {
+            "actor_abi_max": {
+              "const": 2,
+              "type": "integer"
+            },
+            "actor_abi_min": {
+              "const": 2,
+              "type": "integer"
+            },
+            "compiler": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "enum": [
+                    "GNU"
+                  ],
+                  "type": "string"
+                },
+                "version": {
+                  "format": "semver-range",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "version"
+              ],
+              "type": "object"
+            },
+            "cpp_standard": {
+              "const": 26,
+              "type": "integer"
+            },
+            "cxx11_abi": {
+              "enum": [
+                0,
+                1
+              ],
+              "type": "integer"
+            },
+            "obcx": {
+              "format": "semver-range",
+              "minLength": 1,
+              "type": "string"
+            },
+            "pic": {
+              "const": true,
+              "type": "boolean"
+            },
+            "reflection_macro": {
+              "const": 202506,
+              "type": "integer"
+            },
+            "stdlib": {
+              "enum": [
+                "libstdc++"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "cpp_standard",
+            "compiler",
+            "stdlib",
+            "cxx11_abi",
+            "pic",
+            "obcx",
+            "actor_abi_min",
+            "actor_abi_max",
+            "reflection_macro"
+          ],
+          "type": "object"
+        },
+        "dependencies": {
+          "additionalProperties": false,
+          "properties": {
+            "actors": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "format": "semver-range",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "libraries": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "target": {
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "format": "semver-range",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "public",
+                      "interface"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version",
+                  "target",
+                  "visibility"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "system": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "targets": {
+                    "items": {
+                      "minLength": 1,
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "version": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "public",
+                      "interface"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version",
+                  "targets",
+                  "visibility"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "libraries",
+            "actors",
+            "system"
+          ],
+          "type": "object"
+        },
+        "package": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "actor"
+              ],
+              "type": "string"
+            },
+            "name": {
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            "version": {
+              "format": "semver",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "version",
+            "kind"
+          ],
+          "type": "object"
+        },
+        "publication": {
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "homepage": {
+              "format": "https",
+              "minLength": 1,
+              "type": "string"
+            },
+            "license": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]*(?: (?:AND|OR) [A-Za-z0-9][A-Za-z0-9.+-]*)*$",
+              "type": "string"
+            },
+            "repository": {
+              "format": "https",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository",
+            "homepage",
+            "license",
+            "description"
+          ],
+          "type": "object"
+        },
+        "schema_version": {
+          "const": 2,
+          "type": "integer"
+        },
+        "test_dependencies": {
+          "additionalProperties": false,
+          "properties": {
+            "libraries": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "target": {
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "format": "semver-range",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "public",
+                      "interface"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version",
+                  "target",
+                  "visibility"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "system": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "targets": {
+                    "items": {
+                      "minLength": 1,
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "version": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "public",
+                      "interface"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version",
+                  "targets",
+                  "visibility"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "libraries",
+            "system"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "package",
+        "artifact",
+        "dependencies",
+        "test_dependencies",
+        "compatibility",
+        "publication",
+        "actor"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "additionalProperties": false,
+          "properties": {
+            "export_target": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "static-library",
+                "shared-library",
+                "header-only"
+              ],
+              "type": "string"
+            },
+            "name": {
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            "platforms": {
+              "items": {
+                "enum": [
+                  "linux-x86_64",
+                  "linux-arm64"
+                ],
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "target": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "target",
+            "export_target",
+            "platforms"
+          ],
+          "type": "object"
+        },
+        "compatibility": {
+          "additionalProperties": false,
+          "properties": {
+            "compiler": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "enum": [
+                    "GNU"
+                  ],
+                  "type": "string"
+                },
+                "version": {
+                  "format": "semver-range",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "version"
+              ],
+              "type": "object"
+            },
+            "cpp_standard": {
+              "enum": [
+                20,
+                23,
+                26
+              ],
+              "type": "integer"
+            },
+            "cxx11_abi": {
+              "enum": [
+                0,
+                1
+              ],
+              "type": "integer"
+            },
+            "pic": {
+              "const": true,
+              "type": "boolean"
+            },
+            "stdlib": {
+              "enum": [
+                "libstdc++"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "cpp_standard",
+            "compiler",
+            "stdlib",
+            "cxx11_abi",
+            "pic"
+          ],
+          "type": "object"
+        },
+        "dependencies": {
+          "additionalProperties": false,
+          "properties": {
+            "actors": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "format": "semver-range",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "libraries": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "target": {
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "format": "semver-range",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "public",
+                      "interface"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version",
+                  "target",
+                  "visibility"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "system": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "targets": {
+                    "items": {
+                      "minLength": 1,
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "version": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "public",
+                      "interface"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version",
+                  "targets",
+                  "visibility"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "libraries",
+            "actors",
+            "system"
+          ],
+          "type": "object"
+        },
+        "package": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "library"
+              ],
+              "type": "string"
+            },
+            "name": {
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            "version": {
+              "format": "semver",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "version",
+            "kind"
+          ],
+          "type": "object"
+        },
+        "publication": {
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "homepage": {
+              "format": "https",
+              "minLength": 1,
+              "type": "string"
+            },
+            "license": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]*(?: (?:AND|OR) [A-Za-z0-9][A-Za-z0-9.+-]*)*$",
+              "type": "string"
+            },
+            "repository": {
+              "format": "https",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository",
+            "homepage",
+            "license",
+            "description"
+          ],
+          "type": "object"
+        },
+        "schema_version": {
+          "const": 2,
+          "type": "integer"
+        },
+        "test_dependencies": {
+          "additionalProperties": false,
+          "properties": {
+            "libraries": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "target": {
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "format": "semver-range",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "public",
+                      "interface"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version",
+                  "target",
+                  "visibility"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "system": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "targets": {
+                    "items": {
+                      "minLength": 1,
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "version": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "public",
+                      "interface"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version",
+                  "targets",
+                  "visibility"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "libraries",
+            "system"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "package",
+        "artifact",
+        "dependencies",
+        "test_dependencies",
+        "compatibility",
+        "publication"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "OBCX v2 package"
+}

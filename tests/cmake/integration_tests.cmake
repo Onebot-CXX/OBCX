@@ -1,8 +1,37 @@
+# Evidence for the existing installed-SDK smoke: only trusted SDK provider
+# targets, never package source/include directories or arbitrary Nix roots.
+set(_sdk_queue obcx::obcx_core)
+set(_sdk_seen)
+set(_sdk_targets "[]")
+while(_sdk_queue)
+  list(POP_FRONT _sdk_queue _target)
+  _obcx_canonical(_target "${_target}")
+  if(_target IN_LIST _sdk_seen)
+    continue()
+  endif()
+  list(APPEND _sdk_seen "${_target}")
+  _obcx_target_record(_record "${_target}")
+  string(JSON _count LENGTH "${_sdk_targets}")
+  string(JSON _sdk_targets SET "${_sdk_targets}" ${_count} "${_record}")
+  string(REGEX REPLACE "\\$<[A-Za-z0-9_]+:" "" _references "${_record}")
+  string(REGEX MATCHALL "[A-Za-z_][A-Za-z0-9_.:+-]*" _tokens "${_references}")
+  foreach(_token IN LISTS _tokens)
+    if(TARGET "${_token}")
+      list(APPEND _sdk_queue "${_token}")
+    endif()
+  endforeach()
+endwhile()
+file(WRITE "${CMAKE_BINARY_DIR}/sdk-smoke-provider-targets.json" "${_sdk_targets}\n")
+get_property(_sdk_graph GLOBAL PROPERTY OBCX_PACKAGE_GRAPH)
+string(JSON _sdk_platform GET "${_sdk_graph}" lock platform)
+
 add_test(
   NAME actor_sdk_v2_smoke
   COMMAND
     ${CMAKE_COMMAND} -DOBCX_BUILD_DIR=${CMAKE_BINARY_DIR}
     -DOBCX_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+    -DOBCX_SDK_VERSION=${PROJECT_VERSION}
+    -DOBCX_PACKAGE_PLATFORM=${_sdk_platform}
     "-DOBCX_DEPENDENCY_PREFIX=${CMAKE_PREFIX_PATH}"
     "-DOBCX_CONSUMER_C_FLAGS=${CMAKE_C_FLAGS}"
     "-DOBCX_CONSUMER_CXX_FLAGS=${CMAKE_CXX_FLAGS}"

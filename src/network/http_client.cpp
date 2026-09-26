@@ -178,7 +178,12 @@ constexpr std::uint64_t kMaximumResponseHeaderBytes = 64ULL * 1024ULL;
   } else {
     message.append(" request failed");
   }
-  throw HttpClientError(message, submission_state);
+  const auto kind = error == asio::error::timed_out
+                        ? HttpClientErrorKind::Timeout
+                    : error == asio::error::operation_aborted
+                        ? HttpClientErrorKind::Cancelled
+                        : HttpClientErrorKind::TransportFailure;
+  throw HttpClientError(message, submission_state, kind);
 }
 
 } // namespace
@@ -194,11 +199,12 @@ HttpClient::HttpClient(asio::any_io_executor executor,
 HttpClient::~HttpClient() { pimpl_->state->close(); }
 
 auto HttpClient::post(std::string_view path, std::string_view body,
-                      const std::map<std::string, std::string> &headers)
+                      const std::map<std::string, std::string> &headers,
+                      const std::optional<std::uint64_t> response_body_limit)
     -> asio::awaitable<HttpResponse> {
   return HttpClientState::perform(pimpl_->state, detail::CurlHttpMethod::Post,
                                   std::string{path}, std::string{body}, headers,
-                                  std::nullopt);
+                                  response_body_limit);
 }
 
 auto HttpClient::get(std::string_view path,

@@ -27,3 +27,5 @@
 ## Commit message
 
 - Allow to commit without gpg sign but **must remind user to amend them with gpg sign**
+
+## Unit test rule

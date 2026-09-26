@@ -3,6 +3,10 @@
 > Historical SDK note: this document records the earlier migration. References
 > to `BotOperationClient` or schema-1 input contracts describe the retired SDK;
 > see the [current modular SDK migration](architecture/modular-bot-sdk-migration.md) for schema 2.
+> The `actor.toml`/`OBCXActor.cmake` build instructions below are also historical:
+> current builds require schema-v2 `package.toml`, an explicit `packages.toml`
+> and lock, and `OBCXPackages.cmake`. Use [package builds](architecture/package-cmake.md),
+> not the retired commands in this record.
 
 Applies to: OBCX C++26 reflected-actor cutover
 

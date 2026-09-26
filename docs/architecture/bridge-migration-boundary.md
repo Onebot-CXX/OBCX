@@ -8,7 +8,8 @@ Status: actor cutover complete in the checked-out bridge repository
 The bridge lives at `local_actor/obcx-message-bridge` and builds one dynamic
 entry point: the ABI 2 `bridge` actor. Its package identity, artifact,
 dependencies, compatibility range, and publication information are declared
-in `actor.toml`.
+in schema-v2 `package.toml`; the workspace explicitly binds its sources and
+providers (see [package builds](package-cmake.md)).
 
 `BridgeActor::handle` consumes
 `obcx::message_store::events::MessageStored`, resolves the runtime

@@ -38,24 +38,38 @@ enum class HttpRequestSubmissionState : std::uint8_t {
   PossiblySubmitted,
 };
 
+/** Structured failure category, independent of request submission safety. */
+enum class HttpClientErrorKind : std::uint8_t {
+  TransportFailure,
+  Timeout,
+  Cancelled,
+};
+
 /**
  * @brief HTTP客户端错误类型
  */
 class HttpClientError : public std::runtime_error {
 public:
-  explicit HttpClientError(std::string_view message,
-                           HttpRequestSubmissionState submission_state =
-                               HttpRequestSubmissionState::PossiblySubmitted)
+  explicit HttpClientError(
+      std::string_view message,
+      HttpRequestSubmissionState submission_state =
+          HttpRequestSubmissionState::PossiblySubmitted,
+      HttpClientErrorKind kind = HttpClientErrorKind::TransportFailure)
       : std::runtime_error(std::string{message}),
-        submission_state_{submission_state} {}
+        submission_state_{submission_state}, kind_{kind} {}
 
   [[nodiscard]] auto submission_state() const noexcept
       -> HttpRequestSubmissionState {
     return submission_state_;
   }
 
+  [[nodiscard]] auto kind() const noexcept -> HttpClientErrorKind {
+    return kind_;
+  }
+
 private:
   HttpRequestSubmissionState submission_state_;
+  HttpClientErrorKind kind_;
 };
 
 /**
@@ -97,8 +111,9 @@ public:
    * @return 响应的awaitable
    */
   virtual auto post(std::string_view path, std::string_view body,
-                    const std::map<std::string, std::string> &headers = {})
-      -> asio::awaitable<HttpResponse>;
+                    const std::map<std::string, std::string> &headers = {},
+                    std::optional<std::uint64_t> response_body_limit =
+                        std::nullopt) -> asio::awaitable<HttpResponse>;
 
   /**
    * @brief 异步发送GET请求（协程版本）

@@ -8,7 +8,7 @@ execute_process(
   COMMAND
     "${CXX_COMPILER}" -std=c++26 -freflection -fsyntax-only
     "-DOBCX_CASE=${CASE_ID}" "-I${SOURCE_ROOT}/include"
-    "${SOURCE_ROOT}/tests/compile/reflected_actor_cases.cpp"
+    "${SOURCE_ROOT}/tests/actor/reflected_actor_cases.cpp"
   RESULT_VARIABLE compile_result
   OUTPUT_VARIABLE compile_stdout
   ERROR_VARIABLE compile_stderr)

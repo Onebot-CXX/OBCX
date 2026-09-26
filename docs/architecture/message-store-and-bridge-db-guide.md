@@ -8,8 +8,10 @@ The participating packages are:
 - `local_actor/obcx-message-bridge`
 - `local_actor/obcx-exhentai-fetch`
 
-Both build against the installed SDK and declare their contract in
-`actor.toml`.
+These packages declare their contracts in schema-v2 `package.toml` and are
+selected through an explicit workspace and source lock. The current acceptance
+path is the core workspace; expanded standalone release acceptance is deferred.
+See [package builds](package-cmake.md).
 
 ## Runtime configuration
 

@@ -4,6 +4,7 @@
 // Process-only definitions shared by recipe manifests and handler installation.
 #include "core/bot/messaging.hpp"
 #include "core/bot/operation_registry.hpp"
+#include "onebot11/bot/group_forward.hpp"
 #include "onebot11/bot/operations.hpp"
 
 #include <set>
@@ -26,6 +27,8 @@ template <typename Visitor> void for_each_operation(Visitor visit) {
   visit(
       core::OperationDefinition<ResolveOneBotPrivateFileRequest>{dependencies});
   visit(core::OperationDefinition<PokeOneBotGroupRequest>{dependencies});
+  visit(core::OperationDefinition<SendOneBotGroupForwardMessageRequest>{
+      dependencies});
 }
 
 inline auto operation_actions() -> std::vector<obcx::bot::ActionId> {
