@@ -72,6 +72,15 @@ extern "C" auto obcx_get_actor_contract() -> const char * {
   return R"({"schema_version":2,"actor":"contract_fixture","accepted_inputs":["test::Message"],"configuration":{"bot_installation_collections":{"pairs":{"minimum_items":1,"identity":"id","bot_installations":{"target":"qq"}}},"collection_identity_references":[{"source_key":"pair","target_collection":"missing","target_identity":"id"}]}})";
 #elif OBCX_CONTRACT_CASE == 24
   return R"({"schema_version":2,"actor":"contract_fixture","accepted_inputs":["test::Message"],"commands":[{"name":"help","description":"Reserved","request_type":"test::Message"}]})";
+#elif OBCX_CONTRACT_CASE >= 26 && OBCX_CONTRACT_CASE <= 28
+  static const std::string marker = OBCX_CONTRACT_CASE == 26 ? R"("unknown")"
+                                    : OBCX_CONTRACT_CASE == 27
+                                        ? "true"
+                                        : R"({"handler":"probe"})";
+  static const std::string contract =
+      R"({"schema_version":2,"actor":"contract_fixture","accepted_inputs":["test::Message"],"commands":[{"name":"ping","description":"Ping","request_type":"test::Message","availability":)" +
+      marker + "}]}";
+  return contract.c_str();
 #else
   return R"({"schema_version":2,"actor":"contract_fixture","accepted_inputs":["test::Message"]})";
 #endif

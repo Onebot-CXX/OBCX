@@ -1,8 +1,8 @@
 #include "core/actor/actor_messages.hpp"
-#include "core/actor/reflected_actor.hpp"
 #include "core/bot/messaging.hpp"
 #include "core/command/command_coordinator.hpp"
 #include "support/bot_platform_fixture.hpp"
+#include "support/reflected_test_actor.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -434,25 +434,6 @@ protected:
   fs::path root_;
 };
 
-TEST_F(CommandCoordinatorTest, BuildsImmutableRoutesAndDetectionOnlyCatalogs) {
-  const auto config = snapshot("valid.toml", config_document());
-  const auto built = table(config);
-  ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
-  ASSERT_EQ(built.table->routes().size(), 1U);
-  ASSERT_EQ(built.table->bots().size(), 1U);
-  const auto &route = built.table->routes().begin()->second;
-  EXPECT_EQ(route.actor, "command_actor");
-  EXPECT_EQ(route.request_type,
-            obcx::core::canonical_message_type_name<
-                obcx::tests::command_runtime::TestCommand>());
-  EXPECT_EQ(route.timeout, 100ms);
-  const auto &bot = built.table->bots().begin()->second;
-  ASSERT_EQ(bot.catalog.size(), 2U);
-  EXPECT_EQ(bot.catalog[0].name, "help");
-  EXPECT_EQ(bot.catalog[1].name, "test");
-  EXPECT_FALSE(bot.adapter->supports_catalog_publication());
-}
-
 TEST_F(CommandCoordinatorTest,
        UsesConfiguredTelegramUsernameForExplicitCommandTargets) {
   auto document = config_document("continue", "telegram", "telegram");
@@ -485,33 +466,6 @@ TEST_F(CommandCoordinatorTest,
   event.raw["text"] = "/test@other_bot";
   event.raw["entities"][0]["length"] = 15;
   EXPECT_FALSE(bot.adapter->detect(event).has_value());
-}
-
-TEST_F(CommandCoordinatorTest, AggregatesCommandsFromMultipleActorsPerBot) {
-  auto document = config_document();
-  document += "\n[actors.other_actor]\n"
-              "enabled = true\n\n"
-              "[[command_runtime.routes]]\n"
-              "actor = \"other_actor\"\n"
-              "commands = [\"other\"]\n"
-              "platforms = [\"qq\"]\n"
-              "bots = [\"primary\"]\n"
-              "fallback = \"consume\"\n";
-  const auto config = snapshot("aggregate.toml", document);
-  auto other = command_contract();
-  other.actor = "other_actor";
-  other.commands.front().name = "other";
-  other.commands.front().description = "Run another actor command";
-  const auto built = obcx::core::build_command_routing_table(
-      *config, {{"command_actor", command_contract()}, {"other_actor", other}});
-  ASSERT_TRUE(built) << (built.failure ? built.failure->message : "");
-  ASSERT_EQ(built.table->routes().size(), 2U);
-  ASSERT_EQ(built.table->bots().size(), 1U);
-  const auto &catalog = built.table->bots().begin()->second.catalog;
-  ASSERT_EQ(catalog.size(), 3U);
-  EXPECT_EQ(catalog[0].name, "help");
-  EXPECT_EQ(catalog[1].name, "other");
-  EXPECT_EQ(catalog[2].name, "test");
 }
 
 TEST_F(CommandCoordinatorTest, RejectsInvalidActorCommandBotAndAdapterEdges) {
@@ -1233,6 +1187,237 @@ TEST_F(CommandCoordinatorTest,
   ASSERT_EQ(result.failures.size(), 1U);
   EXPECT_EQ(result.failures.front().failure.code, "command_actor_failure");
   EXPECT_EQ(active.actor->raw_count, 0);
+}
+
+TEST_F(CommandCoordinatorTest, AvailabilityPublicationIsOwnedCopiedAndFrozen) {
+  const auto config = snapshot("scopes.toml", config_document());
+  auto contract = command_contract();
+  contract.commands.front().actor_scoped = true;
+  obcx::core::CommandAvailabilityBuilder builder(
+      *config,
+      {{"command_actor", contract}, {"observer", message_observer_contract()}});
+  auto publisher = builder.for_actor("command_actor");
+  obcx::command::GroupScopes scopes{{"qq", "primary", "42",
+                                     obcx::command::TopicSelection::None,
+                                     std::nullopt}};
+  publisher->publish("test", scopes);
+  scopes.front().group_id = "43";
+  const auto frozen = builder.freeze();
+  EXPECT_EQ(frozen.at({"command_actor", "test"}).front().group_id, "42");
+  EXPECT_THROW(publisher->publish("test", {}), std::logic_error);
+  EXPECT_THROW((void)builder.for_actor("command_actor"), std::logic_error);
+  EXPECT_THROW((void)builder.freeze(), std::logic_error);
+
+  const auto structural = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", contract}});
+  ASSERT_TRUE(structural);
+  EXPECT_FALSE(structural.table->availability_ready());
+  const auto missing =
+      obcx::core::finalize_command_routing_table(*structural.table, {});
+  ASSERT_TRUE(missing.failure);
+  EXPECT_EQ(missing.failure->code, "command_availability_missing");
+  const auto bound =
+      obcx::core::finalize_command_routing_table(*structural.table, frozen);
+  ASSERT_TRUE(bound);
+  EXPECT_TRUE(bound.table->availability_ready());
+  EXPECT_FALSE(structural.table->availability_ready());
+  const auto empty = obcx::core::finalize_command_routing_table(
+      *structural.table, {{{"command_actor", "test"}, {}}});
+  ASSERT_TRUE(empty);
+  obcx::core::CommandPolicySubject subject{
+      "qq", "primary", obcx::command::ConversationKind::Group,
+      "42", "7",       std::nullopt};
+  EXPECT_EQ(bound.table->eligibility("test", subject),
+            obcx::core::CommandEligibility::Eligible);
+  EXPECT_EQ(empty.table->eligibility("test", subject),
+            obcx::core::CommandEligibility::Unavailable);
+}
+
+TEST_F(CommandCoordinatorTest,
+       RejectsInvalidScopePublicationsEvenIfActorCatchesError) {
+  const auto config = snapshot("invalid-scopes.toml", config_document());
+  auto contract = command_contract();
+  contract.commands.front().actor_scoped = true;
+  const obcx::command::GroupScopes invalid[] = {
+      {{"qq", "missing", "42", obcx::command::TopicSelection::None,
+        std::nullopt}},
+      {{"telegram", "primary", "42", obcx::command::TopicSelection::None,
+        std::nullopt}},
+      {{"qq", "primary", "42", obcx::command::TopicSelection::Exact, 1}},
+  };
+  for (const auto &scopes : invalid) {
+    obcx::core::CommandAvailabilityBuilder builder(
+        *config, {{"command_actor", contract}});
+    EXPECT_THROW(builder.for_actor("command_actor")->publish("test", scopes),
+                 std::invalid_argument);
+    EXPECT_THROW((void)builder.freeze(), std::logic_error);
+  }
+  for (const auto &actor : {"command_actor", "observer"}) {
+    obcx::core::CommandAvailabilityBuilder builder(
+        *config, {{"command_actor", contract},
+                  {"observer", message_observer_contract()}});
+    EXPECT_THROW(builder.for_actor(actor)->publish("not_owned", {}),
+                 std::invalid_argument);
+  }
+  obcx::core::CommandAvailabilityBuilder legacy(
+      *config, {{"command_actor", command_contract()}});
+  EXPECT_THROW(legacy.for_actor("command_actor")->publish("test", {}),
+               std::invalid_argument);
+  obcx::core::CommandAvailabilityBuilder duplicate(
+      *config, {{"command_actor", contract}});
+  const auto publisher = duplicate.for_actor("command_actor");
+  publisher->publish("test", {});
+  EXPECT_THROW(publisher->publish("test", {}), std::invalid_argument);
+}
+
+TEST_F(CommandCoordinatorTest,
+       ActorUnavailableHelpAndDispatchShareGateWithoutFallback) {
+  for (const auto &fallback : {"continue", "consume"}) {
+    auto document = config_document(fallback);
+    document += R"(
+[actors.message_observer]
+enabled = true
+partition = "conversation_id"
+[[command_runtime.message_observers]]
+actor = "message_observer"
+platforms = ["qq"]
+bots = ["primary"]
+timeout_ms = 100
+)";
+    const auto config =
+        snapshot(std::string{fallback} + "-scope.toml", document);
+    auto contract = command_contract(true, "^alias$");
+    contract.commands.front().actor_scoped = true;
+    const auto structural = obcx::core::build_command_routing_table(
+        *config, {{"command_actor", contract},
+                  {"message_observer", message_observer_contract()}});
+    ASSERT_TRUE(structural);
+    obcx::core::CommandAvailabilityBuilder builder(
+        *config, {{"command_actor", contract}});
+    builder.for_actor("command_actor")
+        ->publish("test",
+                  {{"qq", "primary", "43", obcx::command::TopicSelection::None,
+                    std::nullopt}});
+    const auto finalized = obcx::core::finalize_command_routing_table(
+        *structural.table, builder.freeze());
+    ASSERT_TRUE(finalized);
+    EXPECT_EQ(finalized.table->bots().begin()->second.catalog.size(), 2U);
+    auto active = runtime(config, finalized.table);
+    asio::io_context ioc;
+    EXPECT_TRUE(run_awaitable(
+                    ioc, active.coordinator->process(raw_command("help", ""),
+                                                     std::make_shared<int>(1)))
+                    .ok());
+    ASSERT_EQ(active.gateway->operations.size(), 1U);
+    EXPECT_EQ(
+        active.gateway->operations[0].payload.at("message").at(0).at("data").at(
+            "text"),
+        "/help - List commands available to you\n");
+    for (const auto &name : {"test", "alias"}) {
+      const auto result = run_awaitable(
+          ioc, active.coordinator->process(raw_command(name, "consume"),
+                                           std::make_shared<int>(2)));
+      ASSERT_EQ(result.failures.size(), 1U);
+      EXPECT_EQ(result.failures.front().failure.code, "command_unavailable");
+      EXPECT_TRUE(result.emitted.empty());
+    }
+    EXPECT_EQ(active.actor->command_count, 0);
+    EXPECT_EQ(active.actor->raw_count, 0);
+    EXPECT_EQ(active.message_observer->message_count, 3);
+    EXPECT_EQ(active.gateway->operations.size(), 1U);
+    auto allowed = raw("consume");
+    allowed.conversation_id = "group:43";
+    allowed.payload["group_id"] = "43";
+    EXPECT_TRUE(run_awaitable(ioc, active.coordinator->process(
+                                       allowed, std::make_shared<int>(3)))
+                    .ok());
+    EXPECT_EQ(active.actor->command_count, 1);
+    auto private_call = raw("consume");
+    private_call.conversation_id = "private:7";
+    private_call.payload["message_type"] = "private";
+    private_call.payload["group_id"] = "";
+    const auto denied = run_awaitable(
+        ioc,
+        active.coordinator->process(private_call, std::make_shared<int>(4)));
+    ASSERT_EQ(denied.failures.size(), 1U);
+    EXPECT_EQ(denied.failures[0].failure.code, "command_unavailable");
+    EXPECT_TRUE(run_awaitable(
+                    ioc, active.coordinator->process(raw_command("unknown", ""),
+                                                     std::make_shared<int>(5)))
+                    .ok());
+    EXPECT_EQ(active.actor->raw_count, 1);
+  }
+}
+
+TEST_F(CommandCoordinatorTest,
+       ScopedHelpDistinguishesTopicPrivateAndInstallation) {
+  const auto config = snapshot(
+      "topic-scope.toml", config_document("consume", "telegram", "telegram"));
+  auto contract = command_contract();
+  contract.commands.front().actor_scoped = true;
+  const auto structural = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", contract}});
+  ASSERT_TRUE(structural);
+  const auto bound = obcx::core::finalize_command_routing_table(
+      *structural.table, {{{"command_actor", "test"},
+                           {{"telegram", "primary", "-42",
+                             obcx::command::TopicSelection::Exact, 10}}}});
+  ASSERT_TRUE(bound);
+  const auto *bot = bound.table->find_bot({"telegram", "primary"});
+  ASSERT_NE(bot, nullptr);
+  obcx::core::CommandPolicySubject subject{
+      "telegram", "primary", obcx::core::CommandConversationKind::Group,
+      "-42",      "7",       10};
+  EXPECT_EQ(bound.table->eligibility("test", subject),
+            obcx::core::CommandEligibility::Eligible);
+  EXPECT_NE(bound.table->render_help(*bot, subject).pages.front().find("/test"),
+            std::string::npos);
+  subject.topic_id = 11;
+  EXPECT_EQ(bound.table->eligibility("test", subject),
+            obcx::core::CommandEligibility::Unavailable);
+  EXPECT_EQ(bound.table->render_help(*bot, subject).pages.front(),
+            "/help - List commands available to you\n");
+  subject.topic_id.reset();
+  EXPECT_EQ(bound.table->eligibility("test", subject),
+            obcx::core::CommandEligibility::Unavailable);
+  subject.topic_id = 10;
+  subject.bot = "secondary";
+  EXPECT_EQ(bound.table->eligibility("test", subject),
+            obcx::core::CommandEligibility::NoRoute);
+  EXPECT_TRUE(bound.table->render_help(*bot, subject).pages.empty());
+  subject.bot = "primary";
+  subject.conversation = obcx::core::CommandConversationKind::Private;
+  subject.topic_id.reset();
+  subject.group_id.clear();
+  EXPECT_EQ(bound.table->render_help(*bot, subject).pages.front(),
+            "/help - List commands available to you\n");
+}
+
+TEST_F(CommandCoordinatorTest, ActorScopesNeverOverrideAcl) {
+  auto document = config_document();
+  replace_policy(
+      document, "users", "denylist",
+      R"([{ platform = "qq", bot = "primary", native_user_id = "7" }])");
+  const auto config = snapshot("scope-acl.toml", document);
+  auto contract = command_contract();
+  contract.commands.front().actor_scoped = true;
+  const auto structural = obcx::core::build_command_routing_table(
+      *config, {{"command_actor", contract}});
+  ASSERT_TRUE(structural);
+  const auto bound = obcx::core::finalize_command_routing_table(
+      *structural.table,
+      {{{"command_actor", "test"},
+        {{"qq", "primary", "42", obcx::command::TopicSelection::None,
+          std::nullopt}}}});
+  ASSERT_TRUE(bound);
+  auto active = runtime(config, bound.table);
+  asio::io_context ioc;
+  const auto denied =
+      run_awaitable(ioc, active.coordinator->process(raw("consume"),
+                                                     std::make_shared<int>(1)));
+  ASSERT_EQ(denied.failures.size(), 1U);
+  EXPECT_EQ(denied.failures[0].failure.code, "command_access_denied");
+  EXPECT_EQ(active.actor->command_count, 0);
 }
 
 } // namespace

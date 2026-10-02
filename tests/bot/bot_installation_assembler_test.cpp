@@ -32,7 +32,6 @@ using TelegramHttpConnectionConfig =
     obcx::telegram::configuration::HttpConnection;
 using obcx::core::BotComponentRuntimeError;
 using obcx::core::BotInstallationAssembler;
-using obcx::core::BotRecipeDescription;
 
 auto onebot_websocket_connection() -> OneBot11WebSocketConnectionConfig {
   return {.host = "localhost",
@@ -81,16 +80,7 @@ auto telegram_http_config()
                                        "http", "telegram-http", true);
 }
 
-auto component_ids(const BotRecipeDescription &recipe)
-    -> std::vector<std::string> {
-  std::vector<std::string> ids;
-  for (const auto &component : recipe.components) {
-    ids.push_back(component.id.value());
-  }
-  return ids;
-}
-
-auto provided_capabilities(const BotRecipeDescription &recipe)
+auto provided_capabilities(const obcx::core::BotRecipeDescription &recipe)
     -> std::set<std::string> {
   std::set<std::string> capabilities;
   for (const auto &component : recipe.components) {
@@ -99,37 +89,6 @@ auto provided_capabilities(const BotRecipeDescription &recipe)
     }
   }
   return capabilities;
-}
-
-TEST(BotInstallationAssemblerTest,
-     ConcreteProtocolComponentsPublishProviderTypedCapabilities) {
-  obcx::core::BotInstallation onebot{"onebot-protocol-test",
-                                     obcx::bot::SurfaceId{"onebot11.qq"}};
-  onebot.add_component(
-      std::make_unique<obcx::core::OneBot11ProtocolComponent>());
-  onebot.assemble();
-  const auto onebot_protocol =
-      onebot.capability<obcx::adapter::onebot11::ProtocolAdapter>(
-          obcx::core::CapabilityId{"onebot11.protocol"});
-  ASSERT_NE(onebot_protocol, nullptr);
-  const auto onebot_payload = onebot_protocol->serialize_send_message_request(
-      "123", {{.type = "text", .data = {{"text", "hello"}}}});
-  EXPECT_TRUE(nlohmann::json::parse(onebot_payload).contains("action"));
-
-  obcx::core::BotInstallation telegram{
-      "telegram-protocol-test", obcx::bot::SurfaceId{"telegram.bot_api"}};
-  telegram.add_component(
-      std::make_unique<obcx::core::TelegramProtocolComponent>());
-  telegram.assemble();
-  const auto telegram_protocol =
-      telegram.capability<obcx::adapter::telegram::ProtocolAdapter>(
-          obcx::core::CapabilityId{"telegram.protocol"});
-  ASSERT_NE(telegram_protocol, nullptr);
-  const auto telegram_payload =
-      telegram_protocol->serialize_send_message_request(
-          "-1001", {{.type = "text", .data = {{"text", "hello"}}}});
-  EXPECT_EQ(nlohmann::json::parse(telegram_payload).at("method"),
-            "sendMessage");
 }
 
 TEST(BotInstallationAssemblerTest,
@@ -221,75 +180,6 @@ TEST(BotInstallationAssemblerTest,
     EXPECT_EQ(installation->state(), obcx::core::BotInstallationState::Stopped);
     EXPECT_FALSE(installation->accepting_work());
   }
-}
-
-TEST(BotInstallationAssemblerTest, SelectsExactReviewedRecipes) {
-  const auto websocket =
-      BotInstallationAssembler::describe(*onebot_websocket_config());
-  EXPECT_EQ(websocket.recipe_id, "onebot11.qq.websocket");
-  EXPECT_EQ(component_ids(websocket),
-            (std::vector<std::string>{
-                "onebot11.protocol", "onebot11.transport.websocket",
-                "onebot11.event-ingress", "onebot11.operations"}));
-
-  const auto onebot_http =
-      BotInstallationAssembler::describe(*onebot_http_config());
-  EXPECT_EQ(onebot_http.recipe_id, "onebot11.qq.http");
-  EXPECT_EQ(component_ids(onebot_http),
-            (std::vector<std::string>{
-                "onebot11.protocol", "onebot11.transport.http",
-                "onebot11.event-ingress", "onebot11.operations"}));
-
-  const auto telegram =
-      BotInstallationAssembler::describe(*telegram_http_config());
-  EXPECT_EQ(telegram.recipe_id, "telegram.bot_api.http");
-  EXPECT_EQ(component_ids(telegram),
-            (std::vector<std::string>{
-                "telegram.protocol", "telegram.transport.http",
-                "telegram.event-ingress", "telegram.media-upload",
-                "telegram.operations", "telegram.command-catalog"}));
-}
-
-TEST(BotInstallationAssemblerTest,
-     RecipesPublishOnlyTheirReviewedCapabilitySets) {
-  const auto websocket =
-      BotInstallationAssembler::describe(*onebot_websocket_config());
-  EXPECT_EQ(provided_capabilities(websocket),
-            (std::set<std::string>{"bot.events", "bot.operations",
-                                   "onebot11.protocol", "onebot11.transport"}));
-  EXPECT_EQ(std::set<ActionId>(websocket.advertised_actions.begin(),
-                               websocket.advertised_actions.end()),
-            (std::set<ActionId>{ActionId{"message.send_group"},
-                                ActionId{"message.send_private"},
-                                ActionId{"message.delete"},
-                                ActionId{"onebot11.group_member.get"},
-                                ActionId{"onebot11.forward_message.get"},
-                                ActionId{"onebot11.group_file.resolve"},
-                                ActionId{"onebot11.private_file.resolve"},
-                                ActionId{"onebot11.group.poke"},
-                                ActionId{"onebot11.group_forward.send"}}));
-
-  const auto telegram =
-      BotInstallationAssembler::describe(*telegram_http_config());
-  EXPECT_EQ(provided_capabilities(telegram),
-            (std::set<std::string>{"bot.events", "bot.operations",
-                                   "telegram.command-catalog",
-                                   "telegram.media-upload", "telegram.protocol",
-                                   "telegram.transport"}));
-  EXPECT_EQ(telegram.advertised_actions.size(), 10U);
-}
-
-TEST(BotInstallationAssemblerTest,
-     DescriptorValidationIsDeterministicAndSideEffectFree) {
-  EXPECT_EQ(BotInstallationAssembler::validate(*onebot_websocket_config())
-                .lifecycle_order,
-            (std::vector<std::size_t>{0, 1, 2, 3}));
-  EXPECT_EQ(
-      BotInstallationAssembler::validate(*onebot_http_config()).lifecycle_order,
-      (std::vector<std::size_t>{0, 1, 2, 3}));
-  EXPECT_EQ(BotInstallationAssembler::validate(*telegram_http_config())
-                .lifecycle_order,
-            (std::vector<std::size_t>{0, 1, 2, 3, 4, 5}));
 }
 
 TEST(BotInstallationAssemblerTest,

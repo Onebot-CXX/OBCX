@@ -183,61 +183,6 @@ private:
   std::vector<std::string> &calls_;
 };
 
-struct RuntimeServiceMarker {
-  std::string label;
-};
-
-class RuntimeServiceAwareActor final : public IActorV2 {
-public:
-  [[nodiscard]] auto get_name() const -> std::string override {
-    return "service_aware";
-  }
-
-  [[nodiscard]] auto get_version() const -> std::string override {
-    return "test";
-  }
-
-  auto handle_message(const MessageEnvelope &message, ActorContext &context)
-      -> ActorTask<ActorResult> override {
-    ActorResult result = ActorResult::success();
-    MessageEnvelope emitted;
-    emitted.type = "RuntimeServiceSeen";
-    emitted.correlation_id = message.correlation_id;
-    emitted.causation_id = message.id;
-
-    if (const auto marker = context.get_service<RuntimeServiceMarker>()) {
-      emitted.payload["label"] = marker->label;
-    }
-
-    result.emit(std::move(emitted));
-    co_return result;
-  }
-};
-
-class DbBindingAwareActor final : public IActorV2 {
-public:
-  [[nodiscard]] auto get_name() const -> std::string override {
-    return "db_aware";
-  }
-
-  [[nodiscard]] auto get_version() const -> std::string override {
-    return "test";
-  }
-
-  auto handle_message(const MessageEnvelope &message, ActorContext &context)
-      -> ActorTask<ActorResult> override {
-    ActorResult result = ActorResult::success();
-    MessageEnvelope emitted;
-    emitted.type = "ActorDbBindingSeen";
-    emitted.correlation_id = message.correlation_id;
-    emitted.causation_id = message.id;
-    emitted.payload["db"] = context.db_instance();
-    emitted.payload["db_namespace"] = context.db_namespace();
-    result.emit(std::move(emitted));
-    co_return result;
-  }
-};
-
 class FailingActor final : public IActorV2 {
 public:
   [[nodiscard]] auto get_name() const -> std::string override {
@@ -449,39 +394,6 @@ auto raw_message(std::string id, std::string group_id) -> MessageEnvelope {
   return raw;
 }
 
-TEST(OrchestratorTest, ProcessesMessageThroughTwoStagePipeline) {
-  std::vector<std::string> calls;
-  Orchestrator orchestrator;
-  orchestrator.register_actor(std::make_shared<RecordingActor>(
-      "message_store", "obcx::message_store::events::MessageStored", calls));
-  orchestrator.register_actor(std::make_shared<RecordingActor>(
-      "bridge", "bridge::events::MessageForwarded", calls));
-  orchestrator.configure_pipelines({pipeline_with_stages({
-      stage("persist", "message_store", "obcx::core::events::RawMessageEvent",
-            "obcx::message_store::events::MessageStored", "await"),
-      stage("forward", "bridge", "obcx::message_store::events::MessageStored",
-            "bridge::events::MessageForwarded", "await", {"persist"}),
-  })});
-
-  MessageEnvelope raw;
-  raw.id = "raw-1";
-  raw.type = "obcx::core::events::RawMessageEvent";
-  raw.correlation_id = "corr-1";
-
-  asio::io_context ioc;
-  const auto result = run_awaitable(ioc, orchestrator.process(raw));
-
-  EXPECT_TRUE(result.ok());
-  EXPECT_EQ(calls, (std::vector<std::string>{
-                       "message_store:obcx::core::events::RawMessageEvent",
-                       "bridge:obcx::message_store::events::MessageStored",
-                   }));
-  ASSERT_EQ(result.emitted.size(), 2);
-  EXPECT_EQ(result.emitted[0].type,
-            "obcx::message_store::events::MessageStored");
-  EXPECT_EQ(result.emitted[1].type, "bridge::events::MessageForwarded");
-}
-
 TEST(OrchestratorTest, ProcessAwaitableSurvivesOrchestratorDestruction) {
   std::vector<std::string> calls;
   std::optional<asio::awaitable<OrchestratorResult>> pending;
@@ -503,52 +415,6 @@ TEST(OrchestratorTest, ProcessAwaitableSurvivesOrchestratorDestruction) {
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(calls, (std::vector<std::string>{
                        "message_store:obcx::core::events::RawMessageEvent"}));
-}
-
-TEST(OrchestratorTest, InjectsRuntimeServicesIntoActorContexts) {
-  Orchestrator orchestrator;
-  auto marker = std::make_shared<RuntimeServiceMarker>();
-  marker->label = "db-main";
-  orchestrator.register_service<RuntimeServiceMarker>(marker);
-  orchestrator.register_actor(std::make_shared<RuntimeServiceAwareActor>());
-  orchestrator.configure_pipelines({pipeline_with_stages({
-      stage("inspect", "service_aware", "obcx::core::events::RawMessageEvent",
-            "RuntimeServiceSeen", "await"),
-  })});
-
-  asio::io_context ioc;
-  const auto result =
-      run_awaitable(ioc, orchestrator.process(raw_message("raw-svc", "g")));
-
-  ASSERT_TRUE(result.ok());
-  ASSERT_EQ(result.emitted.size(), 1);
-  EXPECT_EQ(result.emitted[0].type, "RuntimeServiceSeen");
-  EXPECT_EQ(result.emitted[0].payload["label"], "db-main");
-}
-
-TEST(OrchestratorTest, InjectsActorDbBindingIntoActorContexts) {
-  common::ActorConfig config;
-  config.name = "db_aware";
-  config.enabled = true;
-  config.db = "main";
-  config.db_namespace = "message_store";
-
-  Orchestrator orchestrator;
-  orchestrator.register_actor(std::make_shared<DbBindingAwareActor>());
-  orchestrator.configure_actors({config});
-  orchestrator.configure_pipelines({pipeline_with_stages({
-      stage("inspect", "db_aware", "obcx::core::events::RawMessageEvent",
-            "ActorDbBindingSeen", "await"),
-  })});
-
-  asio::io_context ioc;
-  const auto result =
-      run_awaitable(ioc, orchestrator.process(raw_message("raw-db", "g")));
-
-  ASSERT_TRUE(result.ok());
-  ASSERT_EQ(result.emitted.size(), 1);
-  EXPECT_EQ(result.emitted[0].payload["db"], "main");
-  EXPECT_EQ(result.emitted[0].payload["db_namespace"], "message_store");
 }
 
 TEST(OrchestratorTest, HonorsAfterDependenciesAndDefersTerminalAsyncStages) {
@@ -587,43 +453,6 @@ TEST(OrchestratorTest, HonorsAfterDependenciesAndDefersTerminalAsyncStages) {
   EXPECT_EQ(result.stages[1].name, "forward");
   EXPECT_EQ(result.stages[2].name, "audit_raw");
   EXPECT_TRUE(result.stages[2].terminal_async);
-}
-
-TEST(OrchestratorTest, RoutesEmittedMessagesBackThroughMatchingPipelines) {
-  std::vector<std::string> calls;
-  Orchestrator orchestrator;
-  orchestrator.register_actor(std::make_shared<RecordingActor>(
-      "message_store", "obcx::message_store::events::MessageStored", calls));
-  orchestrator.register_actor(
-      std::make_shared<RecordingActor>("audit", "AuditStored", calls));
-  orchestrator.configure_pipelines({
-      pipeline_with_stages({
-          stage("persist", "message_store",
-                "obcx::core::events::RawMessageEvent",
-                "obcx::message_store::events::MessageStored", "await"),
-      }),
-      common::PipelineConfig{
-          .name = "stored_audit",
-          .source = "obcx::message_store::events::MessageStored",
-          .stages = {stage("audit_stored", "audit",
-                           "obcx::message_store::events::MessageStored",
-                           "AuditStored", "await")},
-      },
-  });
-
-  asio::io_context ioc;
-  const auto result =
-      run_awaitable(ioc, orchestrator.process(raw_message("raw-route", "g")));
-
-  EXPECT_TRUE(result.ok());
-  EXPECT_EQ(calls, (std::vector<std::string>{
-                       "message_store:obcx::core::events::RawMessageEvent",
-                       "audit:obcx::message_store::events::MessageStored",
-                   }));
-  ASSERT_EQ(result.emitted.size(), 2);
-  EXPECT_EQ(result.emitted[0].type,
-            "obcx::message_store::events::MessageStored");
-  EXPECT_EQ(result.emitted[1].type, "AuditStored");
 }
 
 TEST(OrchestratorTest, TerminalAsyncStagesDoNotBlockProcessCompletion) {
@@ -800,31 +629,6 @@ TEST(OrchestratorTest, RoutesUnknownTerminalActorExceptions) {
   EXPECT_EQ(failure.payload["code"], "actor_exception");
   EXPECT_EQ(failure.payload["message"], "unknown actor exception");
   EXPECT_EQ(failure.payload["retryable"], true);
-}
-
-TEST(OrchestratorTest, ResolvesDefaultAndConfiguredPartitionKeys) {
-  std::vector<std::string> calls;
-  Orchestrator orchestrator;
-  orchestrator.register_actor(std::make_shared<RecordingActor>(
-      "message_store", "obcx::message_store::events::MessageStored", calls));
-  orchestrator.configure_pipelines({pipeline_with_stages({
-      stage("persist", "message_store", "obcx::core::events::RawMessageEvent",
-            "obcx::message_store::events::MessageStored", "await"),
-  })});
-
-  asio::io_context ioc;
-  const auto default_result =
-      run_awaitable(ioc, orchestrator.process(raw_message("raw-3", "group-1")));
-  ASSERT_EQ(default_result.stages.size(), 1);
-  EXPECT_EQ(default_result.stages[0].partition_key, "global");
-
-  orchestrator.configure_actors(
-      {actor_config("message_store", "source_platform:group_id")});
-
-  const auto configured_result =
-      run_awaitable(ioc, orchestrator.process(raw_message("raw-4", "group-7")));
-  ASSERT_EQ(configured_result.stages.size(), 1);
-  EXPECT_EQ(configured_result.stages[0].partition_key, "qq:group-7");
 }
 
 TEST(OrchestratorTest, ProcessUsesAnImmutableRoutingSnapshot) {

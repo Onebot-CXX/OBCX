@@ -14,6 +14,7 @@ set(OBCX_GENERIC_RUNTIME_SOURCES
     network/websocket_write_queue.cpp
     network/proxy_http_client.cpp
     core/actor/actor_manager.cpp
+    core/actor/command_availability.cpp
     core/actor/actor_package_stager.cpp
     core/actor/actor_work_stealing_executor.cpp
     core/actor/native_actor_scheduler.cpp
@@ -26,6 +27,7 @@ set(OBCX_GENERIC_RUNTIME_SOURCES
     core/bot/platform_catalog.cpp
     core/bot/installation_plan.cpp
     core/command/command_coordinator.cpp
+    core/command/command_availability_builder.cpp
     core/command/command_matcher.cpp
     core/infrastructure/db_manager.cpp
     core/infrastructure/process_staging_uuid.cpp
@@ -217,6 +219,7 @@ install(FILES
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_generation_lifecycle.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_restart_constraints.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_commands.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/actor/command_availability.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_manager.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_messages.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_task.hpp
@@ -224,6 +227,7 @@ install(FILES
     ${CMAKE_SOURCE_DIR}/include/core/actor/blocking_executor.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/native_actor_scheduler.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/reflected_actor.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/actor/reflected_actor_impl.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obcx/core/actor)
 
 install(FILES
@@ -295,6 +299,7 @@ install(FILES
 # Install build helper modules alongside the SDK
 install(FILES
     ${CMAKE_SOURCE_DIR}/cmake/OBCXPackages.cmake
+    ${CMAKE_SOURCE_DIR}/cmake/OBCXActorIdentity.cmake
     ${CMAKE_SOURCE_DIR}/cmake/OBCXPackageProviders.cmake
     ${CMAKE_SOURCE_DIR}/cmake/package_cmake.py
     ${CMAKE_SOURCE_DIR}/cmake/package_tool.py
@@ -305,7 +310,6 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/cmake/obcx_package
 install(FILES
     ${CMAKE_SOURCE_DIR}/schemas/package.schema.json
     ${CMAKE_SOURCE_DIR}/schemas/workspace.schema.json
-    ${CMAKE_SOURCE_DIR}/schemas/packages-lock.schema.json
     ${CMAKE_SOURCE_DIR}/schemas/resolved-packages.schema.json
     ${CMAKE_SOURCE_DIR}/schemas/package-build-receipt.schema.json
     ${CMAKE_SOURCE_DIR}/schemas/provider-environment.schema.json

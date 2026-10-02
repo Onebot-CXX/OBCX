@@ -4,6 +4,7 @@
 #include "common/config_snapshot.hpp"
 #include "core/actor/actor_commands.hpp"
 #include "core/actor/actor_manager.hpp"
+#include "core/command/command_availability_builder.hpp"
 #include "core/command/command_matcher.hpp"
 #include "core/command/command_platform_adapter.hpp"
 #include "core/runtime/orchestrator.hpp"
@@ -69,19 +70,10 @@ struct ActiveCommandPolicy {
   ActiveCommandAccessPolicy users;
 };
 
-enum class CommandConversationKind : std::uint8_t {
-  Group,
-  Private,
-};
+using CommandConversationKind = command::ConversationKind;
+using CommandPolicySubject = command::Subject;
 
-struct CommandPolicySubject {
-  std::string platform;
-  std::string bot;
-  CommandConversationKind conversation;
-  std::string group_id;
-  std::string user_id;
-  std::optional<std::int64_t> topic_id;
-};
+enum class CommandEligibility { Eligible, AccessDenied, Unavailable, NoRoute };
 
 struct CommandHelpRenderResult {
   std::vector<std::string> pages;
@@ -96,6 +88,8 @@ struct ActiveCommandRoute {
   std::string actor;
   std::string request_type;
   std::string description;
+  bool actor_scoped = false;
+  std::optional<command::GroupScopes> availability;
   std::string partition_expression = "global";
   std::string db_instance;
   std::string db_namespace;
@@ -145,6 +139,12 @@ public:
       -> const ActiveCommandPolicy &;
   [[nodiscard]] auto permits(std::string_view canonical_command,
                              const CommandPolicySubject &subject) const -> bool;
+  [[nodiscard]] auto eligibility(std::string_view canonical_command,
+                                 const CommandPolicySubject &subject) const
+      -> CommandEligibility;
+  [[nodiscard]] auto availability_ready() const noexcept -> bool {
+    return availability_ready_;
+  }
   [[nodiscard]] auto render_help(const ActiveCommandBot &bot,
                                  const CommandPolicySubject &subject) const
       -> CommandHelpRenderResult;
@@ -158,6 +158,11 @@ private:
       const std::unordered_map<std::string, ActorInputContract> &)
       -> struct CommandRoutingBuildResult;
 
+  friend auto finalize_command_routing_table(
+      const CommandRoutingTable &, const CommandAvailabilitySnapshot &)
+      -> struct CommandRoutingBuildResult;
+
+  bool availability_ready_ = true;
   std::map<CommandRouteKey, ActiveCommandRoute> routes_;
   std::map<CommandBotKey, ActiveCommandBot> bots_;
   std::map<CommandBotKey, std::vector<ActiveCommandMessageObserver>>
@@ -188,6 +193,10 @@ struct CommandRoutingBuildResult {
 [[nodiscard]] auto build_command_routing_table(
     const common::RuntimeConfigSnapshot &snapshot,
     const std::unordered_map<std::string, ActorInputContract> &contracts)
+    -> CommandRoutingBuildResult;
+
+[[nodiscard]] auto finalize_command_routing_table(
+    const CommandRoutingTable &table, const CommandAvailabilitySnapshot &scopes)
     -> CommandRoutingBuildResult;
 
 class CommandCoordinator {

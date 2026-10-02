@@ -23,7 +23,7 @@ while(_sdk_queue)
 endwhile()
 file(WRITE "${CMAKE_BINARY_DIR}/sdk-smoke-provider-targets.json" "${_sdk_targets}\n")
 get_property(_sdk_graph GLOBAL PROPERTY OBCX_PACKAGE_GRAPH)
-string(JSON _sdk_platform GET "${_sdk_graph}" lock platform)
+string(JSON _sdk_platform GET "${_sdk_graph}" platform)
 
 add_test(
   NAME actor_sdk_v2_smoke

@@ -18,9 +18,6 @@ Actor 看不到 installation、transport、token 或进程 capability registry�
 nix develop
 # 首次创建显式 workspace；不要覆盖已有的本地选择。
 cp packages-example.toml packages.toml
-python3 cmake/package_tool.py lock --workspace packages.toml --lock packages.lock \
-  --graph build/actor-dev/package-state/resolved-packages.json \
-  --cache build/actor-dev/package-state/sources --mode development --network deny
 cmake --preset actor-dev
 cmake --build --preset actor-dev --parallel "$(nproc)"
 ctest --preset actor-dev --parallel "$(nproc)"
@@ -39,8 +36,10 @@ cmake --install build/actor-dev --prefix "$HOME/.local/obcx"
 
 ## 选择 actor package
 
-根构建现在只消费 v2 `packages.toml`、`packages.lock` 与预解析图；包内
-`package.toml` 是身份、artifact、依赖和兼容范围的唯一声明。示例
+根构建在 CMake configure 内离线解析 v2 `packages.toml`；包内
+`package.toml` 是身份、artifact、依赖和兼容范围的唯一声明。
+依赖图是构建目录内自动生成的中间产物，不需要锁文件或手动 Python 准备步骤；
+删除构建目录后重新执行同一 configure 命令即可。示例
 [packages-example.toml](packages-example.toml) 显式选择空 roots，只构建 core/SDK。
 选择 actor/library 时必须同时提供 roots、来源以及有环境证据的 provider bindings。
 本地选择、锁和 `.package-state/` 环境记录不纳入版本控制。
@@ -51,13 +50,14 @@ cmake --install build/actor-dev --prefix "$HOME/.local/obcx"
 时，须在 workspace 显式绑定该库来源，不能依赖 core 自动附带或下载它。
 此处是本地开发目录约定，尚未配置远程发行地址。
 
-`lock` 是唯一更新锁的命令；已有锁时使用相同参数的 `resolve` 导出冻结图。
-源码实现修改不要求重新锁定元数据。Git 来源必须绑定完整 commit，configure
-不下载、不重新选版本，也不再读取旧 `actors.toml`。
+configure 每次检查当前声明的依赖关系、版本、来源及实际 CMake targets。
+Git 来源必须绑定完整 commit；所需源码必须已在本地或已校验缓存中，configure
+不下载、不重新选版本，也不读取旧 `actors.toml`。`package_tool.py resolve` 仍可
+按需导出依赖图用于诊断，但不是构建前提。
 
 CMake presets 明确选择 development 来源模式；`actor-release` 仅选择优化的
 编译配置，不代表已完成正式发行验证。非 preset 构建必须显式传入
-`OBCX_PACKAGES_WORKSPACE/LOCK/GRAPH/CACHE/MODE/STATE_DIR` 和构建配置。
+`OBCX_PACKAGES_WORKSPACE/CACHE/MODE/STATE_DIR` 和构建配置。
 详见 [CMake 接入](docs/architecture/package-cmake.md) 与
 [provider 证据](docs/architecture/package-providers.md)。
 
@@ -246,6 +246,10 @@ endif()
 
 obcx_add_actor(SOURCES src/example_actor.cpp) # 名称、输出和外部链接来自 TOML
 ```
+
+Actor 名称和版本由 `package.toml` 的 `actor.name`、`package.version` 在构建时
+自动生成并继承，不需在 C++ 类中重复声明。actor 主目标和已注册内部实现库的
+日志宏自动使用 `[actor_name]`，core 自身使用 `[core]`；异步任务不改变来源标签。
 
 Actor library 继承 `ReflectedActor<Derived>`，公开精确的同步或异步 `handle`
 重载，并使用 `OBCX_ACTOR_EXPORT_V2` 导出工厂、析构、名称、版本、数值 ABI 和

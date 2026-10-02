@@ -1046,7 +1046,8 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
     return failed(command_table.failure->code,
                   std::move(command_table.failure->message));
   }
-  generation->command_routing_table_ = std::move(command_table.table);
+  CommandAvailabilityBuilder command_availability(*request.snapshot,
+                                                  actor_contracts);
 
   if (!request.snapshot->validate_actor_pipeline_contracts(actor_inputs)
            .empty()) {
@@ -1120,6 +1121,8 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
     }
     ActorContext preparation_context(actor.name, generation->services_,
                                      actor.db, actor.db_namespace);
+    preparation_context.register_service<command::AvailabilityPublisher>(
+        command_availability.for_actor(actor.name));
     const auto preparation = generation->actor_manager_->prepare_actor(
         actor.name, preparation_context);
     if (!preparation.ok()) {
@@ -1142,6 +1145,18 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
       return failed("reload_activation_failed",
                     "actor scheduler registration failed: " + actor.name);
     }
+  }
+
+  try {
+    auto finalized = finalize_command_routing_table(
+        *command_table.table, command_availability.freeze());
+    if (!finalized) {
+      return failed(finalized.failure->code, finalized.failure->message);
+    }
+    generation->command_routing_table_ = std::move(finalized.table);
+  } catch (const std::exception &) {
+    return failed("command_availability_invalid",
+                  "actor command availability could not be finalized");
   }
 
   generation->orchestrator_->configure_actors(std::move(*ordered));

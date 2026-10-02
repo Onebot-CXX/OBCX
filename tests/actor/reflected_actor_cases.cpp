@@ -1,4 +1,7 @@
+#include "../support/reflected_test_actor.hpp"
+#if OBCX_CASE == 21
 #include "core/actor/reflected_actor.hpp"
+#endif
 
 namespace obcx::compile_tests {
 
@@ -42,21 +45,7 @@ inline void to_json(common::json &document, const Outer::Nested &) {
   document = common::json::object();
 }
 
-#if OBCX_CASE == 0
-class Actor final : public core::ReflectedActor<Actor> {
-public:
-  static constexpr std::string_view actor_name = "positive";
-  static constexpr std::string_view actor_version = "1";
-  auto handle(const Message &, const core::MessageEnvelope &,
-              core::ActorContext &) -> core::ActorResult {
-    return core::ActorResult::success();
-  }
-  auto handle(const OtherMessage &, const core::MessageEnvelope &,
-              core::ActorContext &) -> core::ActorTask<core::ActorResult> {
-    co_return core::ActorResult::success();
-  }
-};
-#elif OBCX_CASE == 1
+#if OBCX_CASE == 1
 class Actor final : public core::ReflectedActor<Actor> {
 public:
   static constexpr std::string_view actor_name = "no_handler";
@@ -127,18 +116,6 @@ public:
   static constexpr std::string_view actor_name = "missing_decode";
   static constexpr std::string_view actor_version = "1";
   auto handle(const MissingDecode &, const core::MessageEnvelope &,
-              core::ActorContext &) -> core::ActorResult;
-};
-#elif OBCX_CASE == 14
-class Actor final : public core::ReflectedActor<Actor> {
-public:
-  static constexpr std::string_view actor_name = "valid_command";
-  static constexpr std::string_view actor_version = "1";
-  static constexpr auto command_contract() {
-    return command::catalog(command::observe<CommandMessage>(
-        "ping", "Ping the actor", command::re2(R"(^(?:ping|alias)$)")));
-  }
-  auto handle(const CommandMessage &, const core::MessageEnvelope &,
               core::ActorContext &) -> core::ActorResult;
 };
 #elif OBCX_CASE == 15
@@ -230,7 +207,7 @@ struct {
 #endif
 
 auto main() -> int {
-#if OBCX_CASE <= 9 || (OBCX_CASE >= 14 && OBCX_CASE <= 20)
+#if (OBCX_CASE >= 1 && OBCX_CASE <= 9) || (OBCX_CASE >= 15 && OBCX_CASE <= 20)
   using Actor = obcx::compile_tests::Actor;
   return Actor::input_contract_json().empty() ? 1 : 0;
 #elif OBCX_CASE == 10

@@ -1,3 +1,7 @@
+## Superseded package-lock design
+
+The user's subsequent `remove-package-lock` change replaces the package-lock/frozen-snapshot architecture below. Current resolution uses explicit declarations directly, CMake resolves offline internally, and generated graphs are disposable outputs. There is no source-lock schema, CLI, CMake input or build-receipt lock digest. Retain the original design as historical rationale, not an instruction to restore these interfaces. Nix inputs, fixed sources, provenance and actual target audits remain enforced.
+
 ## Context
 
 本变更解决的是“能否根据 TOML 检查完整依赖”，不是单纯让 linker 找到一个 `.so`。用户已决定：**不兼容旧格式，全部维护中的 actor 一次迁移；显式来源＋锁文件，不做 registry 自动选版本。** 规划已获批准，现开始跨仓实施；不修改运行配置或执行部署。
@@ -13,7 +17,6 @@
 | Runtime | 已能扫描并 staging 包内私有 ELF 闭包、版本化 SONAME/DT_NEEDED；这不是源码依赖解析器，不能识别静态/header-only 源依赖 |
 | 发布 | `package_actor_release.py` 写死两个 actor，archive 主要收 actor DSO 和元数据，尚不保证完整私有库闭包 |
 | Registry | actor-only schema/index，存在根目录和独立仓库中的 validator 镜像，必须避免新版出现三份不同规则 |
-| Mapper | bridge 内部的 `PathManager` 可复用，但字符串前缀、越界后原样返回、词法规范化不等于安全文件访问 |
 
 核心原则：**声明图、实际构建图、发布文件闭包是三种证据，不互相冒充。**
 
@@ -234,7 +237,7 @@ SDK 使用保留 system ID `obcx-sdk`：workspace 构建可显式绑定到本树
 
 “公共源码”不等于“进程里只有一个库实例”。第一版 shared 普通库采用 actor-private 闭包部署；不能让 bridge/exhentai 跨 actor 交换它分配的对象、函数指针或共享可变单例。SDK/process-owned 依赖保持现有身份规则，更新需要进程重启时必须明确提示，不能用多版本 staging 规避 ABI 边界。
 
-纯 mapper 无可变全局状态、不依赖 OBCX logger，选择 **static-library + PIC**，避免不必要的 DSO/ABI 运行时耦合；仍完整走 TOML 的来源/版本/实际构建检查。
+实际普通库消费者的设计由各自仓库维护；core 对 static/shared/header-only 一致执行来源、版本与实际构建检查。
 
 ### 8. 安装、发布与热更新是闭环的一部分
 
@@ -264,37 +267,9 @@ SDK 使用保留 system ID `obcx-sdk`：workspace 构建可显式绑定到本树
 
 父仓库 `actor-package-ecosystem` 主规格原有“registry only actor”要求必须明确替换；这不是一次仅改 CMake 的实现细节。
 
-### 10. 公共 mapper 的边界
+### 10–11. Library and consumer ownership
 
-按用户最新确认，库源码归属独立 Git 仓库 `local_library/obcx-path-mapping/`；core 忽略 `local_library/`，不跟踪这份源码、不使用 gitlink/submodule，也不保留旧目录副本。包 ID `obcx.path-mapping`，导出 `obcx::path_mapping`，测试不依赖机器人连接。工作区只显式绑定来源；开发阶段无需提交、远程地址或发布 pin。bridge 和 ExHentai 在 package.toml 直接声明它，不跨 actor 目录 include 头文件或链接对方 core archive。
-
-库接受显式映射：逻辑目标/installation key、host_root、peer_root（不硬编码容器概念）。两个根目录必须是显式绝对路径，非空；目标不能从最近一次调用或进程全局配置推断。
-
-核心契约：
-
-- 输入是受控 host root 内的路径，输出该目标可读的 peer path 或正确百分号编码的 file URI。
-- 按路径分量判断边界，`/data/media-other` 不属于 `/data/media`；词法规范化后 `..` 越界拒绝。
-- unknown mapping、越界和非法 URI 字符/格式明确失败，**禁止沿用旧 mapper 的“警告后原样返回”**。
-- 容器侧路径仅词法处理，不对容器路径调用宿主机 canonical/stat。
-- 安全写入和读取 host 文件要另做真实文件系统检查，拒绝 symlink 逃逸；明确提供已有文件解析校验与尚未创建文件的安全目录流程。只做 lexical mapping 不能自称防 TOCTOU。
-- URI 用编码器生成 `file:///...`，测试空格、`#`、`%`、Unicode；不简单拼 `"file:///" + absolute_path`。
-- 映射不创建挂载、不传输文件、不修改权限、不自动发消息。库错误不暴露凭据或无关路径。
-
-下载鉴权/URL 信任/图片魔数仍由业务负责。临时文件写入、原子发布、单文件与总缓存限制、正在发送的租约以及 uncertain 后的保留/清理由各业务或另立的媒体存储组件负责；不可偷偷塞进无状态 mapper 并产生全局单例。
-
-### 11. 与画廊合集的衔接
-
-该变更达到“mapper 可由 TOML 被两个 actor 正确消费”的阶段后，修订 `qq-gallery-forward-batches` 的媒体准备设计：下载校验后写共享文件，节点的 `image.file` 使用 peer file URI，仍是一份图片/文字交替的合并转发，现有 OneBot11 action 不变。
-
-必须另明确：
-
-1. 实际目录挂载和权限，以及每个 installation 的映射配置，无默认根路径。
-2. `PreparedForward` 保有文件 lease；在明确已读取/完成前不删除，超时/取消/uncertain 后保守保留并有显式回收策略。
-3. 清理只删除本业务持有的受控文件，不跨 actor 清理共享根、跟随 symlink 或在同一路径原地覆盖在途文件。
-4. 单图/整次准备/总磁盘的显式容量约束；路径引用移除了 base64 膨胀，但并未取消文件、节点和文字 JSON 的预算。
-5. 当前 DTO 只接受 base64，需要显式支持受控 file URI，而不是接受任意调用者提供的绝对路径。
-
-因此暂不为旧 base64 路线选择 8/16/32 MiB 业务预算，不自动加入该配置值，也不在本次规划里声称新文件方案已经实现。
+原 mapper 边界、路径/URI 安全规则及画廊衔接设计已于 2026-09-30 原文迁至 `local_library/obcx-path-mapping/openspec/changes/declarative-package-dependencies/design.md`。画廊业务由 ExHentai 的 `qq-gallery-forward-batches` 管理。见 [迁移指向](migration.md)；core 只维护通用包声明、解析与实际链接检查。
 
 ## Risks / Trade-offs
 
@@ -306,7 +281,7 @@ SDK 使用保留 system ID `obcx-sdk`：workspace 构建可显式绑定到本树
 - [本地修改影响可重现性] → development 允许代码编辑但记录 dirty；release 要求固定源/归档，frozen 图漂移拒绝。
 - [系统依赖各自版本规则不统一] → provider adapter 明确版本/provenance，不自动猜版本，不重新实现 Nix/vcpkg。
 - [共享库被错误放到包根之外而变成 process-owned] → inventory/ELF 审计要求私有闭包真实位于部署 package root；重用已有 runtime 拒绝规则。
-- [mapper 正确但文件提前清理或根本不共享] → 在画廊后续任务验证真实挂载与 lease，明确路径映射本身不解决生命周期。
+- 消费者自身的文件生命周期和业务验收风险见迁出的 library/actor 设计，不由 core 包解析器负责。
 
 ## Migration Plan
 
@@ -318,18 +293,18 @@ SDK 使用保留 system ID `obcx-sdk`：workspace 构建可显式绑定到本树
 3. 接入 SDK/system provider adapters、根构建与 installed SDK；实现 CMake target ownership 和实际依赖审计。
 4. 一次迁移全部维护 actor、模板、测试、根清单和构建命令，删除 v1 入口；空 roots SDK-only 和 clean external actor 两条路径都通过。
 5. 实现 inventory、完整闭包打包、统一 registry 和空前缀发布验收；验证私有 DSO 两代共存与回滚。
-6. 抽取 mapper 并修复路径边界，bridge/exhentai 显式消费；静态实际消费者与 shared/header-only fixtures 都完成验收。
-7. 回到画廊变更，先补共享文件准备/租约/容量规格，再实施 file URI 发送，不跳过真实 QQ 验收。
+6. 在 core 保留实际普通库消费者和 shared/header-only fixtures 的声明/构建验收；库实现和 actor 业务迁移见所属仓库。
+7. 原画廊业务后续阶段随 library 消费者交接记录迁出，不作为 core 任务。
 
 每阶段 done criteria 对应 tasks/spec 场景。编译与测试至少 6 worker，低负载使用全部 CPU；本机目前 20。提交前根目录 `nix fmt`；如未签名提交，提醒补 GPG 签名。实施不自动创建提交。
 
 ## Open Questions
 
-不再开放的决定：旧格式不兼容；普通库是一等声明；显式 sources＋lock；无 registry 自动选版本；mapper 采用静态 PIC、无状态、无 actor SDK 依赖。
+不再开放的决定：旧格式不兼容；普通库是一等声明；显式 sources＋lock（lock 后由 `remove-package-lock` 取代）；无 registry 自动选版本。mapper 设计见所属库。
 
 实施前仍须确认的外部边界：
 
 - 已确认本包系统变更迁到 OBCX 根仓库并授权跨仓实施；core 主规格仍在根仓库，画廊变更仍在子仓库。
 - 已确认独立 registry 为发布源、根目录为固定快照；实际远程发布和新 release commit pin 等待之后明确批准。
 - 本地维护仓库和消费者清单已记录于 implementation.md；未见源码的外部消费者不宣称已迁移。
-- 画廊文件方案的目录、权限、保留时长和容量已在目标 `muf7ej4d-srqpof` 中获用户明确确认，记录于 ExHentai 的 `qq-gallery-forward-batches/shared-files-approved.md`。路径必须由各 actor 从配置读取后传入 mapper，不写死、不增加默认值；共享文件实现和真实 QQ 验收仍未完成。
+- 画廊交接及用户批准记录见 ExHentai 的 `qq-gallery-forward-batches/shared-files-approved.md`；本次文档迁移不改变其任务状态或批准范围。

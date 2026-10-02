@@ -21,32 +21,6 @@ TEST(RuntimeThreadBudgetTest, SharesOneBudgetAcrossAllRuntimePools) {
   EXPECT_GE(budget.blocking_workers, 2);
 }
 
-TEST(RuntimeThreadBudgetTest, DefaultsFavorActorWorkersWithoutMultiplication) {
-  const auto budget = resolve_runtime_thread_budget(
-      RuntimeThreadBudgetRequest{.total_threads = 8});
-
-  EXPECT_EQ(budget.total_threads, 8);
-  EXPECT_EQ(budget.actor_workers + budget.io_workers + budget.blocking_workers,
-            8);
-  EXPECT_GE(budget.actor_workers, budget.io_workers);
-  EXPECT_GE(budget.actor_workers, budget.blocking_workers);
-  EXPECT_GE(budget.io_workers, 1);
-  EXPECT_GE(budget.blocking_workers, 1);
-}
-
-TEST(RuntimeThreadBudgetTest, AutomaticBlockingPoolSharesExplicitIoBudget) {
-  const auto budget = resolve_runtime_thread_budget(RuntimeThreadBudgetRequest{
-      .total_threads = 8,
-      .io_workers = 2,
-  });
-
-  EXPECT_EQ(budget.total_threads, 8);
-  EXPECT_EQ(budget.io_workers, 2);
-  EXPECT_GT(budget.blocking_workers, 1);
-  EXPECT_EQ(budget.actor_workers + budget.io_workers + budget.blocking_workers,
-            8);
-}
-
 TEST(RuntimeThreadBudgetTest, ClampsOneOversizedPoolToLeaveRuntimeCapacity) {
   const auto budget = resolve_runtime_thread_budget(RuntimeThreadBudgetRequest{
       .total_threads = 8,

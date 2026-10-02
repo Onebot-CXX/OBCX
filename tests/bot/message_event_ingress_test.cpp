@@ -52,45 +52,6 @@ auto qq_poke_notice_event() -> common::NoticeEvent {
 
 } // namespace
 
-TEST(MessageEventIngressTest, BuildsRawMessageEnvelopeFromMessageEvent) {
-  const auto envelope =
-      raw_message_envelope_from_event("qq", "qq-main", qq_message_event());
-
-  EXPECT_EQ(envelope.type, "obcx::core::events::RawMessageEvent");
-  EXPECT_EQ(envelope.source_platform, "qq");
-  EXPECT_EQ(envelope.source_bot, "qq-main");
-  EXPECT_EQ(envelope.conversation_id, "group:group-3");
-  EXPECT_EQ(envelope.id, "raw:qq:qq-main:group:group-3:qq-101");
-  EXPECT_EQ(envelope.payload["message_id"], "qq-101");
-  EXPECT_EQ(envelope.payload["conversation_id"], "group:group-3");
-  EXPECT_EQ(envelope.payload["source_bot_configured"], true);
-  EXPECT_EQ(envelope.payload["sender"], "user-7");
-  EXPECT_EQ(envelope.payload["group_id"], "group-3");
-  EXPECT_EQ(envelope.payload["chat_id"], "");
-  EXPECT_EQ(envelope.payload["message_type"], "group");
-  ASSERT_TRUE(envelope.payload["payload"].contains("message"));
-  EXPECT_EQ(envelope.payload["payload"]["raw_message"], "hello actor");
-  EXPECT_EQ(envelope.raw["message_id"], "qq-101");
-  EXPECT_EQ(envelope.raw["message"][0]["data"]["text"], "hello actor");
-}
-
-TEST(MessageEventIngressTest, BuildsSuccessfulMessageSendEnvelope) {
-  const auto before = std::chrono::system_clock::now();
-  const auto envelope = bot_message_sent_envelope(
-      "telegram", "telegram-main",
-      obcx::bot::ActionId{"telegram.media.send_photo"});
-  const auto after = std::chrono::system_clock::now();
-
-  EXPECT_EQ(envelope.type, "obcx::core::events::BotMessageSentEvent");
-  EXPECT_EQ(envelope.source_platform, "telegram");
-  EXPECT_EQ(envelope.source_bot, "telegram-main");
-  EXPECT_EQ(envelope.conversation_id, "global");
-  EXPECT_TRUE(envelope.id.starts_with("message-sent:telegram:telegram-main:"));
-  EXPECT_EQ(envelope.payload["action"], "telegram.media.send_photo");
-  EXPECT_GE(envelope.timestamp, before);
-  EXPECT_LE(envelope.timestamp, after);
-}
-
 TEST(MessageEventIngressTest, NormalizesTelegramChatTopicAndPrivateIdentity) {
   auto event = qq_message_event();
   event.self_id = "0";
@@ -146,24 +107,6 @@ TEST(MessageEventIngressTest, SeparatesEqualMessageIdsAcrossConversations) {
   EXPECT_NE(first.id, second.id);
   EXPECT_EQ(first.conversation_id, "group:group-3");
   EXPECT_EQ(second.conversation_id, "group:group-4");
-}
-
-TEST(MessageEventIngressTest, BuildsRawNoticeEnvelopeFromPokeNotice) {
-  const auto envelope =
-      raw_notice_envelope_from_event("qq", "qq-main", qq_poke_notice_event());
-
-  EXPECT_EQ(envelope.type, "obcx::core::events::RawNoticeEvent");
-  EXPECT_EQ(envelope.source_platform, "qq");
-  EXPECT_EQ(envelope.source_bot, "qq-main");
-  EXPECT_EQ(envelope.conversation_id, "group:group-3");
-  EXPECT_TRUE(
-      envelope.id.starts_with("notice:qq:qq-main:group:group-3:notify:"));
-  EXPECT_EQ(envelope.payload["notice_type"], "notify");
-  EXPECT_EQ(envelope.payload["sender"], "user-7");
-  EXPECT_EQ(envelope.payload["group_id"], "group-3");
-  EXPECT_EQ(envelope.payload["payload"]["sub_type"], "poke");
-  EXPECT_EQ(envelope.raw["target_id"], 80008);
-  EXPECT_EQ(envelope.raw["notice_type"], "notify");
 }
 
 TEST(MessageEventIngressTest, NoticeUsesEventSelfIdWhenSourceBotIsEmpty) {

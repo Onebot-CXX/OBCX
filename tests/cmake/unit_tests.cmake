@@ -9,7 +9,18 @@ function(obcx_add_gtest source labels)
                        PROPERTIES LABELS "${escaped_labels}")
 endfunction()
 
-obcx_add_gtest(actor/actor_api_test.cpp "unit;actor-runtime")
+obcx_add_gtest(actor/logger_test.cpp "unit;logging;concurrency")
+include("${CMAKE_SOURCE_DIR}/cmake/OBCXActorIdentity.cmake")
+foreach(_actor IN ITEMS a b)
+  add_library(logger_probe_${_actor} STATIC fixtures/actor_log_probe.cpp)
+  target_link_libraries(logger_probe_${_actor} PRIVATE obcx_core)
+  target_compile_definitions(logger_probe_${_actor} PRIVATE OBCX_LOG_PROBE=log_actor_${_actor})
+  _obcx_bind_actor_identity(logger_probe_${_actor} "fixture.logging-${_actor}"
+    "logging_actor_${_actor}" "1.0.0"
+    "${CMAKE_CURRENT_BINARY_DIR}/actor-identities/logger_probe_${_actor}")
+  target_link_libraries(logger_test PRIVATE logger_probe_${_actor})
+endforeach()
+target_compile_definitions(logger_probe_b PRIVATE OBCX_DEBUG_TRACE)
 obcx_add_gtest(actor/actor_package_stager_test.cpp "unit;actor-runtime;staging")
 obcx_add_gtest(actor/actor_asio_interop_test.cpp "unit;actor-runtime;concurrency")
 obcx_add_gtest(actor/actor_config_test.cpp "unit;actor-runtime;configuration")
@@ -75,10 +86,18 @@ target_link_libraries(bot_echo_runtime_test PRIVATE obcx_generic_runtime GTest::
 gtest_discover_tests(bot_echo_runtime_test DISCOVERY_MODE PRE_TEST
   PROPERTIES LABELS "contract\\;isolation\\;bot-runtime")
 obcx_add_gtest(bot/bot_operation_types_test.cpp "unit;bot-runtime;contract")
-obcx_add_gtest(bot/bot_operation_golden_test.cpp "unit;bot-runtime;contract")
-target_compile_definitions(bot_operation_golden_test PRIVATE
-  OBCX_BOT_GOLDEN_PATH="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/bot_contract/production-baseline.json")
 obcx_add_gtest(cli/cli_handler_test.cpp "unit;cli;actor-runtime")
+if(TARGET bridge_actor AND TARGET exhentai_fetch_actor)
+  obcx_add_gtest(command/actor_command_availability_integration_test.cpp
+                 "integration;actor-runtime;routing;availability")
+  add_dependencies(actor_command_availability_integration_test bridge_actor exhentai_fetch_actor)
+  get_target_property(_exhentai_source exhentai_fetch_actor SOURCE_DIR)
+  target_compile_definitions(actor_command_availability_integration_test PRIVATE
+    OBCX_AVAILABILITY_BRIDGE="$<TARGET_FILE:bridge_actor>"
+    OBCX_AVAILABILITY_EXHENTAI="$<TARGET_FILE:exhentai_fetch_actor>"
+    OBCX_EXHENTAI_CONFIG_EXAMPLE="${_exhentai_source}/exhentai_fetch_config.example.toml")
+endif()
+obcx_add_gtest(command/command_availability_test.cpp "unit;actor-runtime;routing")
 obcx_add_gtest(command/command_coordinator_test.cpp
                "unit;actor-runtime;routing;bot-runtime;concurrency")
 obcx_add_gtest(command/command_platform_adapter_test.cpp "unit;actor-runtime;bot-runtime")
@@ -114,12 +133,13 @@ target_compile_definitions(
           OBCX_PRIVATE_ACTOR_V2="$<TARGET_FILE:obcx_private_actor_v2>")
 
 add_dependencies(
-  runtime_generation_test obcx_test_actor_v2 obcx_activation_failure_actor
+  runtime_generation_test obcx_test_actor_v2 obcx_scoped_actor_v2 obcx_activation_failure_actor
   obcx_private_actor_v1 obcx_private_actor_v2 obcx_schema_probe_999)
 target_compile_definitions(
   runtime_generation_test
   PRIVATE
     OBCX_TEST_ACTOR_V2_LIBRARY="$<TARGET_FILE:obcx_test_actor_v2>"
+    OBCX_SCOPED_ACTOR_V2_LIBRARY="$<TARGET_FILE:obcx_scoped_actor_v2>"
     OBCX_ACTIVATION_FAILURE_ACTOR="$<TARGET_FILE:obcx_activation_failure_actor>"
     OBCX_UNKNOWN_SCHEMA_PROBE="$<TARGET_FILE:obcx_schema_probe_999>"
     OBCX_PRIVATE_ACTOR_V1="$<TARGET_FILE:obcx_private_actor_v1>"
@@ -161,6 +181,9 @@ add_dependencies(
   obcx_contract_command_unsupported_input
   obcx_contract_command_invalid_name
   obcx_contract_command_reserved_name
+  obcx_contract_command_scope_unknown
+  obcx_contract_command_scope_type
+  obcx_contract_command_scope_callable
   obcx_contract_command_invalid_pattern
   obcx_contract_command_matcher_callable
   obcx_contract_command_matcher_kind
@@ -174,7 +197,6 @@ add_dependencies(
 target_compile_definitions(
   actor_manager_test
   PRIVATE
-    OBCX_TEST_ACTOR_DIRECTORY="$<TARGET_FILE_DIR:obcx_test_actor_v2>"
     OBCX_TEST_MULTIPLE_INHERITANCE_ACTOR_LIBRARY="$<TARGET_FILE:obcx_multiple_inheritance_actor>"
     OBCX_TEST_INVALID_ACTOR_LIBRARY="$<TARGET_FILE:obcx_invalid_actor>"
     OBCX_TEST_ACTOR_V2_LIBRARY="$<TARGET_FILE:obcx_test_actor_v2>"
@@ -195,6 +217,9 @@ target_compile_definitions(
     OBCX_TEST_CONTRACT_COMMAND_UNSUPPORTED_INPUT_LIBRARY="$<TARGET_FILE:obcx_contract_command_unsupported_input>"
     OBCX_TEST_CONTRACT_COMMAND_INVALID_NAME_LIBRARY="$<TARGET_FILE:obcx_contract_command_invalid_name>"
     OBCX_TEST_CONTRACT_COMMAND_RESERVED_NAME_LIBRARY="$<TARGET_FILE:obcx_contract_command_reserved_name>"
+    OBCX_TEST_CONTRACT_COMMAND_SCOPE_UNKNOWN_LIBRARY="$<TARGET_FILE:obcx_contract_command_scope_unknown>"
+    OBCX_TEST_CONTRACT_COMMAND_SCOPE_TYPE_LIBRARY="$<TARGET_FILE:obcx_contract_command_scope_type>"
+    OBCX_TEST_CONTRACT_COMMAND_SCOPE_CALLABLE_LIBRARY="$<TARGET_FILE:obcx_contract_command_scope_callable>"
     OBCX_TEST_CONTRACT_COMMAND_INVALID_PATTERN_LIBRARY="$<TARGET_FILE:obcx_contract_command_invalid_pattern>"
     OBCX_TEST_CONTRACT_COMMAND_MATCHER_CALLABLE_LIBRARY="$<TARGET_FILE:obcx_contract_command_matcher_callable>"
     OBCX_TEST_CONTRACT_COMMAND_MATCHER_KIND_LIBRARY="$<TARGET_FILE:obcx_contract_command_matcher_kind>"

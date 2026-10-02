@@ -30,7 +30,7 @@ def main(argv=None) -> int:
             command.add_argument("--observed", required=True, type=Path)
             command.add_argument("--output", required=True, type=Path)
     command = commands.add_parser("plan")
-    for name in ("workspace", "lock", "graph", "cache", "build-dir", "output", "current-graph"):
+    for name in ("workspace", "cache", "build-dir", "output", "current-graph"):
         command.add_argument("--" + name, required=True, type=Path)
     command.add_argument("--mode", required=True, choices=("development", "release"))
     for name in ("platform", "compiler-id", "compiler-version"):

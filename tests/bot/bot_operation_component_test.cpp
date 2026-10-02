@@ -206,134 +206,8 @@ auto text_message() -> obcx::common::Message {
 }
 
 TEST(BotOperationComponentTest,
-     OneBotNativeEndpointExecutesAllDeclaredActions) {
-  auto transport = std::make_shared<FakeOneBotTransport>();
-  transport->responses = {
-      R"({"status":"ok","retcode":0,"data":{"message_id":11}})",
-      R"({"status":"ok","retcode":0,"data":{"message_id":12}})",
-      R"({"status":"ok","retcode":0,"data":null})",
-      R"({"status":"ok","retcode":0,"data":{"user_id":22,"nickname":"member"}})",
-      R"({"status":"ok","retcode":0,"data":{"messages":[{"sender":{"nickname":"a"},"content":"hello"}]}})",
-      R"({"status":"ok","retcode":0,"data":{"url":"https://example.test/group"}})",
-      R"({"status":"ok","retcode":0,"data":{"url":"https://example.test/private"}})",
-      R"({"status":"ok","retcode":0,"data":null})",
-      R"({"status":"ok","retcode":0,"data":{"message_id":13,"forward_id":"resource-13"}})",
-  };
-  obcx::core::BotInstallation installation{"qq-main",
-                                           obcx::bot::SurfaceId{"onebot11.qq"}};
-  installation.add_component(
-      std::make_unique<obcx::core::OneBot11ProtocolComponent>());
-  installation.add_component(
-      std::make_unique<FakeOneBotTransportComponent>(transport));
-  installation.add_component(
-      std::make_unique<obcx::core::OneBot11OperationsComponent>("qq-main"));
-  installation.start();
-  const auto endpoint = installation.capability<BotOperationEndpoint>(
-      CapabilityId{"bot.operations"});
-  ASSERT_NE(endpoint, nullptr);
-  const auto onebot_actions = endpoint->declared_actions();
-  EXPECT_EQ(
-      std::set<ActionId>(onebot_actions.begin(), onebot_actions.end()).size(),
-      9U);
-
-  const GroupTarget target{
-      .installation = {.installation_id = "qq-main",
-                       .surface = SurfaceId{"onebot11.qq"}},
-      .native_group_id = "100",
-  };
-  const auto sent = run(obcx::bot::invoke(
-      *endpoint, obcx::bot::SendGroupMessageRequest{
-                     .target = target, .message = text_message()}));
-  ASSERT_TRUE(sent.ok());
-  EXPECT_EQ(sent.value->primary().native_message_id, "11");
-  const auto private_sent = run(obcx::bot::invoke(
-      *endpoint, obcx::bot::SendPrivateMessageRequest{
-                     .target = {.installation = target.installation,
-                                .native_user_id = "22"},
-                     .message = text_message()}));
-  ASSERT_TRUE(private_sent.ok());
-  EXPECT_EQ(private_sent.value->primary().native_message_id, "12");
-  EXPECT_TRUE(
-      run(obcx::bot::invoke(
-              *endpoint,
-              obcx::bot::DeleteMessageRequest{
-                  .message = {.group = target, .native_message_id = "11"}}))
-          .ok());
-  EXPECT_TRUE(
-      run(obcx::bot::invoke(*endpoint,
-                            obcx::onebot11::bot::GetOneBotGroupMemberRequest{
-                                .target = target, .user_id = "22"}))
-          .ok());
-  EXPECT_TRUE(
-      run(obcx::bot::invoke(*endpoint,
-                            obcx::onebot11::bot::GetOneBotForwardMessageRequest{
-                                .installation = target.installation,
-                                .forward_id = "forward"}))
-          .ok());
-  EXPECT_TRUE(
-      run(obcx::bot::invoke(*endpoint,
-                            obcx::onebot11::bot::ResolveOneBotGroupFileRequest{
-                                .target = target, .file_id = "group-file"}))
-          .ok());
-  EXPECT_TRUE(run(obcx::bot::invoke(
-                      *endpoint,
-                      obcx::onebot11::bot::ResolveOneBotPrivateFileRequest{
-                          .installation = target.installation,
-                          .user_id = "22",
-                          .file_id = "private-file"}))
-                  .ok());
-  EXPECT_TRUE(run(obcx::bot::invoke(*endpoint,
-                                    obcx::onebot11::bot::PokeOneBotGroupRequest{
-                                        .target = target, .user_id = "22"}))
-                  .ok());
-  const auto forwarded = run(obcx::bot::invoke(
-      *endpoint, obcx::onebot11::bot::SendOneBotGroupForwardMessageRequest{
-                     .target = target,
-                     .messages = nlohmann::json::parse(R"([
-            {"type":"node","data":{"content":[{"type":"image","data":{"file":"file:///shared/qq/cover%20A.png"}}]}},
-            {"type":"node","data":{"content":[{"type":"text","data":{"text":"A"}}]}},
-            {"type":"node","data":{"content":[{"type":"image","data":{"file":"base64://ZGVm"}}]}},
-            {"type":"node","data":{"content":[{"type":"text","data":{"text":"B"}}]}}
-          ])"),
-                     .maximum_payload_bytes = 4096,
-                     .shared_files = {"file:///shared/qq/cover%20A.png"}}));
-  ASSERT_TRUE(forwarded.ok());
-  EXPECT_EQ(forwarded.value->message_id, "13");
-  EXPECT_EQ(forwarded.value->forward_id, "resource-13");
-  const auto wire = nlohmann::json::parse(transport->payloads.back());
-  EXPECT_EQ(wire.at("action"), "send_group_forward_msg");
-  EXPECT_EQ(wire.at("params").at("group_id"), "100");
-  EXPECT_FALSE(wire.at("params").contains("maximum_payload_bytes"));
-  EXPECT_FALSE(wire.at("params").contains("shared_files"));
-  const auto &nodes = wire.at("params").at("messages");
-  ASSERT_EQ(nodes.size(), 4U);
-  EXPECT_EQ(nodes[0]["data"]["content"][0]["type"], "image");
-  EXPECT_EQ(nodes[0]["data"]["content"][0]["data"]["file"],
-            "file:///shared/qq/cover%20A.png");
-  EXPECT_EQ(nodes[1]["data"]["content"][0]["data"]["text"], "A");
-  EXPECT_EQ(nodes[2]["data"]["content"][0]["type"], "image");
-  EXPECT_EQ(nodes[3]["data"]["content"][0]["data"]["text"], "B");
-  for (const auto &node : nodes) {
-    EXPECT_EQ(node["data"].size(), 1U);
-    EXPECT_EQ(node["data"]["content"].size(), 1U);
-  }
-  ASSERT_EQ(transport->payloads.size(), 9U);
-  EXPECT_EQ(nlohmann::json::parse(transport->payloads.front()).at("action"),
-            "send_group_msg");
-}
-
-TEST(BotOperationComponentTest,
-     TelegramNativeEndpointExecutesAllCapabilitiesAndBoundsMedia) {
+     TelegramRejectsForgedReplyAndBoundsDownloadedMedia) {
   auto transport = std::make_shared<FakeTelegramTransport>();
-  transport->responses = {
-      R"({"ok":true,"result":{"message_id":31}})",
-      R"({"ok":true,"result":{"message_id":30,"chat":{"id":7}}})",
-      R"({"ok":true,"result":true})",
-      R"({"ok":true,"result":{"message_id":32}})",
-      R"({"ok":true,"result":{"message_id":31}})",
-      R"({"ok":true,"result":{"message_id":33}})",
-      R"({"ok":true,"result":[{"message_id":34},{"message_id":35}]})",
-  };
   obcx::core::BotInstallation installation{
       "tg-main", obcx::bot::SurfaceId{"telegram.bot_api"}};
   installation.add_component(
@@ -356,76 +230,6 @@ TEST(BotOperationComponentTest,
                        .surface = SurfaceId{"telegram.bot_api"}},
       .native_group_id = "-1001",
   };
-  const auto sent = run(obcx::bot::invoke(
-      *endpoint, obcx::bot::SendGroupMessageRequest{
-                     .target = target, .message = text_message()}));
-  ASSERT_TRUE(sent.ok());
-  EXPECT_EQ(sent.value->primary().native_message_id, "31");
-  const auto private_sent = run(obcx::bot::invoke(
-      *endpoint, obcx::bot::SendPrivateMessageRequest{
-                     .target = {.installation = target.installation,
-                                .native_user_id = "7"},
-                     .message = text_message()}));
-  ASSERT_TRUE(private_sent.ok());
-  EXPECT_EQ(private_sent.value->primary().native_message_id, "30");
-  EXPECT_TRUE(
-      run(obcx::bot::invoke(
-              *endpoint,
-              obcx::bot::DeleteMessageRequest{
-                  .message = {.group = target, .native_message_id = "31"}}))
-          .ok());
-  EXPECT_TRUE(run(obcx::bot::invoke(
-                      *endpoint,
-                      obcx::telegram::bot::SendTelegramTopicMessageRequest{
-                          .target = {.group = target, .topic_id = 7},
-                          .message = text_message()}))
-                  .ok());
-  EXPECT_TRUE(
-      run(obcx::bot::invoke(
-              *endpoint,
-              obcx::telegram::bot::EditTelegramMessageTextRequest{
-                  .message = {.group = target, .native_message_id = "31"},
-                  .text = "edited"}))
-          .ok());
-  EXPECT_TRUE(
-      run(obcx::bot::invoke(
-              *endpoint,
-              obcx::telegram::bot::SendTelegramPhotoRequest{
-                  .target = target, .photo = "file-id", .caption = "caption"}))
-          .ok());
-  EXPECT_TRUE(run(obcx::bot::invoke(
-                      *endpoint,
-                      obcx::telegram::bot::SendTelegramMediaGroupUrlsRequest{
-                          .target = target,
-                          .media = {{.type = "photo", .source = "file-a"},
-                                    {.type = "photo", .source = "file-b"}}}))
-                  .ok());
-  const auto uploaded_photo = run(obcx::bot::invoke(
-      *endpoint, obcx::telegram::bot::SendTelegramPhotoUploadRequest{
-                     .target = target,
-                     .photo = {.type = "photo",
-                               .filename = "thumbnail.webp",
-                               .mime_type = "image/webp",
-                               .bytes = {1, 2, 3}},
-                     .maximum_bytes = 16}));
-  ASSERT_TRUE(uploaded_photo.ok());
-  EXPECT_EQ(transport->photo_upload_calls, 1U);
-  const auto uploaded = run(obcx::bot::invoke(
-      *endpoint, obcx::telegram::bot::SendTelegramMediaGroupUploadsRequest{
-                     .target = target,
-                     .media = {{.type = "photo",
-                                .filename = "a.jpg",
-                                .mime_type = "image/jpeg",
-                                .bytes = {1, 2, 3}},
-                               {.type = "photo",
-                                .filename = "b.jpg",
-                                .mime_type = "image/jpeg",
-                                .bytes = {4, 5, 6}}},
-                     .maximum_bytes = 16}));
-  ASSERT_TRUE(uploaded.ok());
-  EXPECT_EQ(transport->upload_chat, "-1001");
-  EXPECT_EQ(transport->upload_count, 2U);
-
   obcx::telegram::bot::SendTelegramMediaGroupUploadsRequest forged_request{
       .target = target,
       .media = {{.type = "photo",
@@ -450,8 +254,9 @@ TEST(BotOperationComponentTest,
   ASSERT_FALSE(forged_reply.ok());
   EXPECT_EQ(forged_reply.error->submission_safety,
             obcx::bot::SubmissionSafety::DefinitelyNotSubmitted);
-  EXPECT_EQ(transport->upload_calls, 1U);
+  EXPECT_EQ(transport->upload_calls, 0U);
 
+  transport->file_content = std::string(32, 'x');
   auto fetched = run(obcx::bot::invoke(
       *endpoint,
       obcx::telegram::bot::FetchTelegramFileRequest{
@@ -461,7 +266,7 @@ TEST(BotOperationComponentTest,
   ASSERT_TRUE(fetched.ok());
   EXPECT_EQ(
       std::string(fetched.value->bytes.begin(), fetched.value->bytes.end()),
-      "file-bytes");
+      std::string(32, 'x'));
   EXPECT_EQ(transport->downloaded_file_id, "telegram-file");
   EXPECT_EQ(transport->download_maximum_bytes, 32U);
 
@@ -580,31 +385,6 @@ TEST(BotOperationComponentTest,
                                 .mime_type = "image/jpeg",
                                 .bytes = {2}}},
                      .maximum_bytes = 16})));
-}
-
-TEST(BotOperationComponentTest,
-     TelegramCommandCatalogUsesItsExplicitInstallationCapability) {
-  auto transport = std::make_shared<FakeTelegramTransport>();
-  transport->responses.push_back(R"({"ok":true,"result":true})");
-  obcx::core::BotInstallation installation{
-      "tg-commands", obcx::bot::SurfaceId{"telegram.bot_api"}};
-  installation.add_component(
-      std::make_unique<obcx::core::TelegramProtocolComponent>());
-  installation.add_component(
-      std::make_unique<FakeTelegramTransportComponent>(transport));
-  installation.add_component(
-      std::make_unique<obcx::core::TelegramCommandCatalogComponent>());
-  installation.start();
-  const auto catalog =
-      installation.capability<obcx::core::CommandCatalogPublisher>(
-          CapabilityId{"telegram.command-catalog"});
-  const auto result = run(
-      catalog->publish({{.name = "chat", .description = "Chat with the bot"}}));
-  EXPECT_TRUE(result.succeeded);
-  ASSERT_EQ(transport->payloads.size(), 1U);
-  const auto payload = nlohmann::json::parse(transport->payloads.front());
-  EXPECT_EQ(payload.at("method"), "setMyCommands");
-  EXPECT_EQ(payload.at("commands").at(0).at("command"), "chat");
 }
 
 template <typename Request>

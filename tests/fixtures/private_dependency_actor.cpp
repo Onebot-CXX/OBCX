@@ -22,9 +22,6 @@ namespace {
 class PrivateDependencyActor final
     : public obcx::core::ReflectedActor<PrivateDependencyActor> {
 public:
-  static constexpr std::string_view actor_name = "private_dependency_actor";
-  static constexpr std::string_view actor_version = "1.0.0";
-
   auto handle(const obcx::tests::events::PrivateDependencyProbe &,
               const obcx::core::MessageEnvelope &message,
               obcx::core::ActorContext &context)

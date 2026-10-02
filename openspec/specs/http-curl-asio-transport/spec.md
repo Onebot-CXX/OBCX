@@ -30,9 +30,7 @@ Asynchronous direct/proxy HTTP clients SHALL bind curl drivers, sockets, and tim
 - **WHEN** a synchronous direct/proxy compatibility method is called with the original client executor idle
 - **THEN** it completes through an isolated local context, preserves request settings, and retires that local transport before returning
 
-#### Scenario: Bridge media uses a request-local HTTP client
-- **WHEN** bridge image probing, downloading, or GIF detection constructs a request-local asynchronous HTTP client
-- **THEN** it supplies the running coroutine executor, rather than an undriven temporary context, so requests, deadlines, and cancellation can complete and executor shutdown can drain cleanup
+Bridge-specific caller obligations are maintained in [Bridge HTTP client lifetime](../../../local_actor/obcx-message-bridge/openspec/specs/bridge-http-client-lifetime/spec.md). The generic owning-executor and drain requirements above remain core-owned.
 
 ### Requirement: Cancellation owns and retires each transfer exactly once
 The adapter SHALL own request data and callback state until completion, serialize cancellation with transfer processing, and remove cancelled transfers from the multi handle before releasing their curl resources. Cancelled or completed transfers MUST complete exactly once; stale readiness callbacks MUST NOT access released or recycled handles. Generation work ownership SHALL remain held until cancellation callbacks retire.

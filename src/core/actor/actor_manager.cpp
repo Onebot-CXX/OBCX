@@ -223,7 +223,7 @@ auto parse_actor_contract(const char *document,
       for (const auto &[key, value] : entry.items()) {
         (void)value;
         if (key != "name" && key != "description" && key != "request_type" &&
-            key != "matcher") {
+            key != "matcher" && key != "availability") {
           error =
               "actor command registration contains an unsupported member '" +
               key + "'";
@@ -243,6 +243,14 @@ auto parse_actor_contract(const char *document,
           .description = entry["description"].get<std::string>(),
           .request_type = entry["request_type"].get<std::string>(),
       };
+      if (entry.contains("availability")) {
+        if (!entry["availability"].is_string() ||
+            entry["availability"] != "actor_scope") {
+          error = "actor command availability must be actor_scope";
+          return std::nullopt;
+        }
+        registration.actor_scoped = true;
+      }
       if (entry.contains("matcher")) {
         const auto &matcher = entry["matcher"];
         if (!matcher.is_object()) {

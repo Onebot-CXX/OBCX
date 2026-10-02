@@ -183,7 +183,7 @@ def vcpkg_manifest(graph: dict, base: dict, baseline: str) -> dict:
     if "builtin-baseline" in base and base["builtin-baseline"] != baseline:
         raise PackageError("vcpkg core baseline conflicts with selected baseline")
     additions = []
-    for provider in graph["lock"]["providers"]:
+    for provider in graph["providers"]:
         if provider["id"] == "obcx-sdk":
             continue  # The supplied core base, not actor metadata, owns SDK deps.
         manager = provider["package_manager"]

@@ -31,7 +31,7 @@ Supported discovery mechanisms:
 
 These are structural examples, not configuration defaults. A missing version is
 an error; the declared version is never substituted for the observed version.
-The actual version must match the locked version under the selected SemVer or
+The actual version must match the explicitly declared version under the selected SemVer or
 numeric scheme. The resolver separately checks every consumer's range.
 
 ## Environment provenance
@@ -58,14 +58,14 @@ unrelated installation prefix is not accepted. Build-relative prefixes allow the
 in-tree SDK's generated headers without committing machine-specific build paths.
 
 The current local workspace records its reviewed environment files under
-`.package-state/providers/`, hashes them in `packages.toml`, and freezes the
-bindings in `packages.lock`. SDK evidence also hashes root and `src/CMakeLists.txt`;
+`.package-state/providers/` and hashes them in `packages.toml`. Current bindings
+are verified on every configure. SDK evidence also hashes root and `src/CMakeLists.txt`;
 its version is read from the exported `obcx::obcx_core.OBCX_SDK_VERSION` property.
 Exact Nix output prefixes cover the observed SDK closure, including literal
 pkg-config library paths. SDK include roots are explicitly `workspace:include`
 and `build:generated`, not the whole checkout. GTest is test-profile-only;
 LibXml2/tomlplusplus and test SQLite have separate bindings. These local records
-are deliberately not a second package lock. The user explicitly rejected adding
+verify the explicitly selected environment; they are not a dependency approval snapshot. The user explicitly rejected adding
 flake-generated dependency lists: the existing `flake.nix`/`flake.lock` own the
 third-party environment. Do not modify the flake or introduce another automatic
 list generator for this change. Package declarations and actual cross-package
@@ -88,7 +88,7 @@ validation and CMake consume the same Python contract implementation.
 
 ## vcpkg preparation without configure
 
-`cmake/gen_vcpkg_manifest.py` now reads a **prepared v2 graph and frozen lock**.
+`cmake/gen_vcpkg_manifest.py` resolves the **current explicit v2 workspace offline**.
 It no longer reads legacy actor metadata or requires CMake's fetched-actor tree.
 The root loader and maintained CMake entries now use v2. This host's bindings are
 explicitly Nix-backed; vcpkg consumption still requires a separately authored
@@ -96,8 +96,7 @@ workspace with the mappings below.
 
 ```sh
 python3 cmake/gen_vcpkg_manifest.py \
-  --workspace packages.toml --lock packages.lock \
-  --graph build/package-state/resolved-packages.json \
+  --workspace packages.toml \
   --cache build/package-state/sources --mode development \
   --base vcpkg-base.json --baseline <explicit-40-character-commit> \
   --output vcpkg.json
@@ -110,6 +109,7 @@ are **not guessed into vcpkg names**. Prepare a vcpkg-bound workspace for that
 export. Feature unions retain core constraints; incompatible default-feature or
 version policies fail rather than being silently overwritten.
 
-The exporter rechecks graph/source mappings and metadata against the lock, stays
-offline and atomically writes only its output. It never executes package CMake,
-updates the source lock or chooses a package version.
+The exporter derives source mappings and checks dependency constraints directly
+from current declarations, stays offline and atomically writes only its output.
+It never executes package CMake or chooses a package version; no prepared graph
+is consumed. The explicitly pinned vcpkg baseline remains required.

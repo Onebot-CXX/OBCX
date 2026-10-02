@@ -1,24 +1,19 @@
-"""Bind prepared graphs to current metadata without changing source locks."""
+"""Keep generated package state separate from its authoritative inputs."""
 from __future__ import annotations
 
 from pathlib import Path
 
 from . import PackageError
-from .io import read_json
-from .resolver import Resolver, frozen
 
 
-def verified_graph(workspace: Path, lock: Path, graph: Path, cache: Path, mode: str) -> dict:
-    prepared = read_json(graph, "resolved-packages")
-    actual = Resolver(workspace, cache, mode, "deny").resolve()
-    frozen(lock, actual)
-    if prepared["lock"] != actual["lock"] or prepared["lock_sha256"] != actual["lock_sha256"]:
-        raise PackageError("prepared graph does not match frozen lock; run explicit resolve")
-    # Development implementation edits are allowed. Their current content is
-    # returned for build evidence; they never silently rewrite the source lock.
-    def metadata_only(value):
-        return [{key: item for key, item in node.items() if key != "source_receipt"}
-                for node in value["packages"]]
-    if metadata_only(prepared) != metadata_only(actual) or prepared["unused_sources"] != actual["unused_sources"]:
-        raise PackageError("prepared graph source/metadata mapping drift; run explicit resolve")
-    return actual
+def validate_outputs(workspace: Path, graph: dict, outputs: list[Path]) -> None:
+    resolved = [path.resolve() for path in outputs]
+    if len(set(resolved)) != len(resolved) or workspace.resolve() in resolved:
+        raise PackageError("output/workspace paths must be distinct")
+    if any(path.is_relative_to(Path(node["source_dir"]).resolve())
+           for path in resolved for node in graph["packages"]):
+        raise PackageError("generated state must be outside package source roots")
+    inputs = {(workspace.resolve().parent / provider["provenance"]["path"]).resolve()
+              for provider in graph["providers"]}
+    if inputs.intersection(resolved):
+        raise PackageError("generated state must not overwrite provider evidence")

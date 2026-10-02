@@ -5,7 +5,7 @@ from pathlib import Path
 
 from . import PackageError, SCHEMA_VERSION, TOOL_VERSION
 from .contracts import validate
-from .io import atomic_write, digest, encoded, metadata, read_json
+from .io import digest, encoded, metadata
 from .sources import Sources
 from .versions import satisfies
 
@@ -29,24 +29,15 @@ class Resolver:
         for root in self.options["roots"]:
             self.visit(root)
         self.check_requirements()
-        lock = {"schema_version": SCHEMA_VERSION, "tool_version": TOOL_VERSION,
-                "workspace_sha256": digest(encoded(self.workspace)), **self.options,
-                "mode": self.store.mode,
-                "packages": [self.lock_node(self.nodes[key]) for key in sorted(self.nodes)],
-                "providers": [self.providers[key] for key in sorted(self.providers)],
-                "edges": sorted(self.edges, key=encoded), "order": self.order}
-        validate(lock, "packages-lock")
         graph = {"schema_version": SCHEMA_VERSION, "tool_version": TOOL_VERSION,
-                 "lock_sha256": digest(encoded(lock)), "lock": lock,
+                 "workspace_sha256": digest(encoded(self.workspace)), **self.options,
+                 "mode": self.store.mode,
                  "packages": [self.nodes[key] for key in sorted(self.nodes)],
+                 "providers": [self.providers[key] for key in sorted(self.providers)],
+                 "edges": sorted(self.edges, key=encoded), "order": self.order,
                  "unused_sources": sorted(self.sources.keys() - self.nodes.keys())}
         validate(graph, "resolved-packages")
         return graph
-
-    @staticmethod
-    def lock_node(node: dict) -> dict:
-        return {key: value for key, value in node.items()
-                if key not in {"source_dir", "metadata", "source_receipt"}}
 
     def claim_target(self, target: str, owner: str) -> None:
         if target in self.targets and self.targets[target] != owner:
@@ -162,32 +153,3 @@ def paths_to(roots: list[str], edges: list[dict], target: str) -> list[list[str]
             for child in sorted({e["to"] for e in edges if e["from"] == node}):
                 yield from visit(child, [*chain, node])
     return [path for root in roots for path in visit(root, [])]
-
-
-def differences(old, new, prefix: str) -> list[str]:
-    if type(old) is not type(new):
-        return [prefix]
-    if isinstance(old, dict):
-        result = []
-        for key in sorted(old.keys() | new.keys()):
-            if key not in old or key not in new:
-                result.append(f"{prefix}.{key}")
-            else:
-                result.extend(differences(old[key], new[key], f"{prefix}.{key}"))
-        return result
-    if isinstance(old, list):
-        if old and new and all(isinstance(x, dict) and "id" in x for x in [*old, *new]):
-            return differences({x["id"]: x for x in old}, {x["id"]: x for x in new}, prefix)
-        return [] if old == new else [prefix]
-    return [] if old == new else [prefix]
-
-
-def frozen(lock_path: Path, graph: dict) -> None:
-    locked = read_json(lock_path, "packages-lock")
-    delta = differences(locked, graph["lock"], "lock")
-    if delta:
-        raise PackageError("frozen lock drift; explicit relock required:\n" + "\n".join(delta))
-
-
-def write_lock(lock_path: Path, graph: dict) -> None:
-    atomic_write(lock_path, encoded(graph["lock"]))

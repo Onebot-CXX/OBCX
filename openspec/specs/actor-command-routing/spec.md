@@ -1,7 +1,7 @@
 # actor-command-routing Specification
 
 ## Purpose
-TBD - created by archiving change add-re2-command-patterns. Update Purpose after archive.
+Define core command observation, exact routing, ACL and availability enforcement, help, transaction completion, and generation-owned propagation. Actor-specific forwarding and authorization are maintained in their owning repositories.
 ## Requirements
 
 ### Requirement: Command access configuration is explicit and exact-scoped
@@ -89,19 +89,31 @@ The canonical name `help` SHALL be reserved by core and actor command contracts 
 - **THEN** core returns one bounded invalid-help-arguments result, invokes no actor, and consumes the command
 
 ### Requirement: Help lists every permitted routable canonical command
-For an authorized `/help` call, core SHALL evaluate the caller's effective policy independently for every command routed to the exact source platform/installation. It SHALL render `help` and every permitted canonical actor command exactly once in deterministic canonical-name order with each registered description. It MUST NOT display commands routed only to other installations, access-denied commands, RE2 expressions, or matcher-derived aliases.
+For an authorized `/help` call, core SHALL evaluate the shared route-aware eligibility decision independently for every command routed to the exact source platform/installation. This decision MUST require the caller's effective ACL and any declared actor availability scope to permit the trusted source context. It SHALL render `help` and every eligible canonical actor command exactly once in deterministic canonical-name order with each registered description. It MUST NOT display commands routed only to other installations, access-denied commands, actor-unavailable commands, RE2 expressions, or matcher-derived aliases. Reserved `help` SHALL remain core-owned and governed by its ACL without an actor scope. Existing help bounds and exact reply targeting MUST be preserved.
 
 #### Scenario: Caller has a restricted command override
-- **WHEN** three commands are routed for the source bot but one command's effective policy denies the caller
+- **WHEN** three commands are routed for the source bot and actor-available but one command's effective policy denies the caller
 - **THEN** help lists the two permitted actor commands plus permitted `help`, and omits the denied command
 
 #### Scenario: Same bot command names are aggregated
-- **WHEN** multiple actors contribute distinct permitted commands to one bot scope
+- **WHEN** multiple actors contribute distinct eligible commands to one bot scope
 - **THEN** help renders one sorted combined list using their registered descriptions
 
 #### Scenario: Another installation has commands
 - **WHEN** an active command exists only for a different bot installation
 - **THEN** it is absent from the caller's help output
+
+#### Scenario: Actor does not serve the source group
+- **WHEN** a command passes ACL evaluation but its actor scope excludes the caller's exact installation/group/topic
+- **THEN** help omits that command using the same eligibility decision as execution
+
+#### Scenario: No actor command is available
+- **WHEN** the caller is authorized for `help` but no actor command is eligible in the conversation
+- **THEN** help succeeds and lists only `/help`
+
+#### Scenario: Eligible commands span pages
+- **WHEN** actor-scope filtering leaves eligible entries requiring more than one permitted page
+- **THEN** help sends every eligible entry once in deterministic order without truncating an entry or changing its exact reply destination
 
 ### Requirement: Complete help output is explicitly bounded
 `command_runtime.help` SHALL require finite positive `page_bytes` and `maximum_pages`. Rendering MUST use plain UTF-8 text, preserve complete name/description entries, and produce pages no larger than `page_bytes`. Candidate validation MUST reject a command entry that cannot fit one page or a complete bot catalog that would exceed `maximum_pages`; runtime filtering MUST NOT silently truncate an otherwise permitted command.
@@ -134,7 +146,7 @@ A platform command adapter SHALL translate each bounded help page and normalized
 - **THEN** core stops sending later pages, reports a conservative terminal failure, and performs no automatic retry or ordinary fallback
 
 ### Requirement: Access and help state follow generation lifecycle
-Compiled policies, overrides, help routes, render bounds, and catalogs SHALL be immutable and generation-owned. Validation-only and reload candidates MUST perform no help send or catalog publication. Old admitted commands SHALL finish under the old policy; successful cutover SHALL apply only the new policy to subsequent messages.
+Compiled policies, overrides, help routes, render bounds, catalogs, and finalized actor availability scopes SHALL be immutable and generation-owned. Validation-only and reload candidates MUST validate required scope publications and perform no help send or catalog publication. Old admitted commands SHALL finish under the old policy and scope snapshot; successful cutover SHALL apply only the new policy and scope to subsequent messages. Missing or malformed required scopes MUST reject a candidate without altering active help or execution eligibility.
 
 #### Scenario: Reload changes an allowlist
 - **WHEN** a valid candidate changes command access entries before cutover
@@ -146,7 +158,15 @@ Compiled policies, overrides, help routes, render bounds, and catalogs SHALL be 
 
 #### Scenario: Validation-only runs
 - **WHEN** `--validate-config` checks help/access configuration
-- **THEN** it validates identities, output bounds, routes, and operation capabilities without invoking actors/providers or publishing a catalog
+- **THEN** it validates identities, output bounds, routes, operation capabilities, and prepared availability data without invoking command handlers/providers or publishing a catalog
+
+#### Scenario: Reload changes an actor destination
+- **WHEN** a valid candidate changes actor group/topic configuration
+- **THEN** old admitted requests retain the old availability scope and post-cutover help/dispatch share the new scope
+
+#### Scenario: Candidate omits a required scope
+- **WHEN** a marked active command has no prepared scope in a reload candidate
+- **THEN** reload fails and the active command table and help output remain unchanged
 
 ### Requirement: Access diagnostics are bounded and content-safe
 Command access/help diagnostics MAY identify generation, normalized platform, installation, canonical command, policy phase, and stable outcome code. They MUST NOT record raw messages, command arguments, help payloads, bot credentials, or complete provider payloads. Native group/user IDs MUST NOT be required in routine denial messages.
@@ -259,33 +279,21 @@ platform command candidate into an intercepted command transaction. When a
 candidate has no active route for its platform and bot scope, downstream
 pipeline actors MUST treat the original event as ordinary business traffic and
 MUST NOT suppress or consume it solely because its raw text begins with `/`.
-In particular, a bridge forwarding handler MUST NOT use a raw leading-slash
-check as a substitute for the active command routing table.
 
-#### Scenario: An unregistered QQ command-shaped message is bridged
+#### Scenario: Normalized command has no active route
 
-- **WHEN** QQ receives `/tp 2072 ~ 1080`, no active QQ route matches `tp`, and the source group has an enabled bridge mapping
-- **THEN** the original message traverses the ordinary message-store and bridge stages once, the target bot is called once, and one forwarding mapping is produced
-
-#### Scenario: An unregistered Telegram command entity is bridged
-
-- **WHEN** Telegram receives a valid leading `bot_command` entity whose normalized name has no active route for that bot and the source group has an enabled bridge mapping
-- **THEN** the original message traverses the ordinary pipeline and is forwarded once instead of being rejected by its leading slash
+- **WHEN** a platform-valid command candidate has no active route for its exact platform and installation
+- **THEN** the coordinator submits the original event to its ordinary configured pipelines exactly once without creating a command transaction
 
 #### Scenario: Slash syntax appears without a platform command match
 
 - **WHEN** a platform adapter reports no command candidate for a slash-prefixed event
-- **THEN** downstream bridge processing applies only its ordinary routing, loop, de-duplication, and forwarding rules
+- **THEN** the coordinator leaves the original event available to ordinary actor routing and does not consume it solely for the slash prefix
 
 #### Scenario: An active command is consumed
 
 - **WHEN** a slash-prefixed event matches an active command route whose valid completion selects `consume`
-- **THEN** the command coordinator completes the source operation without submitting it to the ordinary bridge pipeline
-
-#### Scenario: An independent bridge rule rejects the message
-
-- **WHEN** an unmatched slash-prefixed event reaches a bridge whose group mapping is disabled or absent
-- **THEN** the bridge may skip it for that explicit routing policy but not because of the slash prefix
+- **THEN** the command coordinator completes the source operation without submitting it to ordinary pipelines
 
 ### Requirement: Unmatched-command coverage reaches terminal pipeline effects
 
@@ -294,15 +302,17 @@ unmatched slash-prefixed event across the configured ordinary pipeline, not
 only that the coordinator invoked a generic orchestrator. The coverage MUST
 use isolated persistence and mock external bot transports.
 
-#### Scenario: The unmatched QQ regression completes
+#### Scenario: The unmatched pipeline reaches completion
 
-- **WHEN** the end-to-end actor pipeline processes the unregistered QQ message `/tp 2072 ~ 1080`
-- **THEN** it verifies message persistence, exactly one target send, a queryable source-to-target mapping, successful forwarding completion, and no missing-mapping bridge failure
+- **WHEN** an isolated configured actor pipeline processes an unmatched slash-prefixed event
+- **THEN** coverage verifies its terminal ordinary-pipeline effects exactly once, not merely submission to the orchestrator
 
 #### Scenario: A matched command regression completes
 
 - **WHEN** the same pipeline processes a command that is actively routed and consumed
-- **THEN** it verifies the command actor is invoked while the bridge target bot is not called
+- **THEN** coverage verifies the command actor is invoked and no ordinary-pipeline terminal effects occur
+
+Bridge forwarding, persistence and target-send acceptance is owned by [Bridge command routing](../../../local_actor/obcx-message-bridge/openspec/specs/bridge-command-routing/spec.md), relocated on 2026-09-30. The generic propagation and end-to-end coverage obligations above remain core-owned.
 
 ### Requirement: Platform adapters only translate platform command semantics
 
@@ -379,12 +389,7 @@ routing, or platform catalog publication.
 
 ### Requirement: Active command routing is validated per generation
 
-The generation builder SHALL combine candidate configuration, loaded actor
-contracts, configured bot metadata, and available platform adapters into one
-immutable command routing table. It MUST reject an inactive or missing actor, an
-undeclared command, a request type absent from accepted inputs, an unknown bot,
-a platform/bot mismatch, an unavailable adapter, an invalid fallback, or more
-than one active target for the same platform, bot, and canonical command name.
+The generation builder SHALL combine candidate configuration, loaded actor contracts, configured bot metadata, available platform adapters, and generation-prepared actor availability scopes into one immutable command routing table. It MUST reject an inactive or missing actor, an undeclared command, a request type absent from accepted inputs, an unknown bot, a platform/bot mismatch, an unavailable adapter, an invalid fallback, or more than one active target for the same platform, bot, and canonical command name. It MUST structurally validate routes before actor preparation and reject missing or invalid required availability publications before the candidate becomes ready. Structural validation MUST NOT activate an incomplete table, and availability finalization MUST NOT mutate the active generation.
 
 #### Scenario: Two actors claim one scoped command
 
@@ -398,19 +403,16 @@ than one active target for the same platform, bot, and canonical command name.
 
 #### Scenario: Validation-only startup inspects commands
 
-- **WHEN** `--validate-config` loads actors and a command route is invalid
-- **THEN** validation reports the same command-contract or route failure without starting bots, ingress, command transactions, or catalog publication
+- **WHEN** `--validate-config` loads actors and a command route or required availability publication is invalid
+- **THEN** validation reports the same command-contract, route, or availability failure without starting bots, ingress, command transactions, or catalog publication
+
+#### Scenario: Preparation publishes an empty scope
+- **WHEN** a marked active command has a valid explicit empty actor scope
+- **THEN** its route remains active and valid but no source context is eligible for that command
 
 ### Requirement: Command observation sends a typed actor message
 
-For every root `RawMessageEvent`, the generation's command coordinator SHALL
-perform command observation before ordinary configured pipelines. An unmatched
-event SHALL enter ordinary routing exactly once. For an active match, the
-coordinator SHALL create a generation-scoped transaction, retain the source
-event, construct the actor-declared request envelope using the SDK's common
-command invocation schema, and submit that envelope to the selected actor
-through the normal actor scheduler and reflected message dispatcher. The
-command runtime MUST NOT directly invoke a handler function.
+For every root `RawMessageEvent`, the generation's command coordinator SHALL perform command observation before ordinary configured pipelines. An unmatched event SHALL enter ordinary routing exactly once. For an active match that passes the shared ACL-and-availability eligibility check, the coordinator SHALL create a generation-scoped transaction, retain the source event, construct the actor-declared request envelope using the SDK's common command invocation schema, and submit that envelope to the selected actor through the normal actor scheduler and reflected message dispatcher. An ACL-permitted active match outside its actor scope MUST instead be consumed with `command_unavailable` before transaction creation and without applying transaction fallback. The command runtime MUST NOT directly invoke a handler function. Existing pre-command message observers SHALL remain unchanged.
 
 #### Scenario: Event does not contain an active command
 
@@ -419,13 +421,17 @@ command runtime MUST NOT directly invoke a handler function.
 
 #### Scenario: Active command reaches its actor
 
-- **WHEN** a raw event normalizes to an active `chat` route
+- **WHEN** a raw event normalizes to an active `chat` route and passes its effective ACL and any actor scope
 - **THEN** the configured actor receives its declared `ChatCommand` request with transaction identity, normalized name and arguments, source context, and inherited routing metadata
 
 #### Scenario: Request message is unsupported at execution
 
 - **WHEN** a command request reaches an actor generation that does not accept its declared request type despite prior validation
 - **THEN** the transaction fails with a stable command-dispatch diagnostic and applies its configured fallback
+
+#### Scenario: Recognized command is actor-unavailable
+- **WHEN** a recognized command passes ACL checks but its actor does not serve the source context
+- **THEN** the coordinator emits one bounded `command_unavailable` result without command-handler dispatch, command-triggered provider operations, automatic reply, or ordinary fallback routing
 
 ### Requirement: Command completion controls source propagation
 
@@ -532,7 +538,7 @@ NOT transfer the retained source event or its completion to the new generation.
 - **THEN** subsequent raw events use only the new immutable command routing table
 
 ### Requirement: Platform catalogs aggregate active registrations
-For each bot whose adapter supports command-catalog publication, OBCX SHALL derive one deterministic aggregate catalog from all active scoped actor command routes plus the reserved `help` entry. It MUST publish the complete aggregate rather than allowing individual actors to replace platform state independently. It MUST NOT publish access-filtered per-user variants, RE2 pattern text, or matcher-derived aliases. Reconciliation SHALL begin only after startup activation or successful generation cutover. Publication failure MUST leave local routing active, expose degraded status, and use bounded retry without rolling back to a partially active generation.
+For each bot whose adapter supports command-catalog publication, OBCX SHALL derive one deterministic aggregate catalog from all active scoped actor command routes plus the reserved `help` entry. It MUST publish the complete aggregate rather than allowing individual actors to replace platform state independently. It MUST NOT publish access-filtered or actor-availability-filtered per-caller variants, RE2 pattern text, or matcher-derived aliases. Reconciliation SHALL begin only after startup activation or successful generation cutover. Publication failure MUST leave local routing active, expose degraded status, and use bounded retry without rolling back to a partially active generation.
 
 #### Scenario: Multiple actors contribute Telegram commands
 - **WHEN** two actors have distinct active commands for one Telegram bot
@@ -549,6 +555,10 @@ For each bot whose adapter supports command-catalog publication, OBCX SHALL deri
 #### Scenario: Remote catalog update fails
 - **WHEN** the platform rejects or times out an aggregate catalog publication after activation
 - **THEN** local command detection, access enforcement, and help routing remain active while diagnostics expose the desired catalog, last outcome, and retry state without credentials
+
+#### Scenario: Actor scope excludes one conversation
+- **WHEN** an active command is unavailable in one caller's group/topic according to actor configuration
+- **THEN** the aggregate catalog still includes it while that caller's textual `/help` omits it
 
 ### Requirement: Command diagnostics do not expose message contents
 

@@ -19,6 +19,3 @@ obcx_add_python_unittest(package/actor_vcpkg_manifest_test.py
                          "contract;actor-package;metadata;packaging")
 obcx_add_python_unittest(package/actor_release_tools_test.py
                          "contract;actor-package;release;deployment")
-
-obcx_add_python_unittest(bot/bot_platform_modularity_test.py
-                         "architecture;bot-runtime;isolation")

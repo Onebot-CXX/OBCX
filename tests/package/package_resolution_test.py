@@ -11,37 +11,32 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from package_test_support import WorkspaceCase, write_toml
+from package_test_support import WorkspaceCase
 from obcx_package import PackageError
 from obcx_package.io import digest, encoded
-from obcx_package.resolver import Resolver, frozen, paths_to, write_lock
+from obcx_package.resolver import Resolver, paths_to
 
 
 class PackageResolutionTest(WorkspaceCase):
-    def test_basic_topology_and_receipts(self):
-        graph = self.resolve()
-        self.assertEqual(graph["lock"]["order"], ["example.mapping", "example.actor"])
-        self.assertEqual(len(graph["lock"]["providers"]), 1)
-        self.assertNotIn(str(self.root), encoded(graph["lock"]).decode())
-        self.assertTrue(all("source_receipt" in p for p in graph["packages"]))
-        self.assertTrue(all("source_receipt" not in p for p in graph["lock"]["packages"]))
-
     def test_empty_roots_explicit_sdk_only(self):
         self.workspace["workspace"]["roots"] = []
         self.workspace["sources"][0]["path"] = "does-not-exist"
         graph = self.resolve()
-        self.assertEqual(graph["lock"]["order"], [])
+        self.assertEqual(graph["order"], [])
         self.assertEqual(len(graph["unused_sources"]), 2)
 
-    def test_source_order_and_metadata_array_order_do_not_change_lock(self):
+    def test_source_order_and_metadata_array_order_preserve_semantics(self):
         self.add_package(self.library("other"))
         self.packages["example.actor"]["dependencies"]["libraries"].append(self.edge("other"))
-        first = self.resolve()["lock"]
+        first = self.resolve()
         self.workspace["sources"].reverse()
         self.packages["example.actor"]["dependencies"]["libraries"].reverse()
         self.packages["example.mapping"]["artifact"]["platforms"].reverse()
-        second = self.resolve()["lock"]
-        self.assertEqual(encoded(first), encoded(second))
+        second = self.resolve()
+        for graph in (first, second):
+            for node in graph["packages"]:
+                del node["source_receipt"]  # Equivalent TOML may have different raw bytes.
+        self.assertEqual(first, second)
 
     def test_paths_are_relative_to_manifest_not_cwd(self):
         first = self.resolve()
@@ -51,7 +46,7 @@ class PackageResolutionTest(WorkspaceCase):
             second = Resolver(self.manifest, self.cache, "development", "deny").resolve()
         finally:
             os.chdir(previous)
-        self.assertEqual(first["lock"], second["lock"])
+        self.assertEqual(first, second)
 
     def test_missing_transitive_binding_gives_full_chain(self):
         self.packages["example.mapping"]["dependencies"]["libraries"] = [self.edge("missing")]
@@ -109,7 +104,7 @@ class PackageResolutionTest(WorkspaceCase):
             self.packages[f"example.{name}"]["dependencies"]["libraries"] = [self.edge("leaf")]
         graph = self.resolve()
         self.assertEqual(sum(p["id"] == "example.leaf" for p in graph["packages"]), 1)
-        chains = paths_to(graph["lock"]["roots"], graph["lock"]["edges"], "example.leaf")
+        chains = paths_to(graph["roots"], graph["edges"], "example.leaf")
         self.assertEqual(chains, [["example.actor", "example.a", "example.leaf"], ["example.actor", "example.b", "example.leaf"]])
         self.packages["example.b"]["dependencies"]["libraries"][0]["version"] = ">=2.0.0"
         with self.assertRaises(PackageError) as caught:
@@ -147,7 +142,7 @@ class PackageResolutionTest(WorkspaceCase):
             self.resolve()
         self.add_package(self.library("testing"))
         graph = self.resolve()
-        edge = next(e for e in graph["lock"]["edges"] if e["to"] == "example.testing")
+        edge = next(e for e in graph["edges"] if e["to"] == "example.testing")
         self.assertEqual(edge["scope"], "test")
 
     def test_platform_mismatch(self):
@@ -178,34 +173,12 @@ class PackageResolutionTest(WorkspaceCase):
         with self.assertRaisesRegex(PackageError, "example.actor -> obcx-sdk"):
             self.resolve()
 
-    def test_development_edits_change_receipt_not_lock(self):
+    def test_development_edits_update_current_source_receipts(self):
         first = self.resolve()
-        write_lock(self.lock, first)
         (self.root / "example.mapping" / "implementation.cpp").write_text("int changed = 1;\n")
         second = self.resolve()
-        frozen(self.lock, second)
-        self.assertEqual(first["lock"], second["lock"])
+        self.assertEqual(first["edges"], second["edges"])
         self.assertNotEqual(first["packages"], second["packages"])
-
-    def test_frozen_rejects_missing_and_drift_without_mutation(self):
-        graph = self.resolve()
-        with self.assertRaisesRegex(PackageError, "missing or invalid"):
-            frozen(self.lock, graph)
-        write_lock(self.lock, graph)
-        original = self.lock.read_bytes()
-        mtime = self.lock.stat().st_mtime_ns
-        self.packages["example.mapping"]["package"]["version"] = "0.1.1"
-        graph = self.resolve()
-        with self.assertRaisesRegex(PackageError, "packages.example.mapping"):
-            frozen(self.lock, graph)
-        self.assertEqual(original, self.lock.read_bytes())
-        self.assertEqual(mtime, self.lock.stat().st_mtime_ns)
-
-    def test_frozen_workspace_and_profile_drift(self):
-        write_lock(self.lock, self.resolve())
-        self.workspace["workspace"]["profile"] = "tests"
-        with self.assertRaisesRegex(PackageError, "lock.profile"):
-            frozen(self.lock, self.resolve())
 
     def test_resolver_never_executes_cmake(self):
         marker = self.root / "should-not-exist"
@@ -213,17 +186,20 @@ class PackageResolutionTest(WorkspaceCase):
         self.resolve()
         self.assertFalse(marker.exists())
 
-    def test_cli_lock_check_explain_and_parallel_atomic_writers(self):
+    def test_cli_resolve_check_explain_and_parallel_atomic_writers(self):
         graph_path = self.root / "resolved-packages.json"
-        command = self.cli("lock") + ["--graph", str(graph_path)]
+        command = self.cli("resolve") + ["--graph", str(graph_path)]
         # At least six processes exercise the persistent flock inode/atomic rename.
         with ThreadPoolExecutor(max_workers=8) as workers:
             results = list(workers.map(lambda _: subprocess.run(command, capture_output=True, text=True), range(8)))
         for result in results:
             self.assertEqual(result.returncode, 0, result.stderr)
-        lock = json.loads(self.lock.read_bytes())
         graph = json.loads(graph_path.read_bytes())
-        self.assertEqual(graph["lock_sha256"], digest(encoded(lock)))
+        self.assertEqual(json.loads(results[0].stdout)["graph_sha256"], digest(encoded(graph)))
+        before = graph_path.stat().st_mtime_ns
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(before, graph_path.stat().st_mtime_ns)
         result = subprocess.run(self.cli("check"), capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         result = subprocess.run(self.cli("explain") + ["example.mapping"], capture_output=True, text=True)
@@ -232,6 +208,13 @@ class PackageResolutionTest(WorkspaceCase):
         result = subprocess.run(self.cli("prepare") + ["--graph", str(graph_path)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["system_requirements"][0]["id"], "obcx-sdk")
+
+    def test_graph_output_cannot_overwrite_workspace_or_package_inputs(self):
+        for output in (self.manifest, self.root / "example.mapping/package.toml", self.root / "sdk-receipt.json"):
+            before = output.read_bytes()
+            result = subprocess.run(self.cli("resolve") + ["--graph", str(output)], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(before, output.read_bytes())
 
     def test_cli_does_not_echo_credential_value(self):
         self.workspace["providers"][0]["provenance"]["path"] = "/secret/machine/path"

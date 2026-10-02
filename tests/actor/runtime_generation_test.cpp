@@ -403,27 +403,106 @@ TEST_F(RuntimeGenerationTest, GenerationPreparationFailureIsTyped) {
   }
 }
 
-TEST_F(RuntimeGenerationTest, StagingRootContainsTheProcessUuid) {
-  const auto config = snapshot("process-staging-uuid.toml",
-                               valid_config(OBCX_TEST_ACTOR_V2_LIBRARY));
-  auto [database, registry] = services_for(config);
-  auto build_request =
-      request(obcx::core::RuntimeGenerationBuildPurpose::Startup, 1, config,
-              database, registry);
-  build_request.staging_root.clear();
-
+TEST_F(RuntimeGenerationTest, ScopePreparationIsRequiredForEveryBuildPurpose) {
   obcx::core::RuntimeGenerationBuilder builder{
       obcx::test::bot_platform_catalog()};
-  auto result = builder.build(std::move(build_request));
+  auto blocking = std::make_shared<obcx::core::BlockingExecutor>(6);
+  std::uint64_t generation = 300;
+  for (const auto purpose :
+       {obcx::core::RuntimeGenerationBuildPurpose::Startup,
+        obcx::core::RuntimeGenerationBuildPurpose::ValidationOnly,
+        obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate}) {
+    for (const std::string mode : {"normal", "empty", "missing", "invalid"}) {
+      auto document = valid_command_config(OBCX_SCOPED_ACTOR_V2_LIBRARY);
+      const auto position = document.find("label = \"a\"");
+      document.insert(position,
+                      "scope_mode = \"" + mode + "\"\nscope_group = \"42\"\n");
+      const auto config =
+          snapshot(mode + std::to_string(generation) + ".toml", document);
+      auto [database, registry] = services_for(config);
+      auto req = request(purpose, generation++, config, database, registry);
+      req.blocking_executor = blocking;
+      auto built = builder.build(std::move(req));
+      if (mode == "missing" || mode == "invalid") {
+        ASSERT_FALSE(built.ready());
+        ASSERT_TRUE(built.failure);
+        EXPECT_EQ(built.failure->code,
+                  mode == "missing" ? "command_availability_missing"
+                                    : "reload_actor_initialization_failed");
+        continue;
+      }
+      ASSERT_TRUE(built.ready())
+          << (built.failure ? built.failure->message : "");
+      const auto table = built.generation->command_routing_table();
+      ASSERT_TRUE(table->availability_ready());
+      const obcx::core::CommandPolicySubject subject{
+          "qq", "primary", obcx::core::CommandConversationKind::Group,
+          "42", "7",       std::nullopt};
+      EXPECT_EQ(table->eligibility("sdk_ping", subject),
+                mode == "normal" ? obcx::core::CommandEligibility::Eligible
+                                 : obcx::core::CommandEligibility::Unavailable);
+    }
+  }
+}
 
-  ASSERT_TRUE(result.ready())
-      << (result.failure ? result.failure->code + ": " + result.failure->message
-                         : "missing failure");
-  EXPECT_EQ(result.generation->staging_root().parent_path(),
-            fs::temp_directory_path() / "obcx-runtime-generations");
-  EXPECT_NE(result.generation->staging_root().filename().string().find(
-                obcx::core::detail::process_staging_uuid()),
-            std::string::npos);
+TEST_F(RuntimeGenerationTest,
+       ScopeSnapshotsRemainIsolatedAcrossCandidatesAndRetirement) {
+  obcx::core::RuntimeGenerationBuilder builder{
+      obcx::test::bot_platform_catalog()};
+  auto blocking = std::make_shared<obcx::core::BlockingExecutor>(6);
+  const auto config_for = [&](std::string group, std::string mode) {
+    auto document = valid_command_config(OBCX_SCOPED_ACTOR_V2_LIBRARY);
+    document.insert(document.find("label = \"a\""), "scope_mode = \"" + mode +
+                                                        "\"\nscope_group = \"" +
+                                                        group + "\"\n");
+    return snapshot(group + mode + ".toml", document);
+  };
+  const auto config = config_for("42", "normal");
+  auto [database, registry] = services_for(config);
+  auto req = request(obcx::core::RuntimeGenerationBuildPurpose::Startup, 400,
+                     config, database, registry);
+  req.blocking_executor = blocking;
+  auto active = builder.build(std::move(req));
+  ASSERT_TRUE(active.ready());
+  const auto old_table = active.generation->command_routing_table();
+  auto old_admission = active.generation->admit_route();
+  ASSERT_TRUE(old_admission);
+  obcx::core::CommandPolicySubject subject{
+      "qq", "primary", obcx::core::CommandConversationKind::Group,
+      "42", "7",       std::nullopt};
+  for (const std::string mode : {"invalid", "missing", "normal"}) {
+    auto candidate_req =
+        request(obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate, 401,
+                config_for("43", mode), database, registry);
+    candidate_req.blocking_executor = blocking;
+    candidate_req.active_process_owned_fingerprint =
+        active.generation->process_owned_fingerprint();
+    candidate_req.active_process_owned_dependencies =
+        active.generation->process_owned_dependencies();
+    auto candidate = builder.build(std::move(candidate_req));
+    EXPECT_EQ(old_table->eligibility("sdk_ping", subject),
+              obcx::core::CommandEligibility::Eligible);
+    if (mode == "normal") {
+      ASSERT_TRUE(candidate.ready())
+          << (candidate.failure ? candidate.failure->message : "");
+      EXPECT_EQ(candidate.generation->command_routing_table()->eligibility(
+                    "sdk_ping", subject),
+                obcx::core::CommandEligibility::Unavailable);
+      subject.group_id = "43";
+      EXPECT_EQ(candidate.generation->command_routing_table()->eligibility(
+                    "sdk_ping", subject),
+                obcx::core::CommandEligibility::Eligible);
+      EXPECT_EQ(old_table->eligibility("sdk_ping", subject),
+                obcx::core::CommandEligibility::Unavailable);
+      subject.group_id = "42";
+    } else {
+      EXPECT_FALSE(candidate.ready());
+    }
+  }
+  old_admission.reset();
+  active.generation.reset();
+  EXPECT_EQ(old_table->eligibility("sdk_ping", subject),
+            obcx::core::CommandEligibility::Eligible);
 }
 
 TEST_F(RuntimeGenerationTest,

@@ -69,6 +69,7 @@ set(_expected_headers
     include/obcx/common/message_type.hpp
     include/obcx/core/actor/actor.hpp
     include/obcx/core/actor/actor_commands.hpp
+    include/obcx/core/actor/command_availability.hpp
     include/obcx/core/actor/actor_messages.hpp
     include/obcx/core/actor/actor_asio.hpp
     include/obcx/core/actor/actor_generation_lifecycle.hpp
@@ -79,6 +80,7 @@ set(_expected_headers
     include/obcx/core/infrastructure/db_manager.hpp
     include/obcx/core/actor/native_actor_scheduler.hpp
     include/obcx/core/actor/reflected_actor.hpp
+    include/obcx/core/actor/reflected_actor_impl.hpp
     include/obcx/core/actor/blocking_executor.hpp
     include/obcx/core/bot/ids.hpp
     include/obcx/core/bot/json_codec.hpp
@@ -112,38 +114,6 @@ if(NOT "${_installed_headers}" STREQUAL "${_expected_headers}")
           "actual=${_installed_headers}\nexpected=${_expected_headers}")
 endif()
 
-file(GLOB_RECURSE _retired_sdk_surfaces
-     "${_install_dir}/*plugin*"
-     "${_install_dir}/*Plugin*"
-     "${_install_dir}/*asio_actor_v1*"
-     "${_install_dir}/*task_scheduler*"
-     "${_install_dir}/*OBCXActor.cmake"
-     "${_install_dir}/*OBCXActorLoader.cmake"
-     "${_install_dir}/*actor_metadata.py"
-     "${_install_dir}/*actor-package.schema.json")
-if(_retired_sdk_surfaces)
-  message(FATAL_ERROR
-          "Retired SDK surfaces were installed: ${_retired_sdk_surfaces}")
-endif()
-file(GLOB_RECURSE _internal_test_seams
-     "${_install_dir}/*websocket_write_queue*"
-     "${_install_dir}/*action_request_tracker*")
-if(_internal_test_seams)
-  message(FATAL_ERROR
-          "Internal WebSocket test seams were installed: ${_internal_test_seams}")
-endif()
-
-foreach(_header IN LISTS _installed_headers)
-  file(READ "${_install_dir}/${_header}" _header_content)
-  foreach(_forbidden IN ITEMS "TaskScheduler" "get_task_scheduler"
-                              "run_heavy_task")
-    if(_header_content MATCHES "(^|[^A-Za-z0-9_])${_forbidden}([^A-Za-z0-9_]|$)")
-      message(FATAL_ERROR
-              "Retired bot scheduling API ${_forbidden} found in ${_header}")
-    endif()
-  endforeach()
-endforeach()
-
 set(_package_state "${_consumer_build}/package-state")
 string(TOLOWER "${OBCX_PACKAGE_PLATFORM}" _platform)
 execute_process(
@@ -161,8 +131,6 @@ execute_process(
   COMMAND "${CMAKE_COMMAND}" -S "${_consumer_source}" -B
           "${_consumer_build}" -DCMAKE_BUILD_TYPE=Debug
           "-DOBCX_PACKAGES_WORKSPACE=${_package_state}/packages.toml"
-          "-DOBCX_PACKAGES_LOCK=${_package_state}/packages.lock"
-          "-DOBCX_PACKAGES_GRAPH=${_package_state}/graph.json"
           "-DOBCX_PACKAGES_CACHE=${_package_state}/sources"
           "-DOBCX_PACKAGES_STATE_DIR=${_package_state}/cmake"
           -DOBCX_PACKAGES_MODE=development

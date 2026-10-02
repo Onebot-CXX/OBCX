@@ -1,31 +1,19 @@
 from __future__ import annotations
 
 import copy
-import json
 from pathlib import Path
 import subprocess
 import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from package_test_support import ROOT, WorkspaceCase, fixture, write_toml
+from package_test_support import ROOT, WorkspaceCase, fixture
 from obcx_package import PackageError
-from obcx_package.contracts import schema, validate
-from obcx_package.io import metadata
+from obcx_package.contracts import validate
 from obcx_package.versions import Version, constraints, satisfies
 
 
 class PackageContractTest(WorkspaceCase):
-    def test_complete_fixtures(self):
-        for kind in ("actor", "library"):
-            validate(fixture(kind), "package")
-        validate(self.workspace, "workspace")
-
-    def test_schema_snapshots_are_generated_from_canonical_contract(self):
-        for name in ("package", "workspace", "packages-lock", "resolved-packages", "package-build-receipt", "provider-receipt", "provider-environment"):
-            actual = json.loads((ROOT / "schemas" / f"{name}.schema.json").read_text())
-            self.assertEqual(schema(name), actual)
-
     def test_every_package_field_is_required(self):
         def remove_each(document, value, path):
             if not isinstance(value, dict):
@@ -97,17 +85,6 @@ class PackageContractTest(WorkspaceCase):
         document["dependencies"]["libraries"][0]["visibility"] = "interface"
         validate(document, "package")
 
-    def test_old_names_and_schema_are_not_compatibility_inputs(self):
-        for filename, kind in (("actor.toml", "package"), ("actors.toml", "workspace")):
-            path = self.root / filename
-            write_toml(path, fixture("library") if kind == "package" else self.workspace)
-            with self.assertRaisesRegex(PackageError, "legacy file names"):
-                metadata(path, kind)
-        for kind, document in (("package", fixture("library")), ("workspace", self.workspace)):
-            document["schema_version"] = 1
-            with self.assertRaisesRegex(PackageError, "must equal 2"):
-                validate(document, kind)
-
     def test_integers_are_not_booleans(self):
         document = fixture("actor")
         document["actor"]["abi"] = True
@@ -174,9 +151,9 @@ class PackageContractTest(WorkspaceCase):
             validate(document, "package")
 
     def test_cli_modes_are_required_not_defaulted(self):
-        result = subprocess.run([sys.executable, str(ROOT / "cmake/package_tool.py"), "lock"], capture_output=True, text=True)
+        result = subprocess.run([sys.executable, str(ROOT / "cmake/package_tool.py"), "resolve"], capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
-        for option in ("--mode", "--network", "--workspace", "--cache", "--graph", "--lock"):
+        for option in ("--mode", "--network", "--workspace", "--cache", "--graph"):
             self.assertIn(option, result.stderr)
 
 

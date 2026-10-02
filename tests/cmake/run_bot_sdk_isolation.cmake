@@ -34,11 +34,16 @@ execute_process(COMMAND "${CMAKE_COMMAND}"
 if(NOT _result EQUAL 0)
   message(FATAL_ERROR "isolated SDK configuration failed")
 endif()
-execute_process(COMMAND "${CMAKE_COMMAND}" --build "${_root}/build" -j2 RESULT_VARIABLE _result)
+include(ProcessorCount)
+ProcessorCount(_build_workers)
+if(_build_workers LESS 6)
+  set(_build_workers 6)
+endif()
+execute_process(COMMAND "${CMAKE_COMMAND}" --build "${_root}/build" "-j${_build_workers}" RESULT_VARIABLE _result)
 if(NOT _result EQUAL 0)
   message(FATAL_ERROR "isolated SDK compilation failed")
 endif()
-execute_process(COMMAND "${OBCX_CTEST_COMMAND}" --test-dir "${_root}/build" --output-on-failure
+execute_process(COMMAND "${OBCX_CTEST_COMMAND}" --test-dir "${_root}/build" "-j${_build_workers}" --output-on-failure
                 RESULT_VARIABLE _result)
 if(NOT _result EQUAL 0)
   message(FATAL_ERROR "isolated SDK contracts failed")

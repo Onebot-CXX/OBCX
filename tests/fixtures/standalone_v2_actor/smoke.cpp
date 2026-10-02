@@ -1,5 +1,6 @@
 #include "actor_config_fixture.hpp"
 #include "core/actor/actor_manager.hpp"
+#include "core/actor/command_availability.hpp"
 #include "core/actor/native_actor_scheduler.hpp"
 #include "core/bot/messaging.hpp"
 #include "core/bot/typed_operation.hpp"
@@ -116,11 +117,13 @@ int main(int argc, char **argv) {
       return 2;
     }
     auto actor = manager.get_actor_shared("sdk_v2_fixture");
-    if (!actor) {
+    if (!actor || actor->get_name() != "sdk_v2_fixture" ||
+        actor->get_version() != "2.0.0") {
       return 3;
     }
     const auto *contract = manager.get_actor_contract("sdk_v2_fixture");
     if (contract == nullptr || contract->commands.size() != 1 ||
+        !contract->commands.front().actor_scoped ||
         contract->commands.front().name != "sdk_ping" ||
         contract->commands.front().request_type !=
             "obcx::sdk_fixture::events::SdkCommand" ||
@@ -165,6 +168,32 @@ int main(int argc, char **argv) {
         std::make_shared<boost::asio::any_io_executor>(
             actor_io_pool.get_executor()));
 
+    class Publisher final : public obcx::command::AvailabilityPublisher {
+    public:
+      void publish(std::string_view name,
+                   const obcx::command::GroupScopes &value) override {
+        if (name != "sdk_ping") {
+          throw std::invalid_argument("unexpected publication");
+        }
+        scopes = value;
+      }
+      obcx::command::GroupScopes scopes;
+    };
+    auto publisher = std::make_shared<Publisher>();
+    ActorContext preparation{"sdk_v2_fixture", services};
+    preparation.register_service<obcx::command::AvailabilityPublisher>(
+        publisher);
+    if (!manager.prepare_actor("sdk_v2_fixture", preparation).ok() ||
+        !obcx::command::matches(publisher->scopes,
+                                {"telegram", "standalone-telegram",
+                                 obcx::command::ConversationKind::Group, "-42",
+                                 "7", 7}) ||
+        obcx::command::matches(publisher->scopes,
+                               {"telegram", "standalone-telegram",
+                                obcx::command::ConversationKind::Group, "-42",
+                                "7", std::nullopt})) {
+      return 10;
+    }
     NativeActorScheduler scheduler(
         NativeActorSchedulerOptions{.worker_count = 2}, services);
     scheduler.register_actor(std::move(actor));
@@ -192,6 +221,12 @@ int main(int argc, char **argv) {
         result.emitted.front().type != "SdkV2Handled" ||
         result.emitted.front().causation_id != "standalone-sdk" ||
         result.emitted.front().payload.value("label", "") != "generation-a" ||
+        result.emitted.front().payload.value("identity", "") !=
+            "sdk_v2_fixture:2.0.0" ||
+        result.emitted.front().payload.value("helper_identity", "") !=
+            "sdk_v2_fixture:2.0.0" ||
+        result.emitted.front().payload.value("actor_logger", "") !=
+            "sdk_v2_fixture" ||
         !result.emitted.front().payload.value("bot_operation_client", false)) {
       return 7;
     }

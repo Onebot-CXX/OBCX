@@ -3,6 +3,21 @@
 `tests/` 只保存 OBCX 根仓库拥有的可重复自动化测试。QQ、LLOneBot、Docker
 Compose 和包含凭据的本地配置位于 `dev/onebot/`，不属于测试门禁。
 
+## 测试保留标准
+
+根仓库及 `local_actor/`、`local_library/` 的自有测试只保留边界与高风险场景：
+
+- 空值、缺项、非法输入、上下限及边界上的成功输入。
+- 超时、取消、并发竞态、重复调用、销毁与动态库卸载安全。
+- 权限与 installation/conversation/topic 隔离、敏感信息脱敏。
+- 数据完整性、迁移回滚、重复投递、失败后的恢复与原子性。
+- 历史缺陷回归，以及防止修复误伤所需的成功对照。
+- 真正执行的编译拒绝、SDK 隔离及跨动态库生命周期边界。
+
+不保留独立的普通成功流程、纯赋值/往返序列化、夹具自测或重复冒烟。
+边界用例需要的成功准备步骤不应删除；不要把普通用例藏进循环或大测试。
+删除用例时同时移除无人使用的辅助代码、独立夹具及 CMake 注册。
+
 ## 所有权边界
 
 根仓库测试可以覆盖：
@@ -24,8 +39,8 @@ isolation 和 generation cutover 使用根仓库自有源码与通用 fixture �
 
 测试源码按功能归类，不按 C++、Python 或测试执行方式拆分：
 
-- `actor/`：actor API、配置、协程、调度、加载、staging、热重载与反射编译契约。
-- `bot/`：bot SDK、组件、平台协议、操作、消息入口，以及 Python 平台依赖边界检查。
+- `actor/`：actor 配置、协程、调度、加载、staging、热重载与反射编译契约。
+- `bot/`：bot SDK、组件、平台协议、操作与消息入口。
 - `command/`：命令协调与平台适配。
 - `network/`：HTTP、curl、WebSocket、超时与取消。
 - `package/`：包契约、解析、来源、provider、registry、CMake 集成与发布工具。
@@ -49,25 +64,26 @@ isolation 和 generation cutover 使用根仓库自有源码与通用 fixture �
 
 ## 测试层级
 
-先按根 README 准备 v2 workspace、冻结锁和解析图。快速根测试，不执行 compile/package 门禁：
+先按根 README 准备 v2 workspace。验证使用至少 6 个并行 worker；低负载时使用
+全部可用 CPU 核心。快速根测试，不执行 compile/package 门禁：
 
 ```bash
 cmake --preset actor-dev
-cmake --build --preset actor-dev --parallel
-ctest --preset actor-fast
+cmake --build --preset actor-dev --parallel "$(nproc)"
+ctest --preset actor-fast --parallel "$(nproc)"
 ```
 
 完整根测试，包括反射编译、Python package、CLI 与 installed-SDK：
 
 ```bash
-ctest --preset actor-full
+ctest --preset actor-full --parallel "$(nproc)"
 ```
 
 标签仍可用于进一步缩小范围：
 
 ```bash
-ctest --preset actor-dev -L actor-runtime
-ctest --preset actor-dev -L network
+ctest --preset actor-dev --parallel "$(nproc)" -L actor-runtime
+ctest --preset actor-dev --parallel "$(nproc)" -L network
 ```
 
 ## 确定性 WebSocket 测试
@@ -75,8 +91,7 @@ ctest --preset actor-dev -L network
 WebSocket FIFO、bounded backpressure、write failure、shutdown、OneBot echo
 response/timeout race 使用手动 write gate 与 deadline 驱动，并默认进入 fast/full
 门禁。测试不得用固定 `sleep_for` 或真实响应时长证明正确性；`wait_for` 只可作为
-发现 deadlock 的有界 watchdog。Beast loopback smoke 使用 listening、connected、message
-completion signal，不使用 startup sleep。
+发现 deadlock 的有界 watchdog。
 
 Python 测试也可以直接运行，例如：
 

@@ -24,6 +24,7 @@ struct ActorCommandRegistration {
   std::string description;
   std::string request_type;
   std::optional<ActorCommandMatcher> matcher;
+  bool actor_scoped = false;
 };
 
 struct ActorInputContract {

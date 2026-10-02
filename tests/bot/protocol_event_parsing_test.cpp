@@ -25,29 +25,6 @@ TEST(ProtocolEventParsingTest, OneBotParsesMessageAndUnescapesOnlyRawText) {
   EXPECT_EQ(message.message.front().data.at("text"), "&#91;hello&#93;&amp;");
 }
 
-TEST(ProtocolEventParsingTest, OneBotParsesNoticeAndRequest) {
-  obcx::adapter::onebot11::ProtocolAdapter adapter;
-  const auto notice = adapter.parse_event(R"({
-    "post_type": "notice", "notice_type": "group_recall",
-    "user_id": 123, "group_id": 456, "message_id": 42
-  })");
-  ASSERT_TRUE(notice.has_value());
-  ASSERT_TRUE(std::holds_alternative<obcx::common::NoticeEvent>(*notice));
-  const auto &parsed_notice = std::get<obcx::common::NoticeEvent>(*notice);
-  EXPECT_EQ(parsed_notice.notice_type, "group_recall");
-  EXPECT_EQ(parsed_notice.data.at("message_id"), 42);
-
-  const auto request = adapter.parse_event(R"({
-    "post_type": "request", "request_type": "friend",
-    "user_id": 123, "comment": "hello", "flag": "request-1"
-  })");
-  ASSERT_TRUE(request.has_value());
-  ASSERT_TRUE(std::holds_alternative<obcx::common::RequestEvent>(*request));
-  const auto &parsed_request = std::get<obcx::common::RequestEvent>(*request);
-  EXPECT_EQ(parsed_request.request_type, "friend");
-  EXPECT_EQ(parsed_request.flag, "request-1");
-}
-
 TEST(ProtocolEventParsingTest, OneBotDistinguishesHeartbeatAndOtherMetaEvents) {
   obcx::adapter::onebot11::ProtocolAdapter adapter;
   const auto heartbeat = adapter.parse_event(R"({

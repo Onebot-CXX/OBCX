@@ -13,10 +13,9 @@
 - [x] 3.1 Add cross-executor retirement, queued shutdown ownership, pending-transfer close, polling, and installation drain regression coverage.
 - [x] 3.2 Run focused and sanitizer tests with at least six workers, build the application, document lifecycle contracts, and validate the OpenSpec change.
 
-## 4. Bridge caller migration follow-up
+## 4. Actor caller migration moved
 
-- [x] 4.1 Bind bridge image probes, downloads, and GIF detection to their running coroutine executor instead of an undriven temporary context; audit other actor HTTP constructors.
-- [x] 4.2 Cover probe completion/timeouts and media cancellation/drain, rerun bridge and core transport regressions with sanitizers, and rebuild the runtime bridge module.
+Original checked tasks 4.1–4.2 and their verification record moved unchanged to the Bridge archive with the same original date; see [migration.md](migration.md).
 
 ## Verification results
 
@@ -26,11 +25,7 @@
 - Sanitizer CTest used an isolated inventory of rebuilt targets because unrelated stale binaries in `build-asan` fail test discovery against the newer core ABI.
 - Public `HttpClient` single-pointer object layout is preserved; request ownership lives behind its pimpl.
 
-### Bridge follow-up verification
+### Caller follow-up evidence
 
-- Before migration, all five existing image URL validator tests timed out on local HTTP fixtures, including download cancellation.
-- After migration, 108 bridge tests and 61 core HTTP/curl/installation tests passed with 20 workers. Added probe success/timeout drain tests and a 30-second CTest limit for this suite.
-- 68 ASan/UBSan tests passed with leak detection; all seven image validator tests also passed ten repetitions each. Sanitizer inventory includes only rebuilt targets to avoid unrelated stale binary discovery.
-- Rebuilt `build/actors/bridge.so` and `build/src/app/obcx`; production bridge configuration validation passed. Formatted touched C++ files with the root style; both repository diff checks and strict OpenSpec validation passed.
-- Other actor HTTP constructor sites were audited: ExHentai supplies its owned executor and chat LLM explicitly drives its supplied context. No additional undriven temporary HTTP contexts were found in that audit.
+The relocated Bridge `tasks.md` retains the complete original failed-before-migration, 108/61 regular, 68 sanitizer, repetition, module-build and constructor-audit results verbatim. These are historical results, not tests rerun by the documentation migration.
 

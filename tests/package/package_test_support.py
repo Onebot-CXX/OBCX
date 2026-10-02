@@ -50,7 +50,6 @@ class WorkspaceCase(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.manifest = self.root / "packages.toml"
-        self.lock = self.root / "packages.lock"
         self.cache = self.root / "cache"
         (self.root / "sdk-input.txt").write_text("offline SDK fixture, not a deployment")
         receipt = encoded({"schema_version": 2, "kind": "workspace-sdk",
@@ -99,5 +98,5 @@ class WorkspaceCase(unittest.TestCase):
 
     def cli(self, command: str) -> list[str]:
         return [sys.executable, str(ROOT / "cmake/package_tool.py"), command,
-                "--workspace", str(self.manifest), "--lock", str(self.lock), "--cache", str(self.cache),
+                "--workspace", str(self.manifest), "--cache", str(self.cache),
                 "--mode", "development", "--network", "deny"]

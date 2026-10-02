@@ -85,10 +85,6 @@ jobs:
         run: |
           printf 'schema_version = 2\nsources = []\nproviders = []\n[workspace]\nroots = []\nplatform = "%s"\nprofile = "tests"\n' \
             '${{ matrix.platform }}' > packages.toml
-          nix develop .#ci --command python3 cmake/package_tool.py lock \
-            --workspace packages.toml --lock packages.lock \
-            --graph build/package-state/resolved-packages.json --cache build/package-state/sources \
-            --mode development --network deny
 
       - name: Configure
         run: |
@@ -97,8 +93,6 @@ jobs:
             -DOBCX_BUILD_TESTS=ON \
             -DOBCX_BUILD_BENCHMARKS=OFF \
             -DOBCX_PACKAGES_WORKSPACE="$PWD/packages.toml" \
-            -DOBCX_PACKAGES_LOCK="$PWD/packages.lock" \
-            -DOBCX_PACKAGES_GRAPH="$PWD/build/package-state/resolved-packages.json" \
             -DOBCX_PACKAGES_CACHE="$PWD/build/package-state/sources" \
             -DOBCX_PACKAGES_STATE_DIR="$PWD/build/package-state/cmake" \
             -DOBCX_PACKAGES_MODE=development

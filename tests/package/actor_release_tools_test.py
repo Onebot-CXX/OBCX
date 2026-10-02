@@ -5,7 +5,6 @@ import importlib.util
 import io
 import os
 from pathlib import Path
-import subprocess
 import sys
 import tarfile
 import tempfile
@@ -89,29 +88,6 @@ class ActorReleaseToolsTest(unittest.TestCase):
             self.assertIn("release packaging failed:", stderr.getvalue())
             self.assertIn("YYYY-MM-DD", stderr.getvalue())
             self.assertNotIn("Traceback", stderr.getvalue())
-
-    def test_retired_release_entrypoints_refuse_before_mutation(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            output = root / "output"
-            output.mkdir()
-            sentinel = output / "keep.txt"
-            sentinel.write_text("keep\n", encoding="utf-8")
-            commands = [
-                [sys.executable, str(ROOT / "scripts/package_actor_release.py"),
-                 "--deployment", str(root / "deployment"), "--output-dir", str(output),
-                 "--recorded-date", "2026-07-30", "--clean"],
-                [sys.executable, str(ROOT / "scripts/verify_actor_release.py"),
-                 "--work-dir", str(output), "--jobs", "20"],
-                ["sh", str(ROOT / "scripts/build-podman-image.sh"), "--tag", "unused"],
-            ]
-            for command in commands:
-                with self.subTest(command=command[1]):
-                    result = subprocess.run(command, cwd=root, text=True, capture_output=True)
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertIn("unavailable after package-v2 cutover", result.stderr)
-                    self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep\n")
-                    self.assertEqual(list(root.iterdir()), [output])
 
     def test_release_archives_are_byte_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

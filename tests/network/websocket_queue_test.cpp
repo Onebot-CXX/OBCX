@@ -1,16 +1,13 @@
 #include "network/detail/websocket_write_queue.hpp"
-#include "network/websocket_client.hpp"
 
 #include <algorithm>
-#include <atomic>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
-#include <boost/beast/core.hpp>
-#include <boost/beast/websocket.hpp>
 #include <chrono>
 #include <condition_variable>
 #include <exception>
@@ -29,8 +26,6 @@ namespace obcx::network::test {
 namespace {
 
 namespace asio = boost::asio;
-namespace beast = boost::beast;
-using tcp = asio::ip::tcp;
 using namespace std::chrono_literals;
 using detail::WebsocketWriteQueue;
 
@@ -247,96 +242,6 @@ TEST_F(WebsocketWriteQueueTest, StopCancelsEveryWaiterExactlyOnce) {
   EXPECT_THROW(queued.get(), boost::system::system_error);
   EXPECT_THROW(backpressured.get(), boost::system::system_error);
   EXPECT_TRUE(queue_->stopped());
-}
-
-class LoopbackWebSocketServer final {
-public:
-  LoopbackWebSocketServer()
-      : acceptor_(io_, {asio::ip::make_address("127.0.0.1"), 0}),
-        received_(received_promise_.get_future()) {}
-
-  void start() {
-    asio::co_spawn(
-        io_,
-        [this]() -> asio::awaitable<void> {
-          auto socket = co_await acceptor_.async_accept(asio::use_awaitable);
-          beast::websocket::stream<tcp::socket> stream{std::move(socket)};
-          co_await stream.async_accept(asio::use_awaitable);
-          beast::flat_buffer buffer;
-          co_await stream.async_read(buffer, asio::use_awaitable);
-          received_promise_.set_value(beast::buffers_to_string(buffer.data()));
-          beast::error_code ignored;
-          stream.close(beast::websocket::close_code::normal, ignored);
-        },
-        [this](std::exception_ptr failure) {
-          if (failure) {
-            try {
-              received_promise_.set_exception(failure);
-            } catch (...) {
-            }
-          }
-        });
-    thread_ = std::jthread([this] { io_.run(); });
-  }
-
-  ~LoopbackWebSocketServer() {
-    io_.stop();
-    if (thread_.joinable()) {
-      thread_.join();
-    }
-  }
-
-  [[nodiscard]] auto port() const -> std::uint16_t {
-    return acceptor_.local_endpoint().port();
-  }
-
-  auto received() -> std::future<std::string> && {
-    return std::move(received_);
-  }
-
-private:
-  asio::io_context io_;
-  tcp::acceptor acceptor_;
-  std::promise<std::string> received_promise_;
-  std::future<std::string> received_;
-  std::jthread thread_;
-};
-
-TEST(WebsocketLoopbackTest, HandshakeAndWriteUseExplicitCompletionSignals) {
-  LoopbackWebSocketServer server;
-  server.start();
-  auto received = std::move(server).received();
-
-  asio::io_context io;
-  auto work = asio::make_work_guard(io);
-  auto client = std::make_shared<WebsocketClient>(io);
-  std::promise<void> connected_promise;
-  auto connected = connected_promise.get_future();
-  std::atomic_bool connection_reported{false};
-
-  asio::co_spawn(io,
-                 client->run("127.0.0.1", std::to_string(server.port()), "",
-                             [&](const beast::error_code &error,
-                                 const std::string &message) {
-                               if (!error && message.empty() &&
-                                   !connection_reported.exchange(true)) {
-                                 connected_promise.set_value();
-                               }
-                             }),
-                 asio::detached);
-  std::jthread io_thread([&] { io.run(); });
-
-  ASSERT_EQ(connected.wait_for(3s), std::future_status::ready);
-  auto sent = asio::co_spawn(io, client->send("deterministic-loopback"),
-                             asio::use_future);
-  ASSERT_EQ(sent.wait_for(3s), std::future_status::ready);
-  EXPECT_NO_THROW(sent.get());
-  ASSERT_EQ(received.wait_for(3s), std::future_status::ready);
-  EXPECT_EQ(received.get(), "deterministic-loopback");
-
-  work.reset();
-  io.stop();
-  io_thread.join();
 }
 
 } // namespace

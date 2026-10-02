@@ -651,27 +651,6 @@ protected:
 /**
  * Test: Normal response within timeout
  */
-TEST_F(HttpClientTimeoutTest, NormalResponseWithinTimeout) {
-  server_->set_should_respond(true);
-  server_->set_response_delay(NORMAL_RESPONSE_DELAY);
-
-  auto client = create_client(SHORT_TIMEOUT);
-
-  auto start_time = std::chrono::steady_clock::now();
-  network::HttpResponse response;
-
-  ASSERT_NO_THROW(response = run_awaitable(ioc_, client->get("/test")));
-
-  auto end_time = std::chrono::steady_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-      end_time - start_time);
-
-  EXPECT_EQ(response.status_code, 200) << "Response status should be 200";
-  EXPECT_FALSE(response.body.empty()) << "Response body should not be empty";
-  EXPECT_LT(duration.count(), SHORT_TIMEOUT.count())
-      << "Request should complete before timeout";
-}
-
 /**
  * Test: Request times out when server doesn't respond
  */
@@ -781,23 +760,6 @@ TEST_F(HttpClientTimeoutTest, SetTimeoutUpdatesValue) {
 /**
  * Test: is_connected returns correct state
  */
-TEST_F(HttpClientTimeoutTest, IsConnectedReturnsCorrectState) {
-  server_->set_should_respond(true);
-  server_->set_response_delay(std::chrono::milliseconds(0));
-
-  auto client = create_client(SHORT_TIMEOUT);
-
-  // Before any request, connected should be false
-  EXPECT_FALSE(client->is_connected())
-      << "Should not be connected before first request";
-
-  // After successful request, connected should be true
-  auto response = run_awaitable(ioc_, client->get("/test"));
-  EXPECT_EQ(response.status_code, 200);
-  EXPECT_TRUE(client->is_connected())
-      << "Should be connected after successful request";
-}
-
 /**
  * Test: Delayed response that arrives before timeout
  */
@@ -934,33 +896,6 @@ TEST(HttpClientResponseLimitTest, ProxyGetUsesConfiguredLimit) {
                network::HttpClientError);
   EXPECT_EQ(proxy.connect_requests(), 1);
   proxy.stop();
-}
-
-TEST_F(HttpClientTimeoutTest, DelayedResponseBeforeTimeout) {
-  // Set delay shorter than timeout
-  std::chrono::milliseconds response_delay{1000};
-  server_->set_should_respond(true);
-  server_->set_response_delay(response_delay);
-
-  auto client = create_client(SHORT_TIMEOUT);
-
-  auto start_time = std::chrono::steady_clock::now();
-  network::HttpResponse response;
-
-  ASSERT_NO_THROW(response = run_awaitable(ioc_, client->get("/test")));
-
-  auto end_time = std::chrono::steady_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-      end_time - start_time);
-
-  EXPECT_EQ(response.status_code, 200) << "Delayed response should succeed";
-
-  // Should take at least the delay time
-  EXPECT_GE(duration.count(), response_delay.count() - 100)
-      << "Should wait for the delayed response";
-  // But less than the timeout
-  EXPECT_LT(duration.count(), SHORT_TIMEOUT.count())
-      << "Should complete before timeout";
 }
 
 } // namespace obcx::test

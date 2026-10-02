@@ -551,11 +551,11 @@ auto TelegramConnectionManager::poll_updates() -> asio::awaitable<void> {
 void TelegramConnectionManager::process_updates(std::string_view updates_json) {
   try {
     auto json_data = json::parse(updates_json);
-    OBCX_DEBUG("Received updates: {}", updates_json);
+    OBCX_TRACE("Received updates: {}", updates_json);
 
     if (json_data.contains("result") && json_data["result"].is_array()) {
       auto result_array = json_data["result"];
-      OBCX_DEBUG("Processing {} updates", result_array.size());
+      OBCX_TRACE("Processing {} updates", result_array.size());
 
       // Advance offset past the last seen update_id; the next getUpdates call
       // will then ack everything we just processed.
@@ -568,15 +568,15 @@ void TelegramConnectionManager::process_updates(std::string_view updates_json) {
 
       for (const auto &update_json : result_array) {
         std::string single_update = update_json.dump();
-        OBCX_DEBUG("Processing single update: {}", single_update);
+        OBCX_TRACE("Processing single update: {}", single_update);
         auto event_opt = adapter_.parse_event(single_update);
         if (event_opt && event_callback_) {
-          OBCX_DEBUG("Dispatching event");
+          OBCX_TRACE("Dispatching event");
           event_callback_(event_opt.value());
         } else if (!event_opt) {
-          OBCX_DEBUG("Failed to parse event from update");
+          OBCX_WARN("Failed to parse event from update");
         } else {
-          OBCX_DEBUG("Event callback not set");
+          OBCX_TRACE("Event callback not set");
         }
       }
     }

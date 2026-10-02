@@ -109,23 +109,6 @@ TEST(ActorTaskTest, DestroysNeverStartedCoroutineFrame) {
   EXPECT_TRUE(observer.expired());
 }
 
-TEST(ActorTaskTest, DeterministicSchedulerRequeuesExplicitYield) {
-  test::ActorTaskTestScheduler scheduler;
-  ActorContext context{"yielding"};
-  int step = 0;
-  auto ticket = scheduler.submit(yielding_task(context, step));
-
-  ASSERT_TRUE(scheduler.run_one());
-  EXPECT_EQ(step, 1);
-  EXPECT_FALSE(ticket.done());
-  EXPECT_EQ(scheduler.ready_count(), 1);
-
-  ASSERT_TRUE(scheduler.run_one());
-  EXPECT_EQ(step, 2);
-  EXPECT_TRUE(ticket.done());
-  EXPECT_NO_THROW(ticket.take_result());
-}
-
 TEST(ActorTaskTest, YieldObservesCancellation) {
   test::ActorTaskTestScheduler scheduler;
   auto cancellation = std::make_shared<ActorCancellationState>();

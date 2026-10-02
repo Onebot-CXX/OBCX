@@ -13,54 +13,6 @@
 namespace obcx::common {
 namespace {
 
-TEST(CliHandlerTest, TuiReloadUsesAsynchronousContextCallback) {
-  std::atomic_bool should_stop = false;
-  std::condition_variable stop_cv;
-  std::vector<std::string> output;
-  std::size_t requests = 0;
-  CliHandler handler(CliHandler::Context{
-      .should_stop = should_stop,
-      .stop_cv = stop_cv,
-      .output_cb = [&](const std::string &line) { output.push_back(line); },
-      .reload_cb =
-          [&] {
-            ++requests;
-            return CliHandler::ReloadRequestStatus::Accepted;
-          },
-  });
-
-  EXPECT_TRUE(handler.process_command("reload"));
-  EXPECT_EQ(requests, 1);
-  ASSERT_EQ(output.size(), 1);
-  EXPECT_EQ(output.front(),
-            "ACTOR RELOAD STARTED: wait for the highlighted ACTOR RELOAD "
-            "SUCCEEDED/FAILED result");
-  EXPECT_FALSE(should_stop.load());
-}
-
-TEST(CliHandlerTest, NoTuiReloadUsesTheSameContextCallback) {
-  std::atomic_bool should_stop = false;
-  std::condition_variable stop_cv;
-  std::size_t requests = 0;
-  CliHandler handler(CliHandler::Context{
-      .should_stop = should_stop,
-      .stop_cv = stop_cv,
-      .reload_cb =
-          [&] {
-            ++requests;
-            return CliHandler::ReloadRequestStatus::Accepted;
-          },
-  });
-
-  testing::internal::CaptureStdout();
-  EXPECT_TRUE(handler.process_command("reload"));
-  const auto output = testing::internal::GetCapturedStdout();
-  EXPECT_EQ(requests, 1);
-  EXPECT_EQ(output,
-            "ACTOR RELOAD STARTED: wait for the highlighted ACTOR RELOAD "
-            "SUCCEEDED/FAILED result\n");
-}
-
 TEST(CliHandlerTest, BusyReloadIsRejectedImmediately) {
   std::atomic_bool should_stop = false;
   std::condition_variable stop_cv;

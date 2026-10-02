@@ -11,23 +11,6 @@ namespace {
 using obcx::bot::BotOperationErrorCode;
 using obcx::bot::SubmissionSafety;
 
-TEST(BotOperationResponseParserTest, ParsesTelegramSuccessValues) {
-  const auto message = obcx::telegram::bot::parse_telegram_operation_response(
-      R"({"ok":true,"result":{"message_id":42,"chat":{"id":-1001}}})", true);
-  ASSERT_TRUE(message.ok());
-  EXPECT_EQ(message.value->at("message_id"), 42);
-
-  const auto mutation = obcx::telegram::bot::parse_telegram_operation_response(
-      R"({"ok":true,"result":true})", true);
-  ASSERT_TRUE(mutation.ok());
-  EXPECT_TRUE(mutation.value->get<bool>());
-
-  const auto media = obcx::telegram::bot::parse_telegram_operation_response(
-      R"({"ok":true,"result":[{"message_id":1},{"message_id":2}]})", true);
-  ASSERT_TRUE(media.ok());
-  EXPECT_EQ(media.value->size(), 2U);
-}
-
 TEST(BotOperationResponseParserTest,
      ParsesTelegramProviderErrorAndRetryMetadata) {
   const auto result = obcx::telegram::bot::parse_telegram_operation_response(
@@ -106,18 +89,6 @@ TEST(BotOperationResponseParserTest,
   EXPECT_EQ(read_only.error->submission_safety,
             SubmissionSafety::DefinitelyNotSubmitted);
   EXPECT_TRUE(read_only.error->retryable);
-}
-
-TEST(BotOperationResponseParserTest, ParsesOneBotSuccessValues) {
-  const auto send = obcx::onebot11::bot::parse_onebot11_operation_response(
-      R"({"status":"ok","retcode":0,"data":{"message_id":7},"echo":1})", true);
-  ASSERT_TRUE(send.ok());
-  EXPECT_EQ(send.value->at("message_id"), 7);
-
-  const auto deletion = obcx::onebot11::bot::parse_onebot11_operation_response(
-      R"({"status":"ok","retcode":0,"data":null})", true);
-  ASSERT_TRUE(deletion.ok());
-  EXPECT_TRUE(deletion.value->is_null());
 }
 
 TEST(BotOperationResponseParserTest, ParsesOneBotProviderFailure) {

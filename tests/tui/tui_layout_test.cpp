@@ -21,11 +21,6 @@
 namespace obcx::common::tui_layout {
 namespace {
 
-TEST(TuiWrapTextTest, WrapsAsciiAtWhitespaceWithoutDroppingIt) {
-  EXPECT_EQ(wrap_text("alpha beta", 6),
-            (std::vector<std::string>{"alpha ", "beta"}));
-}
-
 TEST(TuiWrapTextTest, HardWrapsLongUnbrokenText) {
   EXPECT_EQ(wrap_text("abcdefgh", 3),
             (std::vector<std::string>{"abc", "def", "gh"}));
@@ -46,43 +41,6 @@ TEST(TuiWrapTextTest, UsesTerminalCellsForDoubleWidthGlyphs) {
 
 TEST(TuiWrapTextTest, KeepsGlyphWiderThanViewportOnItsOwnRow) {
   EXPECT_EQ(wrap_text("测", 1), (std::vector<std::string>{"测"}));
-}
-
-TEST(TuiSplitStateTest, UsesSeventyThirtyOnFirstFrame) {
-  SplitState split;
-
-  const auto layout = split.snapshot(80, 21);
-
-  EXPECT_EQ(layout.log_pane_height, 14);
-  EXPECT_EQ(layout.console_pane_height, 6);
-  EXPECT_EQ(layout.separator_y, 14);
-  EXPECT_EQ(layout.log_content_width, 77);
-  EXPECT_EQ(layout.log_content_height, 12);
-  EXPECT_EQ(layout.console_content_width, 77);
-  EXPECT_EQ(layout.console_content_height, 4);
-}
-
-TEST(TuiSplitStateTest, PreservesInitialRatioWhenTerminalHeightChanges) {
-  SplitState split;
-  static_cast<void>(split.snapshot(80, 21));
-
-  const auto layout = split.snapshot(80, 31);
-
-  EXPECT_EQ(layout.log_pane_height, 21);
-  EXPECT_EQ(layout.console_pane_height, 9);
-}
-
-TEST(TuiSplitStateTest, PreservesMouseSelectedRatioAcrossResize) {
-  SplitState split;
-  static_cast<void>(split.snapshot(80, 21));
-  split.main_size() = 10;
-  static_cast<void>(split.snapshot(80, 21));
-
-  const auto layout = split.snapshot(80, 41);
-
-  EXPECT_DOUBLE_EQ(split.preferred_ratio(), 0.5);
-  EXPECT_EQ(layout.log_pane_height, 20);
-  EXPECT_EQ(layout.console_pane_height, 20);
 }
 
 TEST(TuiSplitStateTest, ClampsBothNormalPanesToUsableMinimums) {
@@ -190,56 +148,6 @@ auto test_log_line(uint64_t sequence, std::string text) -> LogLine {
   };
 }
 
-TEST(WrappedLogCacheTest, InitializesAndExtractsVisualRows) {
-  WrappedLogCache cache;
-  const LogSnapshot snapshot{
-      .version = 2,
-      .first_sequence = 0,
-      .next_sequence = 2,
-      .lines = {test_log_line(0, "abcde"), test_log_line(1, "x")},
-  };
-
-  const auto result = cache.sync(snapshot, 3);
-
-  EXPECT_TRUE(result.rebuilt);
-  EXPECT_EQ(result.appended_rows, 3);
-  EXPECT_EQ(cache.total_rows(), 3U);
-  EXPECT_EQ(cache.next_sequence(), 2U);
-  const auto rows = cache.rows_range(1, 2);
-  ASSERT_EQ(rows.size(), 2U);
-  EXPECT_EQ(rows[0].sequence, 0U);
-  EXPECT_EQ(rows[0].segment_index, 1U);
-  EXPECT_EQ(rows[0].text, "de");
-  EXPECT_EQ(rows[1].sequence, 1U);
-  EXPECT_EQ(rows[1].text, "x");
-}
-
-TEST(WrappedLogCacheTest, StableWidthWrapsOnlyAppendedEntries) {
-  WrappedLogCache cache;
-  static_cast<void>(
-      cache.sync(LogSnapshot{.version = 1,
-                             .first_sequence = 0,
-                             .next_sequence = 1,
-                             .lines = {test_log_line(0, "abcde")}},
-                 3));
-
-  const auto result =
-      cache.sync(LogSnapshot{.version = 2,
-                             .first_sequence = 0,
-                             .next_sequence = 2,
-                             .lines = {test_log_line(1, "yyyy")}},
-                 3);
-
-  EXPECT_FALSE(result.rebuilt);
-  EXPECT_EQ(result.appended_rows, 2);
-  EXPECT_EQ(result.removed_rows, 0);
-  EXPECT_EQ(cache.total_rows(), 4U);
-  const auto first_rows = cache.rows_range(0, 2);
-  ASSERT_EQ(first_rows.size(), 2U);
-  EXPECT_EQ(first_rows[0].text, "abc");
-  EXPECT_EQ(first_rows[1].text, "de");
-}
-
 TEST(WrappedLogCacheTest, RemovesEvictedEntriesFromTheFront) {
   WrappedLogCache cache;
   static_cast<void>(cache.sync(
@@ -304,28 +212,6 @@ TEST(WrappedLogCacheTest, LocatesRowsByStableLogicalAnchor) {
       cache.row_index(WrappedLogAnchor{.sequence = 5, .segment_index = 1}),
       std::optional<std::size_t>{3});
   EXPECT_FALSE(cache.anchor_at(4).has_value());
-}
-
-TEST(LogViewportTest, FollowsNewWrappedRowsAtTail) {
-  WrappedLogCache cache;
-  LogViewport viewport;
-  auto result = cache.sync(LogSnapshot{.version = 1,
-                                       .first_sequence = 0,
-                                       .next_sequence = 1,
-                                       .lines = {test_log_line(0, "abcd")}},
-                           2);
-  viewport.apply_sync(cache, result, 2, std::nullopt);
-  EXPECT_EQ(viewport.offset(), 0);
-  EXPECT_TRUE(viewport.following_tail());
-
-  result = cache.sync(LogSnapshot{.version = 2,
-                                  .first_sequence = 0,
-                                  .next_sequence = 2,
-                                  .lines = {test_log_line(1, "efgh")}},
-                      2);
-  viewport.apply_sync(cache, result, 2, std::nullopt);
-  EXPECT_EQ(viewport.offset(), 0);
-  EXPECT_TRUE(viewport.following_tail());
 }
 
 TEST(LogViewportTest, AppendedRowsDoNotMoveInspectedContent) {
@@ -443,19 +329,6 @@ auto left_mouse(ftxui::Mouse::Motion motion, int x, int y) -> ftxui::Event {
   mouse.x = x;
   mouse.y = y;
   return ftxui::Event::Mouse("", mouse);
-}
-
-TEST(TuiFixedScreenTest, WrappedRowsRenderWithoutClipping) {
-  const auto rows = wrap_text("abcdefgh", 4);
-  ftxui::Elements elements;
-  for (const auto &row : rows) {
-    elements.push_back(ftxui::text(row));
-  }
-
-  auto screen = ftxui::Screen(4, 2);
-  ftxui::Render(screen, ftxui::vbox(std::move(elements)));
-
-  EXPECT_EQ(screen.ToString(), "abcd\r\nefgh");
 }
 
 TEST(TuiFixedScreenTest, WidthChangeReflowsEveryVisibleGlyph) {

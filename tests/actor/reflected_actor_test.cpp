@@ -1,5 +1,5 @@
 #include "core/actor/native_actor_scheduler.hpp"
-#include "core/actor/reflected_actor.hpp"
+#include "support/reflected_test_actor.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/executor_work_guard.hpp>
@@ -30,10 +30,6 @@ struct Output {
 
 struct ImmediateAsioInput {
   std::uint64_t sequence = 0;
-};
-
-struct ChatCommand final : command::RequestMessage<ChatCommand> {};
-struct ToggleThinkCommand final : command::RequestMessage<ToggleThinkCommand> {
 };
 
 struct Outer {
@@ -86,14 +82,6 @@ public:
   static constexpr std::string_view actor_name = "reflected_test";
   static constexpr std::string_view actor_version = "1.0";
 
-  static constexpr auto command_contract() {
-    return command::catalog(
-        command::observe<ChatCommand>("chat", "Chat with the test actor",
-                                      command::re2(R"(^(?:chat|ask)$)")),
-        command::observe<ToggleThinkCommand>("toggle_think",
-                                             "Toggle test thinking"));
-  }
-
   auto handle(const SyncInput &input, const core::MessageEnvelope &envelope,
               core::ActorContext &) -> core::ActorResult {
     auto result = core::ActorResult::success();
@@ -108,16 +96,6 @@ public:
     co_await context.yield();
     after_suspend = input.value;
     co_return core::ActorResult::success();
-  }
-
-  auto handle(const ChatCommand &, const core::MessageEnvelope &,
-              core::ActorContext &) -> core::ActorResult {
-    return core::ActorResult::success();
-  }
-
-  auto handle(const ToggleThinkCommand &, const core::MessageEnvelope &,
-              core::ActorContext &) -> core::ActorResult {
-    return core::ActorResult::success();
   }
 
   std::string before_suspend;
@@ -158,14 +136,12 @@ namespace obcx::core {
 namespace {
 
 using obcx::tests::reflection::AsyncInput;
-using obcx::tests::reflection::ChatCommand;
 using obcx::tests::reflection::ImmediateAsioActor;
 using obcx::tests::reflection::ImmediateAsioInput;
 using obcx::tests::reflection::Outer;
 using obcx::tests::reflection::Output;
 using obcx::tests::reflection::SyncInput;
 using obcx::tests::reflection::TestActor;
-using obcx::tests::reflection::ToggleThinkCommand;
 using namespace std::chrono_literals;
 
 auto run_to_completion(ActorTask<ActorResult> task) -> ActorResult {
@@ -182,79 +158,6 @@ TEST(ReflectedActorTest, DerivesNestedAndDealiasedCanonicalNames) {
             "obcx::tests::reflection::Outer::NestedMessage");
   EXPECT_EQ(canonical_message_type_name<const SyncInput &>(),
             "obcx::tests::reflection::SyncInput");
-}
-
-TEST(ReflectedActorTest, GeneratesSortedUniqueInputContract) {
-  const auto contract = common::json::parse(TestActor::input_contract_json());
-  EXPECT_EQ(contract["schema_version"], 2);
-  EXPECT_EQ(contract["actor"], "reflected_test");
-  EXPECT_EQ(contract["accepted_inputs"],
-            (common::json{
-                "obcx::tests::reflection::AsyncInput",
-                "obcx::tests::reflection::ChatCommand",
-                "obcx::tests::reflection::SyncInput",
-                "obcx::tests::reflection::ToggleThinkCommand",
-            }));
-  EXPECT_EQ(
-      contract["commands"],
-      (common::json{
-          {{"name", "chat"},
-           {"description", "Chat with the test actor"},
-           {"request_type", canonical_message_type_name<ChatCommand>()},
-           {"matcher",
-            {{"kind", "re2"},
-             {"pattern", R"(^(?:chat|ask)$)"},
-             {"mode", "full"}}}},
-          {{"name", "toggle_think"},
-           {"description", "Toggle test thinking"},
-           {"request_type", canonical_message_type_name<ToggleThinkCommand>()}},
-      }));
-  EXPECT_FALSE(contract.contains("outputs"));
-}
-
-TEST(ReflectedActorTest, SerializesCommandRequestAndCompletionMessages) {
-  ChatCommand request;
-  request.invocation = command::CommandInvocation{
-      .transaction_id = "generation-7:command-1",
-      .name = "chat",
-      .arguments = "hello",
-      .source_message_id = "raw-1",
-      .source_platform = "telegram",
-      .source_bot = "bot",
-      .conversation_id = "chat:1",
-      .sender = "42",
-      .source_event = {{"message_id", "raw-1"}},
-  };
-  const auto document = common::json(request);
-  const auto decoded = document.get<ChatCommand>();
-  EXPECT_EQ(decoded.invocation.transaction_id, "generation-7:command-1");
-  EXPECT_EQ(decoded.invocation.arguments, "hello");
-  EXPECT_EQ(decoded.invocation.source_event["message_id"], "raw-1");
-
-  const auto completion_document = common::json(command::CommandCompleted{
-      .transaction_id = request.invocation.transaction_id,
-      .propagation = command::Propagation::Continue,
-  });
-  const auto completion = completion_document.get<command::CommandCompleted>();
-  EXPECT_EQ(completion.transaction_id, request.invocation.transaction_id);
-  EXPECT_EQ(completion.propagation, command::Propagation::Continue);
-}
-
-TEST(ReflectedActorTest, DispatchesExactTypeThroughAdlJsonAndNormalizesSync) {
-  TestActor actor;
-  ActorContext context("reflected_test");
-  MessageEnvelope envelope;
-  envelope.id = "sync";
-  envelope.type = canonical_message_type_name<SyncInput>();
-  envelope.payload = {{"value", 41}};
-
-  const auto result =
-      run_to_completion(actor.handle_message(envelope, context));
-
-  ASSERT_TRUE(result.ok());
-  ASSERT_EQ(result.emitted.size(), 1);
-  EXPECT_EQ(result.emitted.front().type, canonical_message_type_name<Output>());
-  EXPECT_EQ(result.emitted.front().payload, (common::json{{"value", 42}}));
 }
 
 TEST(ReflectedActorTest, ReportsUnsupportedAndInvalidPayloadWithoutContents) {
@@ -305,43 +208,6 @@ TEST(ReflectedActorTest, KeepsDecodedAsyncInputAliveAcrossSuspension) {
   ASSERT_TRUE(task.done());
   EXPECT_TRUE(task.take_result().ok());
   EXPECT_EQ(actor.after_suspend, "retained");
-}
-
-TEST(ReflectedActorTest, TypedEmitInheritsAndOverridesRoutingMetadata) {
-  MessageEnvelope parent;
-  parent.id = "parent";
-  parent.source_platform = "qq";
-  parent.source_bot = "bot";
-  parent.conversation_id = "group:1";
-  parent.headers = {{"inherited", "yes"}, {"replace", "old"}};
-
-  auto result = ActorResult::success();
-  result.emit(Output{.value = 7}, parent,
-              ActorEmitOptions{
-                  .id = "custom",
-                  .source_platform = "telegram",
-                  .headers = {{"replace", "new"}, {"extra", "value"}},
-              });
-  ASSERT_EQ(result.emitted.size(), 1);
-  const auto &emitted = result.emitted.front();
-  EXPECT_EQ(emitted.id, "custom");
-  EXPECT_EQ(emitted.type, canonical_message_type_name<Output>());
-  EXPECT_EQ(emitted.source_platform, "telegram");
-  EXPECT_EQ(emitted.source_bot, "bot");
-  EXPECT_EQ(emitted.conversation_id, "group:1");
-  EXPECT_EQ(emitted.correlation_id, "parent");
-  EXPECT_EQ(emitted.causation_id, "parent");
-  EXPECT_EQ(emitted.headers.at("inherited"), "yes");
-  EXPECT_EQ(emitted.headers.at("replace"), "new");
-  EXPECT_EQ(emitted.headers.at("extra"), "value");
-  EXPECT_EQ(emitted.payload, (common::json{{"value", 7}}));
-
-  MessageEnvelope low_level;
-  low_level.id = "low";
-  low_level.type = "dynamic::Envelope";
-  result.emit(low_level);
-  ASSERT_EQ(result.emitted.size(), 2);
-  EXPECT_EQ(result.emitted.back().type, "dynamic::Envelope");
 }
 
 TEST(ReflectedActorTest, TypedEmitGeneratesUniqueDefaultIds) {

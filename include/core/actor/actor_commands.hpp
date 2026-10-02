@@ -148,7 +148,16 @@ struct Observation {
   bool request_message = false;
   MatcherKind matcher_kind = MatcherKind::None;
   std::string_view matcher_pattern;
+  bool actor_scoped = false;
 };
+
+// Capability declaration, not an operator configuration default. Unmarked
+// observations retain the existing ACL-only protocol.
+[[nodiscard]] consteval auto actor_scoped(Observation observation)
+    -> Observation {
+  observation.actor_scoped = true;
+  return observation;
+}
 
 [[nodiscard]] constexpr auto valid_name(const std::string_view name) -> bool {
   if (name.empty() || name.size() > 32) {

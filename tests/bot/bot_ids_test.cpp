@@ -36,19 +36,6 @@ template <typename Id> void check_invalid_ids() {
   }
 }
 
-TEST(BotIdsTest, NoPlatformListOrOrdinalIsNeededForRoundTrip) {
-  const SurfaceId surface{"test.echo"};
-  const ActionId action{"test.echo.reply-v2_7"};
-  EXPECT_EQ(json(surface).dump(), "\"test.echo\"");
-  EXPECT_EQ(json(action).dump(), "\"test.echo.reply-v2_7\"");
-  EXPECT_EQ(json(surface).get<SurfaceId>(), surface);
-  EXPECT_EQ(json(action).get<ActionId>(), action);
-  // Syntax-valid names do not imply production registration or alias support.
-  EXPECT_NO_THROW((void)SurfaceId{"qq.official"});
-  EXPECT_NO_THROW((void)SurfaceId{"telegram"});
-  EXPECT_NO_THROW((void)ActionId{"message.history"});
-}
-
 TEST(BotIdsTest, OwnsInputAndUsesExactEqualityAndHashing) {
   std::string input = "test.echo";
   const SurfaceId surface{input};

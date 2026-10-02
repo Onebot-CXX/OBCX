@@ -15,10 +15,6 @@ Asynchronous direct/proxy HTTP clients SHALL bind curl drivers, sockets, and tim
 - **WHEN** a synchronous direct/proxy compatibility method is called with the original client executor idle
 - **THEN** it completes through an isolated local context, preserves request settings, and retires that local transport before returning
 
-#### Scenario: Bridge media uses a request-local HTTP client
-- **WHEN** bridge image probing, downloading, or GIF detection constructs a request-local asynchronous HTTP client
-- **THEN** it supplies the running coroutine executor, rather than an undriven temporary context, so requests, deadlines, and cancellation can complete and executor shutdown can drain cleanup
-
 ### Requirement: HTTP close owns cleanup until cancellation retires
 Closing an HTTP client SHALL synchronously reject new admission and initiate idempotent serialized cleanup that retains its own ownership until processed. Pending transfers SHALL complete exactly once, with conservative submission classification, and curl handles SHALL be removed and freed without teardown callbacks rearming timers or sockets. Installation shutdown MUST allow cancellation callbacks and HTTP polling to drain before destroying components or their context. Polling MUST NOT rearm after disconnect.
 

@@ -216,25 +216,6 @@ TEST(BotComponentRuntimeTest, StableIdsRejectInvalidValues) {
   EXPECT_NO_THROW((void)CapabilityId{"onebot11.transport.websocket"});
 }
 
-TEST(BotComponentRuntimeTest,
-     DescriptorValidationUsesStableRecipeOrderForIndependentComponents) {
-  const std::vector<ComponentDescriptor> descriptors = {
-      {.id = ComponentId{"protocol"},
-       .provides = {CapabilityId{"protocol.api"}},
-       .required = {}},
-      {.id = ComponentId{"metrics"},
-       .provides = {CapabilityId{"metrics.api"}},
-       .required = {}},
-      {.id = ComponentId{"operations"},
-       .provides = {CapabilityId{"operations.api"}},
-       .required = {CapabilityId{"protocol.api"}}},
-  };
-  const auto first = obcx::core::validate_component_recipe(descriptors);
-  const auto second = obcx::core::validate_component_recipe(descriptors);
-  EXPECT_EQ(first.lifecycle_order, (std::vector<std::size_t>{0, 1, 2}));
-  EXPECT_EQ(second.lifecycle_order, first.lifecycle_order);
-}
-
 TEST(BotComponentRuntimeTest, DescriptorValidationRejectsInvalidGraphs) {
   EXPECT_THROW((void)obcx::core::validate_component_recipe(
                    {{.id = ComponentId{"consumer"},

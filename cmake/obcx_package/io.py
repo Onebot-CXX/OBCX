@@ -59,6 +59,11 @@ def exclusive(path: Path):
 
 
 def atomic_write(path: Path, value: bytes) -> None:
+    try:
+        if path.read_bytes() == value:
+            return
+    except FileNotFoundError:
+        pass
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
@@ -80,6 +85,6 @@ def read_json(path: Path, kind: str) -> dict:
     try:
         value = json.loads(path.read_bytes())
     except (OSError, ValueError):
-        raise PackageError(f"{path}: missing or invalid {kind}; explicit preparation/relock required") from None
+        raise PackageError(f"{path}: missing or invalid {kind}") from None
     validate(value, kind)
     return value

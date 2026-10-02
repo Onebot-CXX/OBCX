@@ -123,11 +123,6 @@
       "pattern": "^[0-9a-f]{64}$",
       "type": "string"
     },
-    "lock_sha256": {
-      "minLength": 1,
-      "pattern": "^[0-9a-f]{64}$",
-      "type": "string"
-    },
     "package_id": {
       "minLength": 1,
       "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
@@ -501,7 +496,6 @@
     "schema_version",
     "tool_version",
     "package_id",
-    "lock_sha256",
     "graph_sha256",
     "platform",
     "configuration",

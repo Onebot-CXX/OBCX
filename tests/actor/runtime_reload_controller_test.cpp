@@ -4,6 +4,7 @@
 #include "core/actor/native_actor_scheduler.hpp"
 #include "core/bot/bot_operation_dispatcher.hpp"
 #include "core/bot/typed_operation.hpp"
+#include "core/command/command_coordinator.hpp"
 #include "core/infrastructure/db_manager.hpp"
 #include "core/runtime/actor_runtime_reload_controller.hpp"
 #include "core/runtime/orchestrator.hpp"
@@ -72,40 +73,6 @@ auto observed_private_dependency(const obcx::core::OrchestratorResult &result)
     }
   }
   return -1;
-}
-
-TEST(RuntimeReloadOperatorSummaryTest, HighlightsSuccessBeforeDetails) {
-  const obcx::core::RuntimeReloadResult result{
-      .status = obcx::core::RuntimeReloadStatus::Succeeded,
-      .attempt_id = 3,
-      .previous_generation_id = 3,
-      .active_generation_id = 4,
-      .preparation_ms = 3118,
-      .drain_ms = 646,
-      .total_ms = 3769,
-  };
-
-  EXPECT_EQ(obcx::core::runtime_reload_operator_summary(result),
-            "========== ACTOR RELOAD SUCCEEDED | generation 3 -> 4 | "
-            "attempt 3 | total 3769 ms ==========");
-}
-
-TEST(RuntimeReloadOperatorSummaryTest, MakesRestartActionExplicit) {
-  const obcx::core::RuntimeReloadResult result{
-      .status = obcx::core::RuntimeReloadStatus::Failed,
-      .attempt_id = 4,
-      .previous_generation_id = 3,
-      .active_generation_id = 3,
-      .failure =
-          obcx::core::RuntimeReloadFailure{
-              .code = "reload_dependency_identity_conflict",
-              .message = "process-owned dependency identity changed"},
-  };
-
-  const auto summary = obcx::core::runtime_reload_operator_summary(result);
-  EXPECT_TRUE(summary.starts_with("========== ACTOR RELOAD FAILED"));
-  EXPECT_NE(summary.find("generation 3 remains active"), std::string::npos);
-  EXPECT_NE(summary.find("FULL PROCESS RESTART REQUIRED"), std::string::npos);
 }
 
 class RuntimeReloadControllerTest : public ::testing::Test {
@@ -262,6 +229,50 @@ protected:
                 operation_client_);
     }
     return std::move(built.generation);
+  }
+
+  auto scoped_generation(
+      const std::string &generation, const std::string &group, std::uint64_t id,
+      const std::shared_ptr<obcx::core::RuntimeGeneration> &active)
+      -> std::shared_ptr<obcx::core::RuntimeGeneration> {
+    auto document = config_document(generation, "await", true);
+    document.insert(document.find("generation = "),
+                    "scope_group = \"" + group + "\"\n");
+    const std::string old_commands = "commands = [\"reload_probe\"]";
+    document.replace(document.find(old_commands), old_commands.size(),
+                     "commands = [\"scoped_probe\"]");
+    const auto path = root_ / (generation + "-scoped.toml");
+    write_file(path, document);
+    const auto parsed = builder_.parse_config(path.string());
+    EXPECT_TRUE(parsed);
+    if (!parsed)
+      return {};
+    if (!database_)
+      database_ = obcx::core::DbManager::shared_manager(
+          parsed.snapshot->get_db_instance_configs());
+    obcx::core::RuntimeGenerationBuildRequest request{
+        .purpose =
+            active ? obcx::core::RuntimeGenerationBuildPurpose::ReloadCandidate
+                   : obcx::core::RuntimeGenerationBuildPurpose::Startup,
+        .generation_id = id,
+        .snapshot = parsed.snapshot,
+        .actor_search_directories =
+            {fs::path{OBCX_RELOAD_LIFECYCLE_ACTOR}.parent_path()},
+        .staging_root = root_ / "staging",
+        .configured_io_sources = 1,
+        .db_manager = database_,
+        .bot_operation_client = operation_client_};
+    if (active) {
+      request.active_process_owned_fingerprint =
+          active->process_owned_fingerprint();
+      request.active_process_owned_dependencies =
+          active->process_owned_dependencies();
+      request.blocking_executor = active->blocking_executor();
+    }
+    auto result = builder_.build(std::move(request));
+    EXPECT_TRUE(result.ready())
+        << (result.failure ? result.failure->message : "");
+    return result.generation;
   }
 
   auto dependency_config_document(const std::string &rebuilt_actor,
@@ -606,6 +617,51 @@ TEST_F(RuntimeReloadControllerTest,
 
   write_file(gate);
   EXPECT_EQ(observed_generation(admitted.get()), "old");
+}
+
+TEST_F(RuntimeReloadControllerTest,
+       ScopedCommandsDrainAndSwitchEligibilityOnlyAtCutover) {
+  auto old = scoped_generation("old", "42", 1, nullptr);
+  ASSERT_TRUE(old);
+  auto rejected = scoped_generation("rejected", "43", 2, old);
+  ASSERT_TRUE(rejected);
+  auto next = scoped_generation("new", "43", 3, old);
+  ASSERT_TRUE(next);
+  controller_ = std::make_shared<obcx::core::ActorRuntimeReloadController>(old);
+  const auto gate = root_ / "scoped-release";
+  auto message = command_message("scoped-old", gate);
+  message.raw["raw_message"] = "/scoped_probe consume";
+  auto running = process(message);
+  ASSERT_TRUE(wait_until(
+      [&] { return old->scheduler()->metrics().suspended_mailboxes == 1; }));
+  const auto failed = reload(std::move(rejected), 40ms).get();
+  ASSERT_TRUE(failed.failure);
+  EXPECT_EQ(failed.failure->code, "reload_drain_timeout");
+  EXPECT_EQ(controller_->active_generation()->id(), 1U);
+  auto cutover = reload(std::move(next), 2s);
+  ASSERT_TRUE(wait_until([&] { return !controller_->gate_open(); }));
+  write_file(gate);
+  EXPECT_EQ(observed_generation(running.get()), "old");
+  ASSERT_TRUE(cutover.get().succeeded());
+  message.payload["gate_path"] = "";
+  const auto denied = process(message).get();
+  ASSERT_EQ(denied.failures.size(), 1U);
+  EXPECT_EQ(denied.failures.front().failure.code, "command_unavailable");
+  const auto table = controller_->active_generation()->command_routing_table();
+  const auto *bot = table->find_bot({"qq", "primary"});
+  ASSERT_NE(bot, nullptr);
+  obcx::core::CommandPolicySubject subject{
+      "qq", "primary", obcx::core::CommandConversationKind::Group,
+      "42", "7",       std::nullopt};
+  EXPECT_EQ(table->render_help(*bot, subject).pages.front(),
+            "/help - List commands available to you\n");
+  subject.group_id = "43";
+  EXPECT_NE(
+      table->render_help(*bot, subject).pages.front().find("/scoped_probe"),
+      std::string::npos);
+  message.conversation_id = "group:43";
+  message.payload["group_id"] = "43";
+  EXPECT_EQ(observed_generation(process(message).get()), "new");
 }
 
 TEST_F(RuntimeReloadControllerTest,

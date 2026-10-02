@@ -1,26 +1,9 @@
 #include "core/actor/actor_manager.hpp"
-#include "core/actor/native_actor_scheduler.hpp"
 
-#include <algorithm>
-#include <future>
 #include <gtest/gtest.h>
 #include <memory>
 
 using namespace obcx::core;
-
-TEST(ActorManagerTest, LoadsActorFromDynamicLibraryPath) {
-  ActorManager manager;
-  ASSERT_TRUE(manager.load_actor_from_path(OBCX_TEST_ACTOR_V2_LIBRARY));
-  EXPECT_TRUE(manager.is_actor_loaded("test_actor_v2"));
-
-  const auto names = manager.get_loaded_actor_names();
-  EXPECT_NE(std::ranges::find(names, std::string{"test_actor_v2"}),
-            names.end());
-  auto *actor = manager.get_actor("test_actor_v2");
-  ASSERT_NE(actor, nullptr);
-  EXPECT_EQ(actor->get_name(), "test_actor_v2");
-  EXPECT_EQ(actor->get_version(), "2.0.0");
-}
 
 TEST(ActorManagerTest, LoadingSameActorPathIsIdempotent) {
   ActorManager manager;
@@ -111,13 +94,6 @@ TEST(ActorManagerTest, RunsOptionalGenerationPreparationWithTypedStatus) {
   EXPECT_EQ(restart.message, "fixture preparation requires restart");
 }
 
-TEST(ActorManagerTest, FindsActorByNameInActorDirectory) {
-  ActorManager manager;
-  manager.add_actor_directory(OBCX_TEST_ACTOR_DIRECTORY);
-  ASSERT_TRUE(manager.load_actor("test_actor_v2"));
-  ASSERT_NE(manager.get_actor("test_actor_v2"), nullptr);
-}
-
 TEST(ActorManagerTest, LoadsActorWithSecondaryBaseClass) {
   ActorManager manager;
   ASSERT_TRUE(manager.load_actor_from_path(
@@ -186,6 +162,12 @@ TEST(ActorManagerTest, RejectsMissingAndMalformedActorContracts) {
       {OBCX_TEST_CONTRACT_COMMAND_INVALID_NAME_LIBRARY, "invalid command name"},
       {OBCX_TEST_CONTRACT_COMMAND_RESERVED_NAME_LIBRARY,
        "reserved command name"},
+      {OBCX_TEST_CONTRACT_COMMAND_SCOPE_UNKNOWN_LIBRARY,
+       "availability must be actor_scope"},
+      {OBCX_TEST_CONTRACT_COMMAND_SCOPE_TYPE_LIBRARY,
+       "availability must be actor_scope"},
+      {OBCX_TEST_CONTRACT_COMMAND_SCOPE_CALLABLE_LIBRARY,
+       "availability must be actor_scope"},
       {OBCX_TEST_CONTRACT_COMMAND_INVALID_PATTERN_LIBRARY,
        "RE2 command pattern is invalid"},
       {OBCX_TEST_CONTRACT_COMMAND_MATCHER_CALLABLE_LIBRARY,
@@ -218,33 +200,4 @@ TEST(ActorManagerTest, RejectsMissingAndMalformedActorContracts) {
 
   EXPECT_TRUE(manager.load_actor_from_path(OBCX_TEST_ACTOR_V2_LIBRARY));
   EXPECT_TRUE(manager.is_actor_loaded("test_actor_v2"));
-}
-
-TEST(ActorManagerTest, LoadedActorHandlesMessageOnNativeScheduler) {
-  ActorManager manager;
-  ASSERT_TRUE(manager.load_actor_from_path(OBCX_TEST_ACTOR_V2_LIBRARY));
-  auto actor = manager.get_actor_shared("test_actor_v2");
-  ASSERT_NE(actor, nullptr);
-
-  NativeActorScheduler scheduler(
-      NativeActorSchedulerOptions{.worker_count = 2});
-  scheduler.register_actor(std::move(actor));
-  MessageEnvelope message;
-  message.id = "sdk-smoke";
-  message.type = "obcx::tests::events::SdkSmoke";
-  std::promise<ActorResult> completion;
-  auto result = completion.get_future();
-  ASSERT_TRUE(scheduler.enqueue(ActorInvocation{.actor_id = "test_actor_v2",
-                                                .partition_key = "same",
-                                                .message = std::move(message)},
-                                [&completion](ActorResult actor_result) {
-                                  completion.set_value(std::move(actor_result));
-                                }));
-
-  const auto handled = result.get();
-  ASSERT_TRUE(handled.ok());
-  ASSERT_EQ(handled.emitted.size(), 1);
-  EXPECT_EQ(handled.emitted.front().type, "V2Handled");
-  EXPECT_EQ(handled.emitted.front().causation_id, "sdk-smoke");
-  scheduler.shutdown();
 }

@@ -1,8 +1,12 @@
+## Package-lock task supersession
+
+The user has authorized `remove-package-lock`. Source-lock schema/CLI/frozen checks and manual prepared-graph prerequisites mentioned below are superseded, not outstanding features to restore. Their replacement implementation and acceptance are tracked in that change. Existing checkboxes retain the original progress record; unrelated pending work is unchanged. Reconcile superseded specification clauses with the new change before any archive/sync.
+
 ## 当前执行范围（用户最新决定）
 
 项目仍在开发阶段，先完成 **core 工作区内的声明、解析、实际构建检查和 mapper 复用**。暂不推进独立 SDK 二进制/头文件发布、外部 SDK 消费闭环或协调发版，也不以这些问题阻塞当前实施。
 
-- 当前顺序：1–6 的本地开发部分 → 9 的 mapper/两个消费者 → 10 的本地回归与文档。
+- 当前 core 顺序：1–6 的本地开发部分 → 10 的本地回归与文档。原第 9 节的 library/actor 任务已迁至所属库，见 [migration.md](migration.md)。
 - **后置**：5.8；第 7 节的新发布/分发闭环；2.3/4.4/8 中面向发行物的工具 pin、installed-sdk 扩展验收和远程发行流程；3.7 的正式发布来源策略。
 - 本地 cutover 必需的 schema、validator、元数据、fixtures 和脚本引用迁移仍须协调完成，不能以“发布后置”为由新增 v1 兼容 reader 或留下活跃的相互矛盾规则。既有 SDK 功能与 stager 安全回归保留，不为缩小范围删除或静默跳过测试。
 - 1.4 先冻结开发构建需要的契约；发布回执/独立目录布局稍后再定，不要求当前工作区 clean commit 或另建仓库。development 模式仍须显式传入，不新增配置默认值。
@@ -73,14 +77,9 @@
 - [ ] 8.2 更新维护中的所有 entries、generator/workflow/docs 和 core 中的 conformance 快照，检测 validator 版本漂移，不持续输出旧 actors-only 索引。
 - [ ] 8.3 在获准的 core 区域同步 actor-package-ecosystem delta，明确新能力主规格各自归属；不在子仓库误生成 core 主规格或自动归档跨仓变更。
 
-## 9. Mapper 作为首个真实普通库
+## 9. Library/actor tasks moved
 
-- [x] 9.1 在独立 Git 仓库 `local_library/obcx-path-mapping/` 建立 static-library + PIC 的 path-mapping 包、导出 target、安装接口和显式测试依赖；core 不跟踪库源码或 gitlink，无 actor factory、SDK/logger 依赖和全局可变状态。
-- [x] 9.2 实现显式目标/root 映射和结构化错误，修复组件边界/前缀碰撞/越界后返回原值，禁止在宿主机解析 peer filesystem。
-- [x] 9.3 实现正确 file URI 编码并区分 lexical map 与安全 host 文件访问；测试绝对根、空配置、..、symlink、空格/#/%/Unicode 和两个 installation 隔离，不作 TOCTOU 虚假保证。
-- [x] 9.4 Bridge 改为 TOML 声明并链接 mapper，保留媒体行为、配置显式性和文件 owner 责任；不跨目录引用 ExHentai，也不从 mapper 删除文件。
-- [x] 9.5 ExHentai 声明并消费 mapper，验证缺来源/不匹配版本会在构建前失败；移除复制实现或“手工 add_subdirectory 即可绕过”路径。配置解析已实际调用公共库，生成后链接审计通过；共享文件发送仍属后续画廊实现，不能据此声称已发送文件。
-- [ ] 9.6 回到 qq-gallery-forward-batches，先更新 file URI、实际挂载、文件 lease/uncertain 保留、清理与容量规格及任务；保持单合集图文顺序，不替用户选择隐式路径/磁盘预算。
+原任务 9.1–9.6、原编号与完成状态已保留在 `local_library/obcx-path-mapping/openspec/changes/declarative-package-dependencies/tasks.md`。其中 9.6 仍未完成，不能因迁出 core 而计作完成。通用依赖检查及实际消费者构建验收仍由 core 的第 5、10 节负责。
 
 ## 10. 总体验收与交付
 

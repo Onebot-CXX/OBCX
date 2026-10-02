@@ -70,7 +70,7 @@ class Audit:
     def allowed(self, name: str) -> dict[str, str]:
         record = self.targets[name]
         result = {}
-        for edge in self.graph["lock"]["edges"]:
+        for edge in self.graph["edges"]:
             if edge["from"] != record["owner"] or edge["kind"] == "actors":
                 continue
             if edge["scope"] == "test" and record["role"] != "test":
@@ -180,7 +180,7 @@ class Audit:
                 continue
             if record["owner"] not in self.nodes or record["role"] not in {"artifact", "implementation", "test"}:
                 raise PackageError(f"{name}: unregistered target owner/role")
-            if record["role"] == "test" and self.graph["lock"]["profile"] != "tests":
+            if record["role"] == "test" and self.graph["profile"] != "tests":
                 raise PackageError(f"{name}: test target in production profile")
             if record["TYPE"] not in {"INTERFACE_LIBRARY", "UTILITY"}:
                 if record["POSITION_INDEPENDENT_CODE"].upper() in FALSE:
@@ -218,7 +218,7 @@ class Audit:
                 child = self.canonical(child)
                 logical = any(edge["from"] == record["owner"] and edge["kind"] == "actors" and
                               self.nodes[edge["to"]]["metadata"]["artifact"]["target"] == child
-                              for edge in self.graph["lock"]["edges"])
+                              for edge in self.graph["edges"])
                 if not logical:
                     self.edge(name, child)
             for field in ("LINK_LIBRARIES", "INTERFACE_LINK_LIBRARIES"):
@@ -327,6 +327,17 @@ class Audit:
             if target is None or target["type"] != record["TYPE"]:
                 raise PackageError(f"{name}: generated target missing/type drift in File API")
             roots, exported_sources = self.roots(name)
+            # File API artifact paths are build-root relative, but Make's link
+            # command fragments run from the target's binary directory. Ninja
+            # runs link commands from the top-level build directory.
+            link_directory = (build / target["paths"]["build"]
+                              if index["cmake"]["generator"]["name"] == "Unix Makefiles"
+                              else build)
+
+            def link_path(value):
+                path = Path(value)
+                return (path if path.is_absolute() else link_directory / path).resolve()
+
             closure = self.closure(name)
             for dependency in target.get("dependencies", []):
                 child = names[dependency["id"]]
@@ -362,11 +373,11 @@ class Audit:
                     if cmake_padding and token.startswith("-Wl,-rpath,"):
                         value = value.rstrip(":")
                     paths = value.split(":")
-                    if not paths or any(not path or Path(path).resolve() not in allowed_directories for path in paths):
+                    if not paths or any(not path or link_path(path) not in allowed_directories for path in paths):
                         raise PackageError(f"{name}: generated runtime search path outside declared closure")
                     return True
                 if token.startswith("-L"):
-                    if Path(token[2:]).resolve() not in allowed_directories:
+                    if link_path(token[2:]) not in allowed_directories:
                         raise PackageError(f"{name}: generated library search path outside declared closure")
                     return True
                 return False
@@ -377,7 +388,7 @@ class Audit:
                         padding = "install" in target and "backtrace" not in fragment and not record["BUILD_RPATH"]
                         if search_flag(token, padding) or (token.startswith("-l") and token[2:] in implicit_libraries):
                             continue
-                        if artifact_path(token) not in allowed_artifacts and token not in provider_literals:
+                        if link_path(token) not in allowed_artifacts and token not in provider_literals:
                             raise PackageError(f"{name}: generated link item outside declared provider/artifact closure: {token}")
                 elif fragment["role"] == "libraryPath":
                     if not all(search_flag(token) for token in shlex.split(value)):

@@ -3,7 +3,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-import subprocess
 import sys
 
 parser = argparse.ArgumentParser()
@@ -56,6 +55,3 @@ def toml(value):
 
 manifest = args.state / "packages.toml"
 manifest.write_text("\n".join(key + " = " + toml(value) for key, value in workspace.items()) + "\n")
-subprocess.run([sys.executable, str(args.tool), "lock", "--workspace", str(manifest),
-    "--lock", str(args.state / "packages.lock"), "--graph", str(args.state / "graph.json"),
-    "--cache", str(args.state / "sources"), "--mode", "development", "--network", "deny"], check=True)

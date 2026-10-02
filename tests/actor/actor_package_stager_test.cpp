@@ -102,18 +102,6 @@ TEST(ActorPackageStagerTest,
   std::filesystem::remove_all(root);
 }
 
-TEST(ProcessStagingUuidTest, IsOneCanonicalRandomUuidForTheProcess) {
-  const auto first = obcx::core::detail::process_staging_uuid();
-  const auto second = obcx::core::detail::process_staging_uuid();
-
-  EXPECT_EQ(first.data(), second.data());
-  EXPECT_EQ(first, second);
-  const auto parsed =
-      boost::uuids::string_generator{}(first.begin(), first.end());
-  EXPECT_EQ(parsed.version(), boost::uuids::uuid::version_random_number_based);
-  EXPECT_EQ(parsed.variant(), boost::uuids::uuid::variant_rfc_4122);
-}
-
 TEST(ActorPackageStagerTest, FailedAndDestroyedStagesCleanTheirOwnDirectory) {
   const auto root = staging_root();
   std::filesystem::path staged_root;

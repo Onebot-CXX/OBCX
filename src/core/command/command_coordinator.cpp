@@ -2,7 +2,7 @@
 
 #include "common/logger.hpp"
 #include "core/actor/actor_messages.hpp"
-#include "core/actor/reflected_actor.hpp"
+#include "core/actor/reflected_actor_impl.hpp"
 #include "core/runtime/process_configuration.hpp"
 
 #include <algorithm>
@@ -662,13 +662,34 @@ auto CommandRoutingTable::permits(const std::string_view canonical_command,
   return evaluate(policy.groups, subject.group_id) && user_allowed;
 }
 
+auto CommandRoutingTable::eligibility(const std::string_view canonical_command,
+                                      const CommandPolicySubject &subject) const
+    -> CommandEligibility {
+  const auto *bot = find_bot({subject.platform, subject.bot});
+  const auto *route = find_route(
+      {subject.platform, subject.bot, std::string{canonical_command}});
+  if (bot == nullptr || (canonical_command != command::help_name && !route)) {
+    return CommandEligibility::NoRoute;
+  }
+  if (!permits(canonical_command, subject)) {
+    return CommandEligibility::AccessDenied;
+  }
+  if (route && route->actor_scoped &&
+      (!route->availability ||
+       !command::matches(*route->availability, subject))) {
+    return CommandEligibility::Unavailable;
+  }
+  return CommandEligibility::Eligible;
+}
+
 auto CommandRoutingTable::render_help(const ActiveCommandBot &bot,
                                       const CommandPolicySubject &subject) const
     -> CommandHelpRenderResult {
   std::vector<CommandCatalogEntry> permitted;
   permitted.reserve(bot.catalog.size());
   for (const auto &entry : bot.catalog) {
-    if (permits(entry.name, subject)) {
+    if (bot.key.platform == subject.platform && bot.key.bot == subject.bot &&
+        eligibility(entry.name, subject) == CommandEligibility::Eligible) {
       permitted.push_back(entry);
     }
   }
@@ -957,12 +978,16 @@ auto build_command_routing_table(
             .actor = configured_route.actor,
             .request_type = registration->request_type,
             .description = registration->description,
+            .actor_scoped = registration->actor_scoped,
             .partition_expression = actor->second.partition,
             .db_instance = actor->second.db,
             .db_namespace = actor->second.db_namespace,
             .fallback = configured_route.fallback,
             .timeout = command_timeout(runtime, configured_route),
         };
+        if (route.actor_scoped) {
+          table->availability_ready_ = false;
+        }
         if (!table->routes_.emplace(key, std::move(route)).second) {
           return command_failure(
               "command_route_conflict",
@@ -1060,6 +1085,30 @@ auto build_command_routing_table(
   return {.table = std::move(table)};
 }
 
+auto finalize_command_routing_table(const CommandRoutingTable &source,
+                                    const CommandAvailabilitySnapshot &scopes)
+    -> CommandRoutingBuildResult {
+  auto table = std::make_shared<CommandRoutingTable>(source);
+  for (auto &[key, route] : table->routes_) {
+    if (!route.actor_scoped) {
+      continue;
+    }
+    const auto found = scopes.find({route.actor, key.command});
+    if (found == scopes.end()) {
+      return command_failure(
+          "command_availability_missing",
+          "active command requires an actor scope publication");
+    }
+    if (!std::ranges::all_of(found->second, command::valid_scope)) {
+      return command_failure("command_availability_invalid",
+                             "actor command scope is invalid");
+    }
+    route.availability = found->second;
+  }
+  table->availability_ready_ = true;
+  return {.table = std::move(table)};
+}
+
 CommandCoordinator::CommandCoordinator(
     const std::uint64_t generation_id,
     std::shared_ptr<const CommandRoutingTable> routing_table,
@@ -1069,7 +1118,8 @@ CommandCoordinator::CommandCoordinator(
     : generation_id_(generation_id), routing_table_(std::move(routing_table)),
       scheduler_(std::move(scheduler)), orchestrator_(std::move(orchestrator)),
       operation_gateway_(std::move(operation_gateway)) {
-  if (!routing_table_ || !scheduler_ || !orchestrator_ || !operation_gateway_) {
+  if (!routing_table_ || !routing_table_->availability_ready() || !scheduler_ ||
+      !orchestrator_ || !operation_gateway_) {
     throw std::invalid_argument(
         "CommandCoordinator requires routing, "
         "scheduler, orchestrator, and operation gateway");
@@ -1177,7 +1227,8 @@ auto CommandCoordinator::process(MessageEnvelope message,
   }
   const auto subject = command_policy_subject(message, *bot);
   if (detected->name == command::help_name) {
-    if (!subject || !routing_table_->permits(command::help_name, *subject)) {
+    if (!subject || routing_table_->eligibility(command::help_name, *subject) !=
+                        CommandEligibility::Eligible) {
       add_core_command_failure(result, command::help_name,
                                "command_access_denied",
                                "command access was denied");
@@ -1252,10 +1303,16 @@ auto CommandCoordinator::process(MessageEnvelope message,
     merge_result(result, std::move(continued));
     co_return result;
   }
-  if (!subject || !routing_table_->permits(route->key.command, *subject)) {
-    add_core_command_failure(result, route->key.command,
-                             "command_access_denied",
-                             "command access was denied");
+  const auto eligibility =
+      subject ? routing_table_->eligibility(route->key.command, *subject)
+              : CommandEligibility::AccessDenied;
+  if (eligibility != CommandEligibility::Eligible) {
+    const auto unavailable = eligibility == CommandEligibility::Unavailable;
+    add_core_command_failure(
+        result, route->key.command,
+        unavailable ? "command_unavailable" : "command_access_denied",
+        unavailable ? "command is unavailable in this conversation"
+                    : "command access was denied");
     co_return result;
   }
 

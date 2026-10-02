@@ -1,7 +1,7 @@
 #include "core/runtime/message_event_ingress.hpp"
 
 #include "core/actor/actor_messages.hpp"
-#include "core/actor/reflected_actor.hpp"
+#include "core/actor/reflected_actor_impl.hpp"
 
 #include <atomic>
 #include <chrono>

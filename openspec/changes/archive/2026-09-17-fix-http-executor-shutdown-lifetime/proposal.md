@@ -8,7 +8,7 @@ HTTP clients currently discard their constructor executor and cache curl drivers
 - Close request admission and retain shutdown ownership until curl handles are cleaned up; make repeated shutdown harmless.
 - Cancel HTTP polling transfers during connection-manager shutdown, prevent retry timers after shutdown, and drain installation work before context destruction.
 - Keep synchronous compatibility operations isolated on a temporary client/context with complete cleanup.
-- Migrate bridge request-local HTTP clients to their running coroutine executor and cover image probe/download completion and cancellation.
+- The actor caller migration is preserved in the Bridge-owned archive; see [migration.md](migration.md).
 - Add executor-retirement, in-flight cancellation, stopped-context, and lifecycle regressions.
 
 ## Capabilities

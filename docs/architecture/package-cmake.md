@@ -8,35 +8,38 @@ workflow migration remains unfinished; there is no second supported build format
 
 ## Entry point
 
-After defining the workspace SDK targets, call the loader with every argument:
+After defining the workspace SDK targets, call the loader with every argument.
+The loader resolves current declarations offline during configure; no separate
+package-tool invocation or package lock is required:
 
 ```cmake
 include(OBCXPackages)
 obcx_load_packages(
   WORKSPACE "${workspace_manifest}"
-  LOCK "${absolute_lock_path}"
-  GRAPH "${absolute_prepared_graph_path}"
   CACHE "${absolute_source_cache_path}"
   MODE development
   STATE_DIR "${CMAKE_BINARY_DIR}/package-state")
 ```
 
 The root and standalone bootstrap use `obcx_load_configured_workspace()`, which
-requires all six `OBCX_PACKAGES_WORKSPACE`, `OBCX_PACKAGES_LOCK`,
-`OBCX_PACKAGES_GRAPH`, `OBCX_PACKAGES_CACHE`, `OBCX_PACKAGES_MODE`, and
-`OBCX_PACKAGES_STATE_DIR` variables. Presets specify development mode and their
-own graph/cache/state paths; prepare that graph before configuring.
+requires all four `OBCX_PACKAGES_WORKSPACE`, `OBCX_PACKAGES_CACHE`,
+`OBCX_PACKAGES_MODE`, and `OBCX_PACKAGES_STATE_DIR` variables. Presets specify
+development mode and their own cache/state paths. `cmake --preset actor-dev`
+works with a clean build directory once the explicit workspace is authored.
 
 The CMake configuration must also be explicit (`CMAKE_BUILD_TYPE` or a
-multi-configuration generator). The loader checks the frozen graph offline,
-including source mappings and actual target platform/compiler, then configures
-only selected packages in topological order. It neither fetches sources nor
-updates a lock. An explicit empty roots list configures no packages.
+multi-configuration generator). The loader resolves and checks current metadata
+offline, including source mappings and actual target platform/compiler, then
+configures only selected packages in topological order. It neither fetches sources
+nor chooses alternative versions. An explicit empty roots list configures no packages.
+Missing remote cache entries fail with an offline diagnostic.
 
-State must be outside package source roots. Workspace/lock/graph, package metadata
-and provider environment inputs participate in CMake reconfiguration tracking.
-Implementation edits do not force a metadata relock. Current graph content
-receipts are not yet final binary/build receipts.
+State must be outside package source roots. Workspace, selected package metadata,
+tool sources and provider environment inputs participate in CMake reconfiguration
+tracking. The graph is generated under `STATE_DIR/current-graph.json`; it is not
+an input or an approval snapshot. Valid metadata changes need no separate acceptance,
+and generated state can be deleted and recreated. Identical atomic outputs retain
+their timestamps. Current graph content receipts are not final binary/build receipts.
 
 ## Package targets
 
@@ -58,7 +61,7 @@ if(OBCX_PACKAGE_PROFILE STREQUAL "tests")
 endif()
 ```
 
-`OBCX_PACKAGE_PROFILE` is the explicit locked profile, not a package-level default.
+`OBCX_PACKAGE_PROFILE` is the explicit workspace profile, not a package-level default.
 Helpers apply declared library/system edges and their visibility to owned targets.
 Tests additionally receive test dependencies. Internal targets remain part of the
 same package and must be registered; another package's internal target is not an
@@ -70,6 +73,29 @@ checked after package CMake finishes. The selected libstdc++ ABI is compiled as 
 probe; actor construction additionally checks the reflection compiler contract.
 The fixture actor checks construction, not runtime factory/invocation semantics;
 existing SDK/runtime smoke tests remain separate.
+
+## Generated actor identity and logging
+
+For every compiled target owned by an actor package, registration reads
+`actor.name` and `package.version` from the admitted metadata and generates
+`actor_identity.hpp` and `actor_binding.hpp` under that package's binary root.
+Private compile definitions select those headers; identity never propagates to
+core or dependency targets. This includes internal implementation libraries and
+package test targets, not only the actor DSO. Interface libraries do not export a
+current-actor binding.
+
+The metadata-only header supplies logging names without importing reflection.
+The binding header declares an identity type and `ReflectedActor<Derived>` alias
+in a package/identity-specific namespace, then imports that alias into
+`obcx::core`. The shared `ReflectedActorImpl<Derived, Identity>` definition does
+not depend on current-package macros. Actor classes inherit name/version
+constants without declaring them; ABI V2 exports keep their existing signatures.
+
+A translation unit must not mix two package authoring facades. Core runtime
+utilities include the unbound implementation header; multi-identity host tests
+use explicit test-only adapters. Generated content changes only when metadata
+changes, so unchanged reconfiguration preserves header timestamps. Rebuild actors
+with the matching SDK after migrating from handwritten identity constants.
 
 ## Audit stages
 

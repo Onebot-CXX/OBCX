@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OBCX v2 package-tool: explicit sources, deterministic locks, no build execution."""
+"""OBCX v2 package-tool: explicit sources, current graphs, no build execution."""
 from __future__ import annotations
 
 import argparse
@@ -7,9 +7,10 @@ from pathlib import Path
 import sys
 
 from obcx_package import PackageError, TOOL_VERSION
+from obcx_package.build_inputs import validate_outputs
 from obcx_package.contracts import schema
-from obcx_package.io import atomic_write, encoded, exclusive, metadata, read_json
-from obcx_package.resolver import Resolver, frozen, paths_to, write_lock
+from obcx_package.io import atomic_write, digest, encoded, exclusive, metadata, read_json
+from obcx_package.resolver import Resolver, paths_to
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,12 +20,10 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("validate", "inspect"):
         command = commands.add_parser(name)
         command.add_argument("path", type=Path)
-        command.add_argument("--kind", required=True, choices=("package", "workspace", "packages-lock",
-                                                              "resolved-packages", "package-build-receipt",
+        command.add_argument("--kind", required=True, choices=("package", "workspace", "resolved-packages", "package-build-receipt",
                                                               "provider-receipt", "provider-environment"))
     command = commands.add_parser("schema")
-    command.add_argument("--kind", required=True, choices=("package", "workspace", "packages-lock",
-                                                          "resolved-packages", "package-build-receipt",
+    command.add_argument("--kind", required=True, choices=("package", "workspace", "resolved-packages", "package-build-receipt",
                                                           "provider-receipt", "provider-environment"))
     command.add_argument("--output", required=True, type=Path)
     for name in ("registry-validate", "registry-index"):
@@ -33,14 +32,13 @@ def main(argv: list[str] | None = None) -> int:
         if name == "registry-index":
             command.add_argument("--output", required=True, type=Path)
             command.add_argument("--check", action="store_true")
-    for name in ("lock", "resolve", "prepare", "check", "explain"):
+    for name in ("resolve", "prepare", "check", "explain"):
         command = commands.add_parser(name)
         command.add_argument("--workspace", required=True, type=Path)
-        command.add_argument("--lock", required=True, type=Path)
         command.add_argument("--cache", required=True, type=Path)
         command.add_argument("--mode", required=True, choices=("development", "release"))
         command.add_argument("--network", required=True, choices=("allow", "deny"))
-        if name in {"lock", "resolve", "prepare"}:
+        if name in {"resolve", "prepare"}:
             command.add_argument("--graph", required=True, type=Path)
         if name == "explain":
             command.add_argument("id")
@@ -58,33 +56,22 @@ def main(argv: list[str] | None = None) -> int:
             atomic_write(args.output, encoded(schema(args.kind)))
             result = {"schema": args.kind, "tool_version": TOOL_VERSION}
         else:
-            outputs = [args.lock.resolve()]
+            graph = Resolver(args.workspace, args.cache, args.mode, args.network).resolve()
             if hasattr(args, "graph"):
-                outputs.append(args.graph.resolve())
-            if len(outputs) != len(set(outputs)) or args.workspace.resolve() in outputs:
-                raise PackageError("lock/graph/workspace paths must be distinct")
-            with exclusive(args.lock.with_name(args.lock.name + ".guard")):
-                graph = Resolver(args.workspace, args.cache, args.mode, args.network).resolve()
-                if any(path.is_relative_to(Path(node["source_dir"]))
-                       for path in outputs for node in graph["packages"]):
-                    raise PackageError("lock/graph outputs must be outside package source roots to avoid self-referential source receipts")
-                if args.command == "lock":
-                    write_lock(args.lock, graph)
-                else:
-                    frozen(args.lock, graph)
-                if hasattr(args, "graph"):
+                validate_outputs(args.workspace, graph, [args.graph])
+                with exclusive(args.graph.with_name(args.graph.name + ".guard")):
                     atomic_write(args.graph, encoded(graph))
-                result = {"valid": True, "lock_sha256": graph["lock_sha256"], "order": graph["lock"]["order"]}
-                if args.command == "prepare":
-                    result["system_requirements"] = graph["lock"]["providers"]
-                elif args.command == "explain":
-                    nodes = {p["id"]: p for p in graph["lock"]["packages"]}
-                    nodes.update({p["id"]: p for p in graph["lock"]["providers"]})
-                    if args.id not in nodes:
-                        raise PackageError("explain: requested ID is not in the selected graph")
-                    result = {"selected": nodes[args.id],
-                              "chains": paths_to(graph["lock"]["roots"], graph["lock"]["edges"], args.id),
-                              "requirements": [e for e in graph["lock"]["edges"] if e["to"] == args.id]}
+            result = {"valid": True, "graph_sha256": digest(encoded(graph)), "order": graph["order"]}
+            if args.command == "prepare":
+                result["system_requirements"] = graph["providers"]
+            elif args.command == "explain":
+                nodes = {p["id"]: p for p in graph["packages"]}
+                nodes.update({p["id"]: p for p in graph["providers"]})
+                if args.id not in nodes:
+                    raise PackageError("explain: requested ID is not in the selected graph")
+                result = {"selected": nodes[args.id],
+                          "chains": paths_to(graph["roots"], graph["edges"], args.id),
+                          "requirements": [e for e in graph["edges"] if e["to"] == args.id]}
         sys.stdout.write(encoded(result).decode())
         return 0
     except PackageError as error:

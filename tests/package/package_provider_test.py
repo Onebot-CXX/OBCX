@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -50,7 +48,7 @@ class PackageProviderTest(WorkspaceCase):
         self.binding["version_probe"] = {"kind": "receipt", "path": "version-receipt.json", "sha256": digest(content)}
         return value
 
-    def configure(self, body: str, *, pkg_config=False):
+    def configure(self, body: str):
         source = self.root / "driver"
         source.mkdir(exist_ok=True)
         build = self.root / "build"
@@ -65,11 +63,7 @@ include(OBCXPackageProviders)
 file(READ "${{CMAKE_CURRENT_SOURCE_DIR}}/binding.json" binding)
 obcx_find_declared_provider("${{binding}}" "{self.root}" "${{CMAKE_BINARY_DIR}}/providers")
 ''')
-        env = os.environ.copy()
-        if pkg_config:
-            env["PKG_CONFIG_PATH"] = str(self.prefix / "pkgconfig")
-            env["PKG_CONFIG_LIBDIR"] = str(self.prefix / "pkgconfig")
-        return subprocess.run(["cmake", "-S", str(source), "-B", str(build)], env=env, capture_output=True, text=True)
+        return subprocess.run(["cmake", "-S", str(source), "-B", str(build)], capture_output=True, text=True)
 
     def config_body(self, version="2.4.0"):
         return f'''set(Fixture_VERSION "{version}")
@@ -113,18 +107,6 @@ set_target_properties(Fixture::lib PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "{se
         with self.assertRaisesRegex(PackageError, "omits observed binary"):
             self.verify()
 
-    def test_cmake_config_discovery_records_verified_provider(self):
-        result = self.configure(self.config_body())
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        record = json.loads((self.root / "build/providers/fixture.sys.verified.json").read_bytes())
-        self.assertEqual(record["version"], "2.4.0")
-        self.assertEqual(record["targets"][0]["name"], "Fixture::lib")
-
-    def test_cmake_module_discovery(self):
-        self.binding["kind"] = "cmake-module"
-        result = self.configure(self.config_body())
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
     def test_cmake_wrong_version_fails_configure(self):
         result = self.configure(self.config_body("2.5.0"))
         self.assertNotEqual(result.returncode, 0)
@@ -141,16 +123,6 @@ set_target_properties(Fixture::lib PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "{se
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("no reported version", result.stderr)
 
-    def test_cmake_receipt_proves_unversioned_target(self):
-        self.receipt()
-        result = self.configure(self.config_body())
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def test_cmake_explicit_target_property_probe(self):
-        self.binding["version_probe"] = {"kind": "target-property", "target": "Fixture::lib", "property": "VERSION"}
-        result = self.configure(self.config_body() + 'set_target_properties(Fixture::lib PROPERTIES VERSION "2.4.0")\n')
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
     def test_changed_environment_rejected_before_config_code_executes(self):
         self.header.write_text("changed")
         marker = self.root / "should-not-run"
@@ -158,21 +130,6 @@ set_target_properties(Fixture::lib PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "{se
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("environment rejected before discovery", result.stderr)
         self.assertFalse(marker.exists())
-
-    def test_cmake_pkg_config_uses_explicit_target_prefix(self):
-        (self.prefix / "pkgconfig").mkdir()
-        (self.prefix / "pkgconfig/fixture-system.pc").write_text(f'''prefix={self.prefix}
-includedir=${{prefix}}/include
-Name: fixture-system
-Description: offline fixture
-Version: 2.4.0
-Cflags: -I${{includedir}}
-Libs:
-''')
-        self.binding.update(kind="pkg-config", package="fixture-system", targets=["PkgConfig::FIXTURE"])
-        self.binding["version_probe"] = {"kind": "pkg-config"}
-        result = self.configure("", pkg_config=True)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

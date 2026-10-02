@@ -1,3 +1,7 @@
+## Superseded package-lock scope
+
+The user's subsequent `remove-package-lock` change supersedes this proposal's package-lock, frozen-graph and manual pre-configuration preparation requirements. Current builds derive the graph directly from explicit declarations inside CMake. The text below records the original proposal; do not reintroduce its retired lock interfaces when continuing or archiving this change. All unrelated dependency, provider, linking and release safeguards remain applicable.
+
 ## Why
 
 现有 TOML 只能列出 actor 与第三方包名，不能对自有普通库完成来源、版本、传递依赖和实际链接检查；把 mapper 改为静态库只能绕过运行时 `.so`，并没有解决声明式依赖缺口。需要建立从 TOML、锁文件、CMake 到发布文件闭包可核验的一条链路，再以共享路径库验证它。
@@ -15,8 +19,7 @@
 - CMake 从解析结果建立依赖和公开目标，配置/生成后核对真实 target graph，检查隐藏链接和私自抓取依赖；static/header-only 同样有来源、版本、传递闭包和构建记录。
 - shared library 随 actor 发布完整私有闭包，继续复用 `ActorPackageStager` 的版本化 SONAME/DT_NEEDED 机制；不把任意全局共享 `.so` 当成可独立热替换资源。
 - 发布与 registry 支持带 kind 的包记录，发布脚本不再写死 bridge/message_store，不把有私有依赖的单个 actor `.so` 宣称为完整部署包；只描述已构建并验证的平台。
-- 以独立静态 PIC 的路径映射库作为首个消费者，bridge 和 ExHentai 在 TOML 显式依赖。库只负责受控映射和 URI 生成，不负责下载、文件删除或跨 actor 全局状态。
-- ExHentai 合集后续改用共享目录文件引用；真实挂载、写入发布、发送中保留与不确定结果清理须另在画廊变更明确，不能把字符串映射视作文件传输。
+- 通过真实普通库与 actor 消费者验证声明和链接契约；路径映射库实现及画廊业务衔接已迁至所属仓库，见 [migration.md](migration.md)。
 
 ## Capabilities
 
@@ -25,7 +28,6 @@
 - `declarative-package-resolution`: 显式来源、完整依赖图、严格版本约束、锁文件、离线/frozen 和可追溯解析结果。
 - `declared-build-dependencies`: 声明与真实 CMake 依赖一致性、第三方/SDK 绑定、独立 SDK 构建和构建可追溯性。
 - `package-release-closures`: 安装/发布闭包、包索引、ABI 边界、动态依赖热更新与回滚。
-- `shared-media-path-mapping`: 无状态公共路径库、目录安全边界、目标 installation 映射与 file URI。
 
 ### Modified Capabilities
 
@@ -38,6 +40,6 @@
 - Core：`schemas/actor-package.schema.json`、`cmake/actor_metadata.py`、`parse_actor_packages.py`、`gen_vcpkg_manifest.py`、`OBCXActor*.cmake`、SDK 安装/export、根 CMake 和构建入口。
 - 发布：`scripts/package_actor_release.py`、`verify_actor_release.py`、rollback rehearsal、registry schema/generator/CI，以及当前根 `actor-registry/` 和独立 registry 仓库中的镜像代码。
 - 所有维护中的包：bridge、message-store、ExHentai、probe、actor template、已选择的 chat_llm/fixtures 等，必须先清点再一次切换，不能只改当前两个 actor。
-- 新库：按用户确认在 `local_library/obcx-path-mapping/` 建立独立 Git 仓库，core 不跟踪源码、不添加 submodule；具有自己的 `package.toml`、CMake targets、测试和安装契约。workspace 显式绑定来源，不依赖 actor SDK 或全局 logger。
+- 库消费者：workspace 显式绑定独立 library 来源，用于通用包系统验收；`shared-media-path-mapping` 的业务契约、实现设计和任务由 path-mapping 仓库维护。
 - 画廊变更：依赖本包系统的可用阶段，另补共享文件生命周期和 file URI DTO；本规划不执行上线、QQ 测试、服务重启或修改连接凭据。
 - 不引入配置默认值，不实现 registry 自动版本求解，不更换包管理器，不声称能通过元数据约束恶意 CMake 或自动证明 C++ ABI 兼容。

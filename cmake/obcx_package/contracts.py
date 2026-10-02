@@ -122,22 +122,16 @@ EDGE = obj({"from": ID, "to": ID, "kind": choice("libraries", "actors", "system"
             "targets": array(EXPORT, 0), "visibility": choice("private", "public", "interface", "logical")})
 IDENTITY = obj({"kind": choice("working-tree", "git", "archive"),
                 "digest": {"type": "string", "pattern": r"^(?:[0-9a-f]{40}|[0-9a-f]{64}|metadata-only)$"}})
-LOCK_NODE = obj({"id": ID, "kind": choice("actor", "library"), "version": VERSION,
-                 "source": {"oneOf": [PATH_SOURCE, GIT_SOURCE]}, "source_identity": IDENTITY,
-                 "metadata_sha256": SHA})
-LOCK_FIELDS = {"schema_version": integer(SCHEMA_VERSION), "tool_version": choice(TOOL_VERSION),
-               "workspace_sha256": SHA, "platform": PLATFORM, "profile": choice("production", "tests"),
-               "mode": choice("development", "release"), "roots": array(ID, 0),
-               "packages": array(LOCK_NODE, 0), "edges": array(EDGE, 0),
-               "providers": array(PROVIDER, 0), "order": array(ID, 0)}
 SOURCE_RECEIPT = obj({"sha256": SHA, "dirty": {"type": "boolean"}})
-RESOLVED_NODE = obj({**LOCK_NODE["properties"], "source_dir": text(),
+RESOLVED_NODE = obj({"id": ID, "kind": choice("actor", "library"), "version": VERSION,
+                     "source": {"oneOf": [PATH_SOURCE, GIT_SOURCE]}, "source_identity": IDENTITY,
+                     "metadata_sha256": SHA, "source_dir": text(),
                      "metadata": {"oneOf": [package_branch("actor"), package_branch("library")]},
                      "source_receipt": SOURCE_RECEIPT})
 FILE = obj({"path": SUBDIR, "owner": ID, "sha256": SHA, "role": choice(
     "artifact", "header", "cmake", "metadata", "receipt", "private-library")})
 BUILD_RECEIPT = obj({"schema_version": integer(SCHEMA_VERSION), "tool_version": choice(TOOL_VERSION),
-                     "package_id": ID, "lock_sha256": SHA, "graph_sha256": SHA,
+                     "package_id": ID, "graph_sha256": SHA,
                      "platform": PLATFORM, "configuration": text(),
                      "sources": array(obj({"id": ID, **SOURCE_RECEIPT["properties"]}), 1),
                      "toolchain": obj({"compiler_id": text(), "compiler_version": text(), "compiler_sha256": SHA,
@@ -155,10 +149,11 @@ def schema(name: str) -> dict:
                                              "profile": choice("production", "tests")}),
                            "sources": array({"oneOf": [PATH_SOURCE, GIT_SOURCE]}, 0),
                            "providers": array(PROVIDER, 0)}),
-        "packages-lock": obj(LOCK_FIELDS),
         "resolved-packages": obj({"schema_version": integer(SCHEMA_VERSION), "tool_version": choice(TOOL_VERSION),
-                                   "lock_sha256": SHA, "lock": obj(LOCK_FIELDS),
-                                   "packages": array(RESOLVED_NODE, 0), "unused_sources": array(ID, 0)}),
+                                   "workspace_sha256": SHA, "platform": PLATFORM, "profile": choice("production", "tests"),
+                                   "mode": choice("development", "release"), "roots": array(ID, 0),
+                                   "packages": array(RESOLVED_NODE, 0), "edges": array(EDGE, 0),
+                                   "providers": array(PROVIDER, 0), "order": array(ID, 0), "unused_sources": array(ID, 0)}),
         "package-build-receipt": BUILD_RECEIPT,
         "provider-receipt": PROVIDER_RECEIPT,
         "provider-environment": PROVIDER_ENVIRONMENT,

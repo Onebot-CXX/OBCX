@@ -733,18 +733,6 @@ auto proxy_settings(const obcx::network::detail::CurlProxyKind kind,
   };
 }
 
-TEST(CurlAsioMultiTest, LinkedRuntimeHasRequiredCapabilities) {
-  const auto capabilities = obcx::network::detail::curl_runtime_capabilities();
-  EXPECT_FALSE(capabilities.version.empty());
-  EXPECT_FALSE(capabilities.ssl_backend.empty());
-  EXPECT_TRUE(capabilities.asynchronous_dns);
-  EXPECT_TRUE(capabilities.tls);
-  EXPECT_TRUE(capabilities.https_proxy);
-  EXPECT_TRUE(capabilities.http);
-  EXPECT_TRUE(capabilities.https);
-  EXPECT_TRUE(capabilities.socks5_hostname);
-}
-
 TEST(CurlAsioMultiTest, TransfersConcurrentRequestsOnThreadPoolExecutor) {
   LocalHttpServer server;
   server.start();

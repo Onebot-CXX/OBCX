@@ -1,3 +1,4 @@
+#include "core/actor/command_availability.hpp"
 #include "core/actor/reflected_actor.hpp"
 
 namespace obcx::tests::events {
@@ -13,14 +14,16 @@ struct SdkCommand final : obcx::command::RequestMessage<SdkCommand> {};
 namespace {
 class TestActorV2 final : public obcx::core::ReflectedActor<TestActorV2> {
 public:
-  static constexpr std::string_view actor_name = "test_actor_v2";
-  static constexpr std::string_view actor_version = "2.0.0";
-
   static constexpr auto command_contract() {
-    return obcx::command::catalog(
+    constexpr auto observation =
         obcx::command::observe<obcx::tests::events::SdkCommand>(
             "sdk_ping", "Ping the SDK fixture",
-            obcx::command::re2(R"(^(?:sdk_ping|sdk_alias)$)")));
+            obcx::command::re2(R"(^(?:sdk_ping|sdk_alias)$)"));
+#ifdef OBCX_TEST_COMMAND_SCOPE
+    return obcx::command::catalog(obcx::command::actor_scoped(observation));
+#else
+    return obcx::command::catalog(observation);
+#endif
   }
 
   [[nodiscard]] static auto configuration_contract() -> obcx::common::json {
@@ -70,6 +73,26 @@ public:
       return obcx::core::ActorPreparationResult::restart_required(
           "fixture preparation requires restart");
     }
+#ifdef OBCX_TEST_COMMAND_SCOPE
+    const auto mode =
+        context.config().get_value<std::string>("scope_mode").value();
+    if (mode != "missing") {
+      const auto publisher =
+          context.get_service<obcx::command::AvailabilityPublisher>();
+      if (!publisher) {
+        return obcx::core::ActorPreparationResult::failed(
+            "scope publisher missing");
+      }
+      obcx::command::GroupScopes scopes;
+      if (mode != "empty") {
+        scopes.push_back(
+            {"qq", mode == "invalid" ? "unknown" : "primary",
+             context.config().get_value<std::string>("scope_group").value(),
+             obcx::command::TopicSelection::None, std::nullopt});
+      }
+      publisher->publish("sdk_ping", scopes);
+    }
+#endif
     return obcx::core::ActorPreparationResult::ready();
   }
 

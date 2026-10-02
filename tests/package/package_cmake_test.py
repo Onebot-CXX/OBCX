@@ -1,6 +1,7 @@
 """A small real-build fixture covers the three library kinds and audit gates."""
 from __future__ import annotations
 
+import json
 import os
 import platform
 from pathlib import Path
@@ -9,9 +10,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from package_test_support import ROOT, WorkspaceCase
-from obcx_package.io import encoded
-from obcx_package.resolver import write_lock
+from package_test_support import ROOT, WorkspaceCase, digest, encoded
 
 
 class PackageCMakeTest(WorkspaceCase):
@@ -54,8 +53,8 @@ project(PackageBuildFixture VERSION 1.1.0 LANGUAGES CXX)
 add_library(fixture_sdk INTERFACE)
 add_library(obcx::obcx_core ALIAS fixture_sdk)
 include("{ROOT / 'cmake/OBCXPackages.cmake'}")
-obcx_load_packages(WORKSPACE "{self.manifest}" LOCK "{self.lock}"
- GRAPH "{self.root / 'graph.json'}" CACHE "{self.cache}" MODE development
+obcx_load_packages(WORKSPACE "{self.manifest}"
+ CACHE "{self.cache}" MODE development
  STATE_DIR "${{CMAKE_BINARY_DIR}}/package-state")
 ''')
 
@@ -70,9 +69,7 @@ obcx_load_packages(WORKSPACE "{self.manifest}" LOCK "{self.lock}"
         self.workspace["workspace"]["platform"] = selected
         for document in self.packages.values():
             document["artifact"]["platforms"] = [selected]
-        graph = self.resolve()
-        write_lock(self.lock, graph)
-        (self.root / "graph.json").write_bytes(encoded(graph))
+        self.save()
 
     def configure(self, configuration):
         self.prepare()
@@ -85,15 +82,75 @@ obcx_load_packages(WORKSPACE "{self.manifest}" LOCK "{self.lock}"
 
     def test_three_library_kinds_with_internal_object_target_build_and_run(self):
         self.workspace["workspace"]["roots"].append("example.actor")
-        self.files("example.actor", {"CMakeLists.txt": 'obcx_add_actor(SOURCES actor.cpp)\n',
-                   "actor.cpp": 'int mapping_value();\nextern "C" int fixture_value() { return mapping_value(); }\n'})
+        # Installed SDK receipts can name an already-included module through
+        # ../ segments. CMake must track it once, not emit duplicate Ninja rules.
+        module = ROOT / "cmake/OBCXActorIdentity.cmake"
+        anchor = self.root / "sdk-receipt.json"
+        receipt = json.loads(anchor.read_bytes())
+        receipt["inputs"].append({"path": os.path.relpath(module, self.root),
+                                  "sha256": digest(module.read_bytes())})
+        anchor.write_bytes(encoded(receipt))
+        self.workspace["providers"][0]["provenance"]["sha256"] = digest(anchor.read_bytes())
+        self.files("example.actor", {"CMakeLists.txt": '''add_library(actor_helper STATIC helper.cpp)
+obcx_package_target(actor_helper ROLE implementation)
+obcx_add_actor(SOURCES actor.cpp)
+target_link_libraries(example_actor PRIVATE actor_helper)
+''',
+                   "actor.cpp": '''#include OBCX_ACTOR_METADATA_HEADER
+int mapping_value();
+extern "C" const char *helper_identity();
+extern "C" int fixture_value() { return mapping_value(); }
+extern "C" const char *fixture_identity() { return OBCX_ACTOR_NAME ":" OBCX_ACTOR_VERSION; }
+extern "C" const char *fixture_helper_identity() { return helper_identity(); }
+''',
+                   "helper.cpp": '''#include OBCX_ACTOR_METADATA_HEADER
+extern "C" const char *helper_identity() { return OBCX_ACTOR_NAME ":" OBCX_ACTOR_VERSION; }
+'''})
         result = self.configure("Release")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         result = self.compile()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         result = subprocess.run([str(self.build / "package-state/build/example.facade/facade_check")])
         self.assertEqual(result.returncode, 0)
-        self.assertTrue((self.build / "actors/example_actor.so").is_file())
+        actor_artifact = self.build / "actors/example_actor.so"
+        self.assertTrue(actor_artifact.is_file())
+
+        def check_identity():
+            # Separate processes avoid the dynamic loader reusing the old image.
+            expected = self.packages["example.actor"]["actor"]["name"] + ":" + self.packages["example.actor"]["package"]["version"]
+            probe = subprocess.run([sys.executable, "-c", '''import ctypes,sys
+actor = ctypes.CDLL(sys.argv[1])
+for name in ("fixture_identity", "fixture_helper_identity"):
+    function = getattr(actor, name)
+    function.restype = ctypes.c_char_p
+    assert function().decode() == sys.argv[2]
+assert actor.fixture_value() == 42
+''', str(actor_artifact), expected], capture_output=True, text=True)
+            self.assertEqual(probe.returncode, 0, probe.stdout + probe.stderr)
+
+        check_identity()
+
+        # Reuse the built fixture to verify incrementality and metadata tracking.
+        objects = list(self.build.rglob("*.o"))
+        self.assertTrue(objects)
+        generated = list(self.build.rglob("actor_*.hpp"))
+        self.assertEqual(len(generated), 2)
+        outputs = {p: p.stat().st_mtime_ns for p in [*objects, *generated,
+                   self.build / "actors/example_actor.so",
+                   self.build / "package-state/build/example.facade/facade_check"]}
+        result = self.compile()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(outputs, {p: p.stat().st_mtime_ns for p in outputs})
+        self.packages["example.mapping"]["package"]["version"] = "0.1.1"
+        self.packages["example.actor"]["package"]["version"] = "0.1.1"
+        self.save()
+        result = self.compile()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        graph = json.loads((self.build / "package-state/current-graph.json").read_bytes())
+        mapping = next(p for p in graph["packages"] if p["id"] == "example.mapping")
+        self.assertEqual(mapping["version"], "0.1.1")
+        check_identity()
+
         self.workspace["workspace"]["profile"] = "production"
         self.build = self.root / "build-production"
         result = self.configure("Release")
