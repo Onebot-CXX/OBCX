@@ -7,6 +7,7 @@
     "boost-program-options",
     "boost-thread",
     "brotli",
+    "curl",
     "zlib",
     "zstd",
     "fmt",

@@ -3,6 +3,7 @@
 #include "onebot11/adapter/protocol_adapter.hpp"
 
 #include <atomic>
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/bind/bind.hpp>
@@ -20,12 +21,19 @@ WebSocketConnectionManager::WebSocketConnectionManager(
 
 WebSocketConnectionManager::~WebSocketConnectionManager() {
   // Release our own resources while the referenced io_context is still alive
-  // (IBot::~IBot guarantees this destruction order). Without this explicit
+  // (BotInstallation guarantees this destruction order). Without this explicit
   // cleanup, send_strand_ — which holds a shared_ptr into the io_context's
   // strand_executor_service — would be destroyed after the service was gone,
   // crashing inside _Sp_counted_ptr_inplace::_M_destroy.
-  disconnect();
-  // disconnect() posts a detached close() but doesn't drop the client.
+  try {
+    shutdown();
+  } catch (const std::exception &error) {
+    OBCX_ERROR("Failed to shut down WebSocket connection manager: {}",
+               error.what());
+  } catch (...) {
+    OBCX_ERROR("Failed to shut down WebSocket connection manager");
+  }
+  // shutdown() posts a detached close() but doesn't drop the client.
   // Reset it here so its socket/stream destructors run against a live
   // executor service.
   ws_client_.reset();
@@ -46,18 +54,28 @@ void WebSocketConnectionManager::connect(
   connect_ws(config.host, config.port, config.access_token);
 }
 
-void WebSocketConnectionManager::disconnect() {
-  is_running_ = false;
+void WebSocketConnectionManager::disconnect() { shutdown(); }
+
+void WebSocketConnectionManager::shutdown() {
+  const bool was_running = is_running_.exchange(false);
   is_connected_.store(false, std::memory_order_release);
 
   action_requests_->cancel_all();
   OBCX_DEBUG("Cleared all pending OneBot actions");
-
-  if (ws_client_) {
-    asio::co_spawn(ioc_, ws_client_->close(), asio::detached);
+  if (!was_running) {
+    return;
   }
-
-  reconnect_timer_.cancel();
+  asio::post(send_strand_, [this] {
+    reconnect_timer_.cancel();
+    if (ws_client_) {
+      asio::co_spawn(
+          send_strand_,
+          [client = ws_client_]() -> asio::awaitable<void> {
+            co_await client->close();
+          },
+          asio::detached);
+    }
+  });
 }
 
 auto WebSocketConnectionManager::get_connection_type() const -> std::string {
@@ -80,6 +98,9 @@ void WebSocketConnectionManager::connect_ws(std::string host, uint16_t port,
 
 void WebSocketConnectionManager::do_connect() {
   asio::post(send_strand_, [this]() -> void {
+    if (!is_running_) {
+      return;
+    }
     ws_client_ = std::make_shared<WebsocketClient>(ioc_);
     OBCX_INFO("Attempting to connect to ws://{}:{}", host_, port_);
 
@@ -142,17 +163,21 @@ void WebSocketConnectionManager::on_ws_message(const beast::error_code &ec,
 }
 
 void WebSocketConnectionManager::schedule_reconnect() {
+  if (!is_running_) {
+    return;
+  }
   reconnect_timer_.expires_after(std::chrono::seconds(5));
   OBCX_INFO("Reconnection scheduled in {}ms", 5000);
-  reconnect_timer_.async_wait([this](const beast::error_code &ec) -> void {
-    if (ec) {
-      if (ec != asio::error::operation_aborted) {
-        OBCX_ERROR("Reconnect timer error: {}", ec.message());
-      }
-      return;
-    }
-    do_connect();
-  });
+  reconnect_timer_.async_wait(asio::bind_executor(
+      send_strand_, [this](const beast::error_code &ec) -> void {
+        if (ec) {
+          if (ec != asio::error::operation_aborted) {
+            OBCX_ERROR("Reconnect timer error: {}", ec.message());
+          }
+          return;
+        }
+        do_connect();
+      }));
 }
 
 auto WebSocketConnectionManager::send_action_and_wait_async(

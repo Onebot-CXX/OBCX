@@ -1,4 +1,5 @@
-#pragma once
+#ifndef OBCX_INCLUDE_ONEBOT11_ADAPTER_MESSAGE_CONVERTER_HPP_
+#define OBCX_INCLUDE_ONEBOT11_ADAPTER_MESSAGE_CONVERTER_HPP_
 
 #include "common/message_type.hpp"
 #include <string>
@@ -70,3 +71,5 @@ auto cq_unescape(std::string s) -> std::string;
 auto cq_escape(std::string s) -> std::string;
 }; // namespace MessageConverter
 } // namespace obcx::adapter::onebot11
+
+#endif // OBCX_INCLUDE_ONEBOT11_ADAPTER_MESSAGE_CONVERTER_HPP_

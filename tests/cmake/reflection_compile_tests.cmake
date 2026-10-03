@@ -14,7 +14,6 @@ function(obcx_add_reflection_compile_test name case_id should_compile
                TIMEOUT 60)
 endfunction()
 
-obcx_add_reflection_compile_test(valid_sync_async 0 TRUE "")
 obcx_add_reflection_compile_test(no_handler 1 FALSE
                                  OBCX_REFLECTED_ACTOR_NO_HANDLER)
 obcx_add_reflection_compile_test(non_public 2 FALSE
@@ -41,7 +40,8 @@ obcx_add_reflection_compile_test(unnamed_message 12 FALSE
                                  OBCX_REFLECTED_MESSAGE_UNSTABLE_IDENTITY)
 obcx_add_reflection_compile_test(
   missing_encode 13 FALSE OBCX_REFLECTED_ACTOR_MISSING_JSON_SERIALIZATION)
-obcx_add_reflection_compile_test(valid_command_contract 14 TRUE "")
+obcx_add_reflection_compile_test(missing_package_identity 21 FALSE
+                                 OBCX_ACTOR_METADATA_REQUIRED)
 obcx_add_reflection_compile_test(missing_command_input 15 FALSE
                                  OBCX_COMMAND_REQUEST_INPUT_MISSING)
 obcx_add_reflection_compile_test(duplicate_command_name 16 FALSE
@@ -52,3 +52,5 @@ obcx_add_reflection_compile_test(empty_command_pattern 18 FALSE
                                  OBCX_COMMAND_MATCHER_PATTERN_EMPTY)
 obcx_add_reflection_compile_test(invalid_pattern_command_name 19 FALSE
                                  OBCX_COMMAND_INVALID_NAME)
+obcx_add_reflection_compile_test(reserved_command_name 20 FALSE
+                                 OBCX_COMMAND_RESERVED_NAME)

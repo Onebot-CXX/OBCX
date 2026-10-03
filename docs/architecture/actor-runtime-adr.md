@@ -86,9 +86,10 @@ after = ["persist"]
 mode = "await"
 ```
 
-Shared services such as `DbManager`, `BotRegistry`, protocol capabilities, and
+Actor-visible shared services such as `DbManager`, `BotOperationGateway`, and
 blocking executors are registered in `ActorServices` and resolved through the
-context. Concrete actor packages stay outside the core library.
+context. Process bot components and their capability directory are not actor
+services. Concrete actor packages stay outside the core library.
 
 ## Runtime generations and reload
 
@@ -114,17 +115,19 @@ ELF loader may reuse an already loaded dependency with the same SONAME.
 Process-owned runtime/SDK dependencies may be shared only when their content
 identity matches the active generation.
 
-`BotRegistry` and `DbManager` are process-owned. Every generation receives the
-same already-populated registry, so a bridge mapping reload reconstructs actor
-state while the existing bot objects and connections continue running. Bot
-definitions, database instances, and resolved scheduler budgets are
-fingerprinted and require restart when changed.
+`BotInstallationDirectory`, the shared `BotOperationDispatcher`, and
+`DbManager` are process-owned. Every generation receives the same dispatcher
+and weak installation capability directory, so a bridge mapping reload
+reconstructs actor state while existing installations and transports continue
+running. Bot definitions, database instances, and resolved scheduler budgets
+are fingerprinted and require restart when changed.
 
 ## Package boundary
 
-Every standalone package owns one canonical `actor.toml`, uses
-`OBCXActor.cmake`, and exports the symbols emitted by
-`OBCX_ACTOR_EXPORT_V2`. The manager requires an explicit numeric ABI value of
+Every package owns one canonical schema-v2 `package.toml` and uses
+`OBCXPackages.cmake` with an explicit workspace, source lock, and dependency
+graph (see [package builds](package-cmake.md)). Only actor-kind packages export
+the symbols emitted by `OBCX_ACTOR_EXPORT_V2`; ordinary libraries do not. The manager requires an explicit numeric ABI value of
 2 before looking up the V2 factory, destructor, name, version, and input
 contract symbols. GCC 16.1+, C++26 reflection, and Linux x86_64/arm64 are the
 only supported authoring and deployment baseline.

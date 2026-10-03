@@ -8,7 +8,10 @@
 #include <boost/asio/write.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
+#include <limits>
+#include <openssl/evp.h>
 #include <openssl/ssl.h>
+#include <stdexcept>
 
 namespace obcx::network {
 
@@ -19,30 +22,25 @@ using tcp = asio::ip::tcp;
 
 namespace {
 
-auto base64_encode(const std::string &input) -> std::string {
-  static constexpr char table[] =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-  std::string output;
-  output.reserve(((input.size() + 2) / 3) * 4);
-
-  size_t i = 0;
-  const auto *data = reinterpret_cast<const unsigned char *>(input.data());
-  size_t len = input.size();
-
-  while (i < len) {
-    uint32_t octet_a = i < len ? data[i++] : 0;
-    uint32_t octet_b = i < len ? data[i++] : 0;
-    uint32_t octet_c = i < len ? data[i++] : 0;
-
-    uint32_t triple = (octet_a << 16) | (octet_b << 8) | octet_c;
-
-    output += table[(triple >> 18) & 0x3F];
-    output += table[(triple >> 12) & 0x3F];
-    output += (i > len + 1) ? '=' : table[(triple >> 6) & 0x3F];
-    output += (i > len) ? '=' : table[triple & 0x3F];
+auto base64_encode(std::string_view input) -> std::string {
+  // EVP_EncodeBlock uses int for both input and encoded lengths.
+  constexpr auto max_input_size =
+      static_cast<std::size_t>(std::numeric_limits<int>::max() / 4) * 3;
+  if (input.size() > max_input_size) {
+    throw std::length_error("Proxy credentials are too large to encode");
   }
 
+  const auto encoded_size = ((input.size() + 2) / 3) * 4;
+  // OpenSSL also writes a trailing NUL, which is not part of the result.
+  std::string output(encoded_size + 1, '\0');
+  const auto written =
+      EVP_EncodeBlock(reinterpret_cast<unsigned char *>(output.data()),
+                      reinterpret_cast<const unsigned char *>(input.data()),
+                      static_cast<int>(input.size()));
+  if (written < 0 || static_cast<std::size_t>(written) != encoded_size) {
+    throw std::runtime_error("Failed to encode proxy credentials");
+  }
+  output.resize(encoded_size);
   return output;
 }
 
@@ -315,18 +313,18 @@ auto ProxyHttpClient::establish_socks5_tunnel_async(beast::tcp_stream &stream)
 #endif
 
 auto ProxyHttpClient::connect_through_proxy() -> tcp::socket {
-  tcp::resolver resolver(ioc_);
+  tcp::resolver resolver(executor_);
   auto proxy_results =
       resolver.resolve(proxy_config_.host, std::to_string(proxy_config_.port));
 
   switch (proxy_config_.type) {
   case ProxyType::HTTP: {
-    tcp::socket proxy_socket(ioc_);
+    tcp::socket proxy_socket(executor_);
     asio::connect(proxy_socket, proxy_results);
     return establish_http_tunnel(proxy_socket, target_host_, target_port_);
   }
   case ProxyType::HTTPS: {
-    tcp::socket plain_socket(ioc_);
+    tcp::socket plain_socket(executor_);
     asio::connect(plain_socket, proxy_results);
 
     ssl::context ssl_ctx{ssl::context::tls_client};
@@ -344,7 +342,9 @@ auto ProxyHttpClient::connect_through_proxy() -> tcp::socket {
     }
 
     boost::system::error_code ec;
-    ssl_socket.handshake(ssl::stream_base::client, ec);
+    static_cast<void>(
+        ssl_socket.handshake( // NOLINT(bugprone-unused-return-value)
+            ssl::stream_base::client, ec));
     if (ec) {
       throw std::runtime_error(
           fmt::format("HTTPS proxy SSL handshake failed: {}", ec.message()));
@@ -354,7 +354,7 @@ auto ProxyHttpClient::connect_through_proxy() -> tcp::socket {
     return establish_https_tunnel(ssl_socket, target_host_, target_port_);
   }
   case ProxyType::SOCKS5: {
-    tcp::socket proxy_socket(ioc_);
+    tcp::socket proxy_socket(executor_);
     asio::connect(proxy_socket, proxy_results);
     return establish_socks5_tunnel(proxy_socket, target_host_, target_port_);
   }

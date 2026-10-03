@@ -1,17 +1,20 @@
 cmake_minimum_required(VERSION 3.30)
-project(obcx_v2_sdk_smoke LANGUAGES CXX)
+if(NOT DEFINED OBCX_CURRENT_PACKAGE)
+  project(obcx_v2_sdk_smoke LANGUAGES CXX)
+  find_package(obcx-sdk CONFIG REQUIRED GLOBAL)
+  include(OBCXPackages)
+  obcx_load_configured_workspace()
+  return()
+endif()
 
-find_package(obcx-sdk CONFIG REQUIRED)
-include(OBCXActor)
-
-obcx_add_actor(sdk_v2
-    SOURCES actor.cpp
-    OUTPUT_NAME sdk_v2_fixture)
-
+add_library(sdk_v2_helper STATIC helper.cpp)
+obcx_package_target(sdk_v2_helper ROLE implementation)
+obcx_add_actor(SOURCES actor.cpp)
+target_link_libraries(sdk_v2_actor PRIVATE sdk_v2_helper)
+install(TARGETS sdk_v2_actor LIBRARY DESTINATION lib/obcx/actors)
+install(FILES package.toml DESTINATION share/obcx/packages/onebot-cxx.sdk-v2-fixture)
 add_executable(sdk_v2_smoke smoke.cpp)
-target_link_libraries(sdk_v2_smoke PRIVATE obcx::obcx_core)
-target_compile_features(sdk_v2_smoke PRIVATE cxx_std_26)
-target_compile_options(sdk_v2_smoke PRIVATE -freflection)
+set_target_properties(sdk_v2_smoke PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+obcx_package_target(sdk_v2_smoke ROLE test)
 add_dependencies(sdk_v2_smoke sdk_v2_actor)
-
 install(TARGETS sdk_v2_smoke RUNTIME DESTINATION bin)

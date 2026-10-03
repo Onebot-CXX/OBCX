@@ -52,7 +52,10 @@ if(NOT OBCX_CXX26_REFLECTION_SUPPORTED)
     "GCC cannot compile the OBCX C++26 reflection probe. Use GCC 16.1+ "
     "with -std=c++26 -freflection and libstdc++ <meta> support.")
 endif()
-add_compile_options(-freflection)
+# Ordinary packages may explicitly select C++20/23 without the actor SDK.
+# GCC rejects reflection in those modes; keep it on the C++26 core/actors.
+add_compile_options(
+  "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<VERSION_GREATER_EQUAL:$<TARGET_PROPERTY:CXX_STANDARD>,26>>:-freflection>")
 
 set(OBCX_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
 set(OBCX_VERSION_MINOR ${PROJECT_VERSION_MINOR})
@@ -123,6 +126,7 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(CURL 8.0 REQUIRED)
 find_package(ZLIB REQUIRED)
 if(OBCX_IN_NIX_SHELL)
   find_package(SQLite3 REQUIRED)
@@ -200,9 +204,6 @@ if(OBCX_ENABLE_IO_URING)
   endif()
 endif()
 
-include_directories(${CMAKE_SOURCE_DIR}/include)
-include_directories(${CMAKE_BINARY_DIR}/generated)
-
 option(OBCX_BUILD_TESTS "Build tests" OFF)
 option(OBCX_BUILD_BENCHMARKS "Build repeatable benchmark executables" OFF)
 
@@ -214,11 +215,8 @@ endif()
 add_subdirectory(src)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
-include(cmake/OBCXActorLoader.cmake)
-
-if(EXISTS "${CMAKE_SOURCE_DIR}/actors.toml")
-  obcx_load_actors("${CMAKE_SOURCE_DIR}/actors.toml")
-endif()
+include(OBCXPackages)
+obcx_load_configured_workspace()
 
 if(OBCX_BUILD_TESTS)
   add_subdirectory(tests)

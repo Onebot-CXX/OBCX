@@ -13,6 +13,10 @@
       "binaryDir": "${sourceDir}/build/actor-dev",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "OBCX_PACKAGES_WORKSPACE": "${sourceDir}/packages.toml",
+        "OBCX_PACKAGES_CACHE": "${sourceDir}/build/actor-dev/package-state/sources",
+        "OBCX_PACKAGES_STATE_DIR": "${sourceDir}/build/actor-dev/package-state/cmake",
+        "OBCX_PACKAGES_MODE": "development",
         "OBCX_BUILD_TESTS": "ON",
         "OBCX_BUILD_BENCHMARKS": "OFF"
       }
@@ -24,17 +28,12 @@
       "binaryDir": "${sourceDir}/build/actor-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "OBCX_PACKAGES_WORKSPACE": "${sourceDir}/packages.toml",
+        "OBCX_PACKAGES_CACHE": "${sourceDir}/build/actor-release/package-state/sources",
+        "OBCX_PACKAGES_STATE_DIR": "${sourceDir}/build/actor-release/package-state/cmake",
+        "OBCX_PACKAGES_MODE": "development",
         "OBCX_BUILD_TESTS": "ON",
         "OBCX_BUILD_BENCHMARKS": "ON"
-      }
-    },
-    {
-      "name": "actor-conformance",
-      "displayName": "Actor package cross-repository conformance",
-      "inherits": "actor-release",
-      "binaryDir": "${sourceDir}/build/actor-conformance",
-      "cacheVariables": {
-        "OBCX_ENABLE_CROSS_REPO_ACTOR_TESTS": "ON"
       }
     }
   ],
@@ -46,10 +45,6 @@
     {
       "name": "actor-release",
       "configurePreset": "actor-release"
-    },
-    {
-      "name": "actor-conformance",
-      "configurePreset": "actor-conformance"
     }
   ],
   "testPresets": [
@@ -58,7 +53,7 @@
       "configurePreset": "actor-dev",
       "filter": {
         "exclude": {
-          "label": "(compile-contract|contract|architecture|installed-sdk|conformance|slow)"
+          "label": "(compile-contract|contract|architecture|installed-sdk|slow)"
         }
       },
       "output": {
@@ -70,7 +65,7 @@
       "configurePreset": "actor-dev",
       "filter": {
         "exclude": {
-          "label": "(conformance|slow)"
+          "label": "slow"
         }
       },
       "output": {
@@ -80,13 +75,6 @@
     {
       "name": "actor-dev",
       "inherits": "actor-full"
-    },
-    {
-      "name": "actor-conformance",
-      "configurePreset": "actor-conformance",
-      "output": {
-        "outputOnFailure": true
-      }
     }
   ]
 }

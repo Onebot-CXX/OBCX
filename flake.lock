@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "clang-p2996": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1786150512,
+        "narHash": "sha256-YEg9MJs3l8VErGcfpqK0rrGNs2+TB+kbureKyTw+ocU=",
+        "owner": "Bloomberg",
+        "repo": "clang-p2996",
+        "rev": "060be17654102019e14810c3f948ef85a490755f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Bloomberg",
+        "ref": "p2996",
+        "repo": "clang-p2996",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1783776592,
@@ -18,6 +35,7 @@
     },
     "root": {
       "inputs": {
+        "clang-p2996": "clang-p2996",
         "nixpkgs": "nixpkgs"
       }
     }

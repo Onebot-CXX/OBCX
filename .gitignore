@@ -86,8 +86,11 @@ vcpkg_installed/
 vcpkg.json
 .direnv/
 
-# Local config
+# Local config and independent package repositories
 local_actor/
+local_library/
+.package-state/
+packages.toml
 actors.toml
 # Retired local checkouts/config are ignored but never parsed by the build.
 local_plugin/

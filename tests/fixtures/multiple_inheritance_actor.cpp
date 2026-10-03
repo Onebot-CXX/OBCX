@@ -1,4 +1,4 @@
-#include "core/reflected_actor.hpp"
+#include "core/actor/reflected_actor.hpp"
 
 namespace obcx::tests::events {
 struct MultipleInheritanceProbe {};
@@ -20,9 +20,6 @@ class MultipleInheritanceActor final
     : public PrefixInterface,
       public obcx::core::ReflectedActor<MultipleInheritanceActor> {
 public:
-  static constexpr std::string_view actor_name = "multiple_inheritance_actor";
-  static constexpr std::string_view actor_version = "1.0.0";
-
   auto handle(const obcx::tests::events::MultipleInheritanceProbe &,
               const obcx::core::MessageEnvelope &message,
               obcx::core::ActorContext &context) -> obcx::core::ActorResult {

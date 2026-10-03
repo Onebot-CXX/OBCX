@@ -1,6 +1,6 @@
 #include "common/config_loader.hpp"
-#include "core/actor.hpp"
-#include "core/orchestrator.hpp"
+#include "core/actor/actor.hpp"
+#include "core/runtime/orchestrator.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>

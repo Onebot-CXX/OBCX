@@ -28,6 +28,13 @@
   V1 actor ABI, fixed-shard scheduler, runtime engine selection, and
   in-process fallback behavior. Existing binaries and manifests must be
   repackaged as canonical ABI 2 actors.
+- **Bot component cutover**: removed `IBot`, provider bot interfaces,
+  `QQBot`/`TGBot`, `BotRegistry`, live-bot RTTI wrappers, and the legacy bot
+  factory. External actor code must use `BotOperationClient`.
+- **Strict bot configuration**: bot tables now require exact `surface` and
+  `transport` fields plus variant-specific connection keys with explicit
+  `_ms` units. Legacy `type`, `plugins`, `timeout`, aliases, unknown keys, and
+  Telegram WebSocket are rejected.
 
 ### Added
 
@@ -45,14 +52,17 @@
 - Isolated Release verification, continuous installed-pipeline soak, atomic
   deployment rollback rehearsal, and deterministic coordinated artifact
   preparation tools.
+- Installation-scoped component/capability registry, dependency-DAG
+  validation, transactional startup, reverse shutdown, reviewed OneBot and
+  Telegram recipes, native operation endpoints, event ingress, and Telegram
+  command-catalog capability.
 
 ### Changed
 
 - Bridge, message-store, local checkout layout, template, examples, runtime
   entry source, documentation, and package tooling now use actor terminology.
-- Bridge protocol-specific access now uses installed `IQQBot` and
-  `ITelegramBot` capability interfaces rather than concrete implementation
-  headers.
+- Bridge and `chat_llm` bot access now uses the installed, data-only
+  `BotOperationClient`; provider components and transports remain process-only.
 - Installed executables use a relocatable runtime-library search path so an
   installed OBCX prefix starts without `LD_LIBRARY_PATH`.
 

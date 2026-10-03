@@ -71,16 +71,6 @@ void BaseRequest::from_json(const json &j) {
       JsonUtils::get_optional<remove_optional_t<decltype((obj).field)>>(       \
           j, #field)
 
-void to_json(json &j, const MessageSegment &seg) {
-  SERIALIZE_FIELD(j, seg, type);
-  SERIALIZE_FIELD(j, seg, data);
-}
-
-void from_json(const json &j, MessageSegment &seg) {
-  DESERIALIZE_FIELD(j, seg, type);
-  DESERIALIZE_FIELD(j, seg, data);
-}
-
 void BaseEvent::to_json(json &j) const {
   // EventType to string conversion is handled by consumers
   JsonUtils::set_value(

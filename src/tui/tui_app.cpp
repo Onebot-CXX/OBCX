@@ -29,7 +29,6 @@ auto level_color(spdlog::level::level_enum level) -> ftxui::Color {
   case spdlog::level::warn:
     return ftxui::Color::Yellow;
   case spdlog::level::err:
-    return ftxui::Color::Red;
   case spdlog::level::critical:
     return ftxui::Color::Red;
   default:

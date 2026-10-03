@@ -106,7 +106,7 @@ The resulting README must state all of the following explicitly:
 
 ```markdown
 - `OBCX_ACTOR_EXPORT_V2` exports the numeric ABI generation, factory,
-  destructor, actor name, actor version, and generated schema-1 input contract.
+  destructor, actor name, actor version, and generated schema-2 input contract.
 - Supported build baseline: Linux x86_64/arm64, CMake 3.30+, GCC 16.1+,
   C++26, `-freflection`, and `__cpp_impl_reflection >= 202506L`.
 - Bridge consumes `obcx::message_store::events::MessageStored` and emits
@@ -222,7 +222,7 @@ Use this current contract:
 - Linux x86_64/arm64, CMake 3.30+, GCC 16.1+, C++26,
   `-freflection`, `__cpp_impl_reflection >= 202506L`.
 - `OBCX_ACTOR_EXPORT_V2` supplies ABI generation, factory, destructor, name,
-  version, and schema-1 input contract.
+  version, and schema-2 input contract.
 - `actor.toml` is the canonical identity/dependency/publication document.
 - Package dependencies use `[dependencies].packages`; actor dependencies use
   `[dependencies].actors`; the consuming OBCX checkout merges dependencies

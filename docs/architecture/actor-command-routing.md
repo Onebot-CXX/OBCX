@@ -33,7 +33,8 @@ public:
 ```
 
 `command_contract()` adds command name, description, canonical request message
-identity, and an optional RE2 matcher to the existing ABI V2 input contract.
+identity, an optional RE2 matcher, and an opt-in data-only availability marker
+to the existing ABI V2 input contract.
 The ordinary name remains the command's stable identity for configuration,
 catalogs, diagnostics, processed headers, and actor invocations. A matcher only
 adds ways to select that command; it does not replace the name or choose a
@@ -55,6 +56,24 @@ Declarations do not change data flow until configuration activates them:
 [command_runtime]
 timeout_ms = 5000
 
+[command_runtime.help]
+page_bytes = 3500
+maximum_pages = 10
+
+[command_runtime.access.groups]
+mode = "unrestricted"
+entries = []
+
+[command_runtime.access.users]
+mode = "unrestricted"
+entries = []
+
+[[command_runtime.message_observers]]
+actor = "activity_tracker"
+platforms = ["telegram"]
+bots = ["telegram_bot"]
+timeout_ms = 5000
+
 [[command_runtime.routes]]
 actor = "example"
 commands = ["ping"]
@@ -63,6 +82,14 @@ bots = ["telegram_bot", "qq_bot"]
 fallback = "continue"
 # timeout_ms = 10000 # optional route override
 ```
+
+A message observer receives the original `RawMessageEvent` before command
+detection, access checks, help handling, or command propagation. This allows
+installation-scoped activity tracking to include consumed and denied commands
+without passing those commands through the ordinary message pipeline. Observer
+actor, platform, bot, and timeout fields are all explicit. The actor must accept
+`RawMessageEvent` and must not emit messages. Observer failures are reported but
+do not suppress command handling or ordinary message routing.
 
 The runtime expands each route to immutable
 `(platform, bot, command) -> (actor, request_type)` entries for one generation.
@@ -75,6 +102,51 @@ publication.
 `fallback` is `continue` or `consume` and is used for actor failure, malformed
 or missing completion, cancellation, and timeout. It does not replace the
 actor's successful propagation decision.
+
+The help bounds and both access policies are required whenever routes are
+configured; OBCX does not infer access defaults. Policy modes are
+`unrestricted`, `allowlist`, or `denylist`. Unrestricted policies require an
+empty `entries` array. Group entries use exact `platform`, `bot`, and
+`native_group_id`; user entries use exact `platform`, `bot`, and
+`native_user_id`. A bot is
+an installation ID, not a provider-wide identity. Per-command overrides are
+keyed by canonical command name and completely replace both global dimensions:
+
+```toml
+[command_runtime.access.overrides.ping.groups]
+mode = "allowlist"
+entries = [
+  { platform = "telegram", bot = "telegram_bot", native_group_id = "-100123" },
+]
+
+[command_runtime.access.overrides.ping.users]
+mode = "allowlist"
+entries = [
+  { platform = "telegram", bot = "telegram_bot", native_user_id = "456" },
+]
+```
+
+Here `ping` identifies the command, not its actor. Its route determines the
+actor; other commands handled by that actor are unaffected. Use another key,
+such as `[command_runtime.access.overrides.help.groups]`, for a separate command.
+Both `groups` and `users` must specify `mode` and `entries`; nothing is inherited
+from the global policy within an override.
+
+To migrate the old array syntax, replace
+`[[command_runtime.access.overrides]]` plus `command = "ping"` with
+`[command_runtime.access.overrides.ping]`, or add `.ping` to each nested policy
+heading as above. Remove the redundant `command` field. Legacy override arrays
+are rejected with a migration diagnostic. Validate the configuration before
+reloading or restarting with the updated binary.
+
+Override names must be active canonical command names or `help`; aliases do not
+name policies. In a group, both effective group and user policies must permit
+the call. In a private conversation only the effective user policy applies.
+Constrained policies fail closed when normalized ingress identity is missing or
+inconsistent. Command policy also requires the process-supplied installation;
+the legacy event `self_id` fallback is not an ACL identity. A recognized denial
+is consumed as `command_access_denied`
+before actor, provider, or ordinary-pipeline side effects.
 
 Each active matcher is compiled into its generation's immutable routing table.
 Patterns use RE2 UTF-8 `FullMatch`, `log_errors = false`, a 4 KiB pattern byte
@@ -106,12 +178,108 @@ not enough. If different patterns both match, the coordinator reports
 and sends the original event through ordinary routing exactly once.
 
 After generation activation, the runtime derives one sorted aggregate catalog
-per bot across all active actors. Supported platforms receive a complete
-replacement publication with bounded retries. Desired/observed generation,
-attempt, retry, and failure status remain generation-owned. Publication
-failure does not disable local command routing, and superseded generations
-stop retrying. Only canonical names and descriptions enter this catalog;
-patterns and inferred aliases are never published.
+per bot across all active actors and adds one reserved `help` entry. Supported
+platforms receive a complete replacement publication with bounded retries.
+Desired/observed generation, attempt, retry, and failure status remain
+generation-owned. Publication failure does not disable local command routing,
+and superseded generations stop retrying. Only canonical names and
+descriptions enter this catalog; patterns, inferred aliases, and per-caller
+access-filtered variants are never published.
+
+## Built-in Help
+
+`help` is reserved by core: actor contracts and actor-owned routes cannot
+register it. Every exact platform/installation scope containing an active actor
+command receives one synthetic exact `/help`. It accepts no arguments and
+never invokes an actor.
+
+For an authorized caller, help and execution use the same eligibility check:
+exact active route, effective command ACL, and any actor-owned availability
+scope must all permit the caller. Help lists only eligible commands in
+canonical-name order, including permitted `help`. A group with no eligible actor
+commands still receives `/help` if its help ACL allows it. Each complete `/<name> - <description>` entry stays
+on one plain UTF-8 page. Candidate generation validation rejects entries or
+catalogs that cannot fit the explicit byte and page-count bounds rather than
+truncating output.
+
+The platform adapter converts each page into a closed typed operation without
+calling a provider. Telegram group/topic/private and OneBot group/private
+sources retain their exact installation and native destination. The
+coordinator submits pages sequentially through the process-owned
+`BotOperationGateway`. It stops after the first definite failure or possibly
+submitted outcome and never retries or falls through to ordinary routing.
+Validation-only and reload-candidate construction send no help pages and
+publish no catalog. Access policies, actor availability scopes, help bounds,
+routes, and rendered catalog inputs are immutable per generation. An invalid candidate leaves the active
+policy and published catalog unchanged; admitted work drains against its old
+generation. To roll back a valid policy-only deployment, restore the previous
+explicit `command_runtime.help` and `command_runtime.access` tables and perform
+another reload. No database rollback is involved.
+
+## Actor-Owned Command Availability
+
+An actor whose commands apply only to its configured groups/topics can wrap an
+observation with `obcx::command::actor_scoped(...)`. This emits
+`"availability": "actor_scope"` in its static input contract; it does not expose
+a handler or callback. Unmarked actors preserve their existing ACL-only behavior.
+Updated scoped actors require a supporting runtime and must be deployed with it.
+
+The installed `<core/actor/command_availability.hpp>` provides `GroupScope`,
+`Subject`, the pure `matches` helper, and `AvailabilityPublisher`. In
+`prepare_generation`, derive scopes from the actor's existing parsed immutable
+configuration and publish through the owner-bound service:
+
+```cpp
+auto publisher = context.get_service<obcx::command::AvailabilityPublisher>();
+if (!publisher) {
+  return obcx::core::ActorPreparationResult::failed(
+      "command availability publisher is unavailable");
+}
+// Actor-owned pure helper over the same parsed config used by execution.
+publisher->publish("ping", command_scopes(parsed_config));
+```
+
+Publish before any validation-only early return. Each `GroupScope` contains an
+exact normalized platform, installation (`bot`), native group id, explicit
+`TopicSelection`, and optional topic id. `None` permits no topic; `Exact`
+requires a positive Telegram topic; `Any` permits both no-topic and any positive
+Telegram topic. QQ requires `None`. Group scopes never match private chats, and
+identities are opaque exact strings, not wildcard patterns. There is no
+additional operator configuration or second group allowlist.
+
+Publish an empty set to make a command unavailable everywhere. Missing required
+publication, duplicate publication, wrong ownership, invalid scopes, or missing,
+disabled, or mismatched installations reject the candidate. The core copies and
+freezes values after preparation; actors cannot mutate an active scope or use
+scope matching to run I/O. Scope availability cannot override an ACL denial.
+
+Bridge projects its existing installation-pair/group/topic command mappings;
+QQ `bridge_status` retains the QQ-to-Telegram direction requirement. Telegram
+command applicability retains its existing mapping semantics, not ordinary
+forwarding direction restrictions. ExHentai projects exact destinations: a
+no-topic target does not imply every topic. ExHentai's required per-destination
+`manager_access` policy governs its management subcommands at execution and does
+not hide `/exhentai` from ordinary members. It explicitly specifies `mode`
+(`allowlist` or `denylist`) and `entries`; the old `manager_ids` format is rejected.
+Core remains unaware of these actor-owned subcommands.
+Argument validation, reply requirements, and transient service failures remain
+handler responsibilities, so eligibility is not a promise of execution success.
+
+An ACL-permitted recognized command outside its actor scope is consumed with
+`command_unavailable` before transaction creation or command-handler dispatch.
+It sends no automatic reply and does not use the route's transaction-error
+fallback, including `fallback = "continue"`. Existing pre-command message
+observers still run. Truly unmatched traffic and valid command completions
+retain their existing propagation behavior. Diagnostics do not dump scope lists,
+native ids, source content, or secrets.
+
+Scopes follow the generation snapshot: admitted old work uses old scopes, failed
+candidates change nothing, and new admissions switch at successful cutover. For
+example, an ACL-permitted QQ group configured only in ExHentai sees `/exhentai`
+and `/help`, not `/bridge_status`, without a Bridge ACL override. Telegram's
+**bot-wide command menu remains the complete active catalog**; only the textual
+`/help` reply is caller-filtered. Roll back with a compatible core/actor bundle;
+this feature introduces no storage migration.
 
 ## Completion And Propagation
 

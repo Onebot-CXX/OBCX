@@ -1,20 +1,22 @@
 #!/bin/sh
+# Historical pre-v2 bundle inspection only; never a current workspace bootstrap.
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-actor_root=${OBCX_ACTOR_SOURCE_ROOT:-local_actor}
+: "${OBCX_ACTOR_SOURCE_ROOT:?Set an explicit directory for historical bundle inspection; do not use maintained v2 checkouts}"
+actor_root=$OBCX_ACTOR_SOURCE_ROOT
 
 restore_actor_source() {
   actor=$1
 
   case "$actor" in
     bridge)
-      repository=obcx-actor-bridge
+      repository=obcx-message-bridge
       base_revision=de8c3046c218c9e2a254abe832e91595f4cc629a
       bundle_ref=refs/heads/develop
       ;;
     message-store)
-      repository=obcx-actor-message-store
+      repository=obcx-message-store
       base_revision=3a9dfc2b27375d22531b4308356b75f4bac7077f
       bundle_ref=refs/remotes/origin/main
       ;;

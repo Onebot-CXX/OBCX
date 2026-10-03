@@ -1,8 +1,21 @@
+include("${CMAKE_SOURCE_DIR}/cmake/OBCXActorIdentity.cmake")
+function(obcx_bind_fixture_identity TARGET_NAME ACTOR_NAME ACTOR_VERSION)
+  _obcx_bind_actor_identity("${TARGET_NAME}" "fixture.${ACTOR_NAME}"
+    "${ACTOR_NAME}" "${ACTOR_VERSION}"
+    "${CMAKE_CURRENT_BINARY_DIR}/actor-identities/${TARGET_NAME}")
+endfunction()
+
 add_library(obcx_multiple_inheritance_actor SHARED
             fixtures/multiple_inheritance_actor.cpp)
 target_link_libraries(obcx_multiple_inheritance_actor PRIVATE obcx_core)
+obcx_bind_fixture_identity(obcx_multiple_inheritance_actor multiple_inheritance_actor 1.0.0)
 set_target_properties(obcx_multiple_inheritance_actor
                       PROPERTIES OUTPUT_NAME multiple_inheritance_actor)
+
+foreach(_schema IN ITEMS 999)
+  add_library(obcx_schema_probe_${_schema} SHARED fixtures/schema_gate_probe_actor.cpp)
+  target_compile_definitions(obcx_schema_probe_${_schema} PRIVATE OBCX_PROBE_SCHEMA=${_schema})
+endforeach()
 
 add_library(obcx_invalid_actor SHARED fixtures/invalid_actor.cpp)
 set_target_properties(obcx_invalid_actor PROPERTIES OUTPUT_NAME invalid_actor)
@@ -14,11 +27,19 @@ set_target_properties(obcx_activation_failure_actor
 
 add_library(obcx_test_actor_v2 SHARED fixtures/test_actor_v2.cpp)
 target_link_libraries(obcx_test_actor_v2 PRIVATE obcx_core)
+obcx_bind_fixture_identity(obcx_test_actor_v2 test_actor_v2 2.0.0)
 set_target_properties(obcx_test_actor_v2 PROPERTIES OUTPUT_NAME test_actor_v2)
+
+add_library(obcx_scoped_actor_v2 SHARED fixtures/test_actor_v2.cpp)
+target_link_libraries(obcx_scoped_actor_v2 PRIVATE obcx_core)
+obcx_bind_fixture_identity(obcx_scoped_actor_v2 test_actor_v2 2.0.0)
+target_compile_definitions(obcx_scoped_actor_v2 PRIVATE OBCX_TEST_COMMAND_SCOPE)
+set_target_properties(obcx_scoped_actor_v2 PROPERTIES OUTPUT_NAME scoped_actor_v2)
 
 add_library(obcx_reload_lifecycle_actor SHARED
             fixtures/reload_lifecycle_actor.cpp)
 target_link_libraries(obcx_reload_lifecycle_actor PRIVATE obcx_core)
+obcx_bind_fixture_identity(obcx_reload_lifecycle_actor reload_lifecycle_actor 1.0.0)
 set_target_properties(obcx_reload_lifecycle_actor
                       PROPERTIES OUTPUT_NAME reload_lifecycle_actor)
 
@@ -37,6 +58,7 @@ foreach(generation IN ITEMS 1 2)
 
   add_library(obcx_private_actor_v${generation} SHARED
               fixtures/private_dependency_actor.cpp)
+  obcx_bind_fixture_identity(obcx_private_actor_v${generation} private_dependency_actor 1.0.0)
   target_link_libraries(
     obcx_private_actor_v${generation}
     PRIVATE obcx_core obcx_private_dependency_v${generation})
@@ -50,6 +72,7 @@ foreach(generation IN ITEMS 1 2)
 
   add_library(obcx_rebuilt_actor_v${generation} SHARED
               fixtures/test_actor_v2.cpp fixtures/rebuilt_actor_marker.cpp)
+  obcx_bind_fixture_identity(obcx_rebuilt_actor_v${generation} test_actor_v2 2.0.0)
   target_compile_definitions(
     obcx_rebuilt_actor_v${generation}
     PRIVATE OBCX_REBUILT_ACTOR_GENERATION=${generation})
@@ -93,7 +116,17 @@ obcx_add_contract_fixture(unsorted_command 10)
 obcx_add_contract_fixture(command_callable 11)
 obcx_add_contract_fixture(command_unsupported_input 12)
 obcx_add_contract_fixture(command_invalid_name 13)
+obcx_add_contract_fixture(command_reserved_name 24)
+obcx_add_contract_fixture(command_scope_unknown 26)
+obcx_add_contract_fixture(command_scope_type 27)
+obcx_add_contract_fixture(command_scope_callable 28)
 obcx_add_contract_fixture(command_invalid_pattern 14)
 obcx_add_contract_fixture(command_matcher_callable 15)
 obcx_add_contract_fixture(command_matcher_kind 16)
 obcx_add_contract_fixture(command_pattern_too_large 17)
+obcx_add_contract_fixture(collection_callable 18)
+obcx_add_contract_fixture(collection_duplicate_field 19)
+obcx_add_contract_fixture(collection_duplicate_type 20)
+obcx_add_contract_fixture(collection_invalid_alternative 21)
+obcx_add_contract_fixture(collection_unknown_unique_field 22)
+obcx_add_contract_fixture(collection_unknown_reference 23)

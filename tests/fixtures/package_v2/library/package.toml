@@ -1,0 +1,36 @@
+schema_version = 2
+
+[package]
+id = "example.mapping"
+name = "mapping"
+version = "0.1.0"
+kind = "library"
+
+[artifact]
+kind = "static-library"
+name = "mapping"
+target = "example_mapping"
+export_target = "example::mapping"
+platforms = ["linux-x86_64", "linux-arm64"]
+
+[dependencies]
+libraries = []
+actors = []
+system = []
+
+[test_dependencies]
+libraries = []
+system = []
+
+[compatibility]
+cpp_standard = 20
+compiler = { id = "GNU", version = ">=16.1.0" }
+stdlib = "libstdc++"
+cxx11_abi = 1
+pic = true
+
+[publication]
+repository = "https://example.invalid/mapping"
+homepage = "https://example.invalid/mapping"
+license = "MIT"
+description = "Offline package contract fixture, not a published library"

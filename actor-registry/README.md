@@ -1,36 +1,20 @@
-# OBCX Actor Registry
+# Package registry conformance snapshot
 
-This directory is the actor-only publication registry for OBCX ABI 2
-packages. A submission is a canonical `entries/<actor-id>/actor.toml`; no
-second metadata dialect is accepted.
+The publication source is the independent `obcx-actor-registry` repository.
+This directory mirrors its v2 metadata, thin command wrapper and deterministic
+`index/packages.json` for core conformance checks. No independent metadata
+validator or schema is maintained here.
 
-Validate entries and confirm that the checked-in index is current:
+From the core repository:
 
-```bash
-python3 actor-registry/generate_actor_index.py validate
-python3 actor-registry/generate_actor_index.py generate --check
+```sh
+python3 cmake/package_tool.py registry-validate --entries actor-registry/entries
+python3 cmake/package_tool.py registry-index --entries actor-registry/entries \
+  --output actor-registry/index/packages.json --check
 ```
 
-Regenerate `index/actors.json` after adding or updating an entry:
-
-```bash
-python3 actor-registry/generate_actor_index.py generate
-```
-
-Resolve a release artifact deterministically:
-
-```bash
-python3 actor-registry/generate_actor_index.py resolve \
-  --id vollate.bridge --version 0.1.0 --platform linux-x86_64
-```
-
-`artifact.platforms` is the authoritative list of binary assets actually
-built and verified for a package version. The generator emits only those
-platforms and names each release asset with its OS/architecture triple; it
-never fabricates downloads for unverified operating systems.
-
-The entry schema is `schemas/actor-registry-entry.schema.json`; the generated
-index schema is `schemas/actor-index.schema.json`. Generation validates every
-submission with the same canonical metadata validator used by OBCX CMake and
-sorts entries by actor id and version, so identical inputs produce identical
-bytes.
+This is an **unpublished development snapshot**, not a newly pinned release.
+The index has status `development-metadata-only` and advertises no downloads.
+Old release binaries cannot become verified v2 assets merely by renaming their
+metadata. Release tooling pins, inventories and coordinated publication remain
+deferred. The old actor-only generator/index/schema are removed, with no fallback.

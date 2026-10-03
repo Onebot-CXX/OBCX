@@ -1,5 +1,13 @@
 # Actor-Only Runtime Breaking Change
 
+> Historical SDK note: this document records the earlier migration. References
+> to `BotOperationClient` or schema-1 input contracts describe the retired SDK;
+> see the [current modular SDK migration](architecture/modular-bot-sdk-migration.md) for schema 2.
+> The `actor.toml`/`OBCXActor.cmake` build instructions below are also historical:
+> current builds require schema-v2 `package.toml`, an explicit `packages.toml`
+> and lock, and `OBCXPackages.cmake`. Use [package builds](architecture/package-cmake.md),
+> not the retired commands in this record.
+
 Applies to: OBCX C++26 reflected-actor cutover
 
 Date: 2026-07-30
@@ -56,8 +64,9 @@ loader's generic behavior; it is not treated as a migration input.
 
 ## Required package changes
 
-1. Inherit `ReflectedActor<Derived>` and declare `actor_name` and
-   `actor_version` constants.
+1. Inherit `ReflectedActor<Derived>`. The package build generates inherited
+   `actor_name` and `actor_version` from `actor.name` and `package.version`;
+   do not repeat these constants in C++.
 2. Replace `handle_message` string switches with public direct `handle`
    overloads whose exact parameters are `(const Message&,
    const MessageEnvelope&, ActorContext&)`.
@@ -68,10 +77,11 @@ loader's generic behavior; it is not treated as a migration input.
 4. Provide nlohmann ADL JSON conversion for each input and typed output.
 5. Export the class with `OBCX_ACTOR_EXPORT_V2`; do not hand-write the input
    contract.
-6. Add complete canonical `actor.toml` metadata including the C++26,
+6. Add complete canonical `package.toml` metadata including the C++26,
    GCC/reflection, and input-contract compatibility fields.
-7. Build with `find_package(obcx-sdk CONFIG REQUIRED)`, `include(OBCXActor)`,
-   and `obcx_add_actor(...)`.
+7. Build with `find_package(obcx-sdk CONFIG REQUIRED)`, `include(OBCXPackages)`,
+   an explicit workspace and `obcx_add_actor(...)`. Register internal targets
+   with `obcx_package_target` so they receive the same generated identity.
 8. Use fully qualified message names in pipeline configuration and explicit
    `after` edges for dependency ordering.
 9. Build and test against a clean OBCX SDK installation before publishing.
@@ -143,8 +153,8 @@ mode = "await"
 
 ## Verification and recovery
 
-Use `actor_sdk_v2_smoke`, `actor_architecture_test`, and the standalone
-repository conformance test before deployment. Operational rollback means
+Use the complete root suite and `actor_sdk_v2_smoke` before deployment.
+Standalone actor repositories run their own release gates. Operational rollback means
 deploying the preceding OBCX release together with its matching configuration
 and extension binaries; it does not mean switching the actor-only executable
 to another runtime path.

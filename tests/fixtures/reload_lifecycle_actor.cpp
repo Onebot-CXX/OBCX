@@ -1,5 +1,6 @@
-#include "core/actor_messages.hpp"
-#include "core/reflected_actor.hpp"
+#include "core/actor/actor_messages.hpp"
+#include "core/actor/command_availability.hpp"
+#include "core/actor/reflected_actor.hpp"
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -51,13 +52,29 @@ static void write_marker(const std::string &path, const std::string &value) {
 class ReloadLifecycleActor final
     : public core::ReflectedActor<ReloadLifecycleActor> {
 public:
-  static constexpr std::string_view actor_name = "reload_lifecycle_actor";
-  static constexpr std::string_view actor_version = "1.0.0";
-
   static constexpr auto command_contract() {
-    return command::catalog(command::observe<events::ReloadCommand>(
-        "reload_probe", "Exercise generation command draining",
-        command::re2(R"(^(?:reload_probe|reload_alias)$)")));
+    return command::catalog(
+        command::observe<events::ReloadCommand>(
+            "reload_probe", "Exercise generation command draining",
+            command::re2(R"(^(?:reload_probe|reload_alias)$)")),
+        command::actor_scoped(command::observe<events::ReloadCommand>(
+            "scoped_probe", "Exercise scoped command draining")));
+  }
+
+  auto prepare_generation(core::ActorContext &context)
+      -> core::ActorPreparationResult {
+    if (const auto group =
+            context.config().get_value<std::string>("scope_group")) {
+      const auto publisher =
+          context.get_service<command::AvailabilityPublisher>();
+      if (!publisher) {
+        return core::ActorPreparationResult::failed("scope publisher missing");
+      }
+      publisher->publish("scoped_probe",
+                         {{"qq", "primary", *group,
+                           command::TopicSelection::None, std::nullopt}});
+    }
+    return core::ActorPreparationResult::ready();
   }
 
   ~ReloadLifecycleActor() override {

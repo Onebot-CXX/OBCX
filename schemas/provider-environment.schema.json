@@ -1,0 +1,81 @@
+{
+  "$id": "https://onebot-cxx.github.io/obcx/schemas/provider-environment.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "inputs": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "format": "relative-path",
+            "minLength": 1,
+            "type": "string"
+          },
+          "sha256": {
+            "minLength": 1,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "kind": {
+      "enum": [
+        "nix",
+        "vcpkg",
+        "environment",
+        "workspace-sdk",
+        "installed-sdk"
+      ],
+      "type": "string"
+    },
+    "prefixes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "base": {
+            "enum": [
+              "workspace",
+              "build",
+              "absolute"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "base",
+          "path"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schema_version": {
+      "const": 2,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "kind",
+    "inputs",
+    "prefixes"
+  ],
+  "title": "OBCX v2 provider-environment",
+  "type": "object"
+}

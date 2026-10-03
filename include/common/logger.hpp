@@ -1,6 +1,8 @@
-#pragma once
+#ifndef OBCX_INCLUDE_COMMON_LOGGER_HPP_
+#define OBCX_INCLUDE_COMMON_LOGGER_HPP_
 
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -8,6 +10,15 @@
 #ifdef OBCX_DEBUG_TRACE
 #include <fmt/color.h>
 #include <fmt/format.h>
+#endif
+
+// Source ownership is selected at the macro call site, never in a shared
+// inline function or mutable thread/process context.
+#ifdef OBCX_ACTOR_METADATA_HEADER
+#include OBCX_ACTOR_METADATA_HEADER
+#define OBCX_CURRENT_LOGGER() ::obcx::common::Logger::get(OBCX_ACTOR_NAME)
+#else
+#define OBCX_CURRENT_LOGGER() ::obcx::common::Logger::get()
 #endif
 
 namespace obcx::common {
@@ -69,14 +80,15 @@ public:
 private:
   static std::shared_ptr<spdlog::logger> default_logger_;
   static std::shared_ptr<tui_sink_mt> tui_sink_;
-  static bool initialized_;
+  static std::once_flag initialization_;
+  static std::mutex registry_mutex_;
 };
 
 #ifdef OBCX_DEBUG_TRACE
 #define OBCX_LOG_IMPL(__level, __fmt_str, ...)                                 \
   do {                                                                         \
-    if (obcx::common::Logger::get()->should_log(spdlog::level::__level)) {     \
-      obcx::common::Logger::get()->log(                                        \
+    if (OBCX_CURRENT_LOGGER()->should_log(spdlog::level::__level)) {           \
+      OBCX_CURRENT_LOGGER()->log(                                              \
           spdlog::level::__level,                                              \
           fmt::format("{} " __fmt_str,                                         \
                       fmt::styled(fmt::format("[{}:{}]", __FILE__, __LINE__),  \
@@ -92,12 +104,14 @@ private:
 #define OBCX_ERROR(__fmt, ...) OBCX_LOG_IMPL(err, __fmt, ##__VA_ARGS__)
 #define OBCX_CRITICAL(__fmt, ...) OBCX_LOG_IMPL(critical, __fmt, ##__VA_ARGS__)
 #else
-#define OBCX_TRACE(...) obcx::common::Logger::get()->trace(__VA_ARGS__)
-#define OBCX_DEBUG(...) obcx::common::Logger::get()->debug(__VA_ARGS__)
-#define OBCX_INFO(...) obcx::common::Logger::get()->info(__VA_ARGS__)
-#define OBCX_WARN(...) obcx::common::Logger::get()->warn(__VA_ARGS__)
-#define OBCX_ERROR(...) obcx::common::Logger::get()->error(__VA_ARGS__)
-#define OBCX_CRITICAL(...) obcx::common::Logger::get()->critical(__VA_ARGS__)
+#define OBCX_TRACE(...) OBCX_CURRENT_LOGGER()->trace(__VA_ARGS__)
+#define OBCX_DEBUG(...) OBCX_CURRENT_LOGGER()->debug(__VA_ARGS__)
+#define OBCX_INFO(...) OBCX_CURRENT_LOGGER()->info(__VA_ARGS__)
+#define OBCX_WARN(...) OBCX_CURRENT_LOGGER()->warn(__VA_ARGS__)
+#define OBCX_ERROR(...) OBCX_CURRENT_LOGGER()->error(__VA_ARGS__)
+#define OBCX_CRITICAL(...) OBCX_CURRENT_LOGGER()->critical(__VA_ARGS__)
 #endif
 
 } // namespace obcx::common
+
+#endif // OBCX_INCLUDE_COMMON_LOGGER_HPP_

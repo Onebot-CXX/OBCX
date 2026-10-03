@@ -21,9 +21,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
-      - name: Restore pinned actor sources
-        run: sh packaging/actors/restore-sources.sh
-
       - name: Install Nix
         uses: cachix/install-nix-action@v27
         with:
@@ -43,8 +40,10 @@ jobs:
         include:
           - name: linux-x86_64-gcc16
             os: ubuntu-24.04
+            platform: linux-x86_64
           - name: linux-arm64-gcc16
             os: ubuntu-24.04-arm
+            platform: linux-arm64
 
     steps:
       - name: Checkout
@@ -56,9 +55,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
-      - name: Restore pinned actor sources
-        run: sh packaging/actors/restore-sources.sh
-
       - name: Install Nix
         uses: cachix/install-nix-action@v27
         with:
@@ -69,51 +65,52 @@ jobs:
 
       - name: Prime dev shell
         run: |
-          nix develop --command bash -c '
+          nix develop .#ci --command bash -euo pipefail <<'EOF'
             echo "IN_NIX_SHELL=$IN_NIX_SHELL"
             test -n "$IN_NIX_SHELL"
             echo "CC=$(command -v gcc)"
             echo "CXX=$(command -v g++)"
             g++ --version
             printf '#include <meta>\n' | g++ -std=c++26 -freflection -x c++ -E - >/dev/null
-            echo "CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH"
-          '
+          EOF
 
-      - name: Validate actor registry
+      - name: Validate package registry snapshot
         run: |
-          nix develop --command python3 \
-            actor-registry/generate_actor_index.py validate
-          nix develop --command python3 \
-            actor-registry/generate_actor_index.py generate --check
+          nix develop .#ci --command python3 cmake/package_tool.py registry-validate \
+            --entries actor-registry/entries
+          nix develop .#ci --command python3 cmake/package_tool.py registry-index \
+            --entries actor-registry/entries --output actor-registry/index/packages.json --check
+
+      - name: Prepare explicit core-only workspace
+        run: |
+          printf 'schema_version = 2\nsources = []\nproviders = []\n[workspace]\nroots = []\nplatform = "%s"\nprofile = "tests"\n' \
+            '${{ matrix.platform }}' > packages.toml
 
       - name: Configure
         run: |
-          nix develop --command cmake -G Ninja -B build -S . \
+          nix develop .#ci --command cmake -G Ninja -B build -S . \
             -DCMAKE_BUILD_TYPE=Release \
             -DOBCX_BUILD_TESTS=ON \
             -DOBCX_BUILD_BENCHMARKS=OFF \
-            -DOBCX_ENABLE_CROSS_REPO_ACTOR_TESTS=ON
+            -DOBCX_PACKAGES_WORKSPACE="$PWD/packages.toml" \
+            -DOBCX_PACKAGES_CACHE="$PWD/build/package-state/sources" \
+            -DOBCX_PACKAGES_STATE_DIR="$PWD/build/package-state/cmake" \
+            -DOBCX_PACKAGES_MODE=development
 
       - name: Build
-        run: nix develop --command cmake --build build --parallel
-
-      - name: Install actor SDK
         run: |
-          nix develop --command cmake --install build \
-            --prefix build/actor-sdk-install
+          workers=$(nproc)
+          if [ "$workers" -lt 6 ]; then workers=6; fi
+          nix develop .#ci --command cmake --build build --parallel "$workers"
 
       - name: Generate actor-only API documentation
         run: |
-          nix develop --command python3 scripts/generate_api_docs.py
+          nix develop .#ci --command python3 scripts/generate_api_docs.py
 
       - name: Run full core tests
         working-directory: build
-        run: >-
-          nix develop --command ctest --output-on-failure --parallel 2
-          -LE 'conformance|slow'
-
-      - name: Run standalone actor conformance
-        working-directory: build
-        run: >-
-          nix develop --command ctest --output-on-failure --parallel 2
-          -L conformance
+        run: |
+          workers=$(nproc)
+          if [ "$workers" -lt 6 ]; then workers=6; fi
+          nix develop .#ci --command ctest --output-on-failure --parallel "$workers" \
+            --label-exclude installed-sdk

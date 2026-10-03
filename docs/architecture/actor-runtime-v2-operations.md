@@ -45,6 +45,40 @@ The executor exposes these counters through `BlockingExecutor::metrics()`.
 Startup and shutdown logs publish the same payload-free fields so operators can
 distinguish saturation, callable failures, and shutdown rejection.
 
+## Successful bot-operation observation
+
+The process-owned bot operation dispatcher may install one success handler
+before endpoint registration is sealed. It schedules that handler only after an
+endpoint returns a successful `OperationReply`; rejected, failed, uncertain,
+and malformed operations do not qualify. Observation receives only the typed
+installation and action identities, never the request or response payload, and
+runs asynchronously so observer failure cannot change an already completed
+provider operation.
+
+The application uses this hook for Telegram message-send actions and routes an
+`obcx::core::events::BotMessageSentEvent` through the active actor generation.
+This records transport-proven activity without representing Telegram as having
+a native heartbeat. Non-message Telegram operations and every OneBot operation
+are ignored by this observer.
+
+## Generation preparation
+
+A reflected actor may implement synchronous
+`prepare_generation(ActorContext&) -> ActorPreparationResult`. The V2 export
+helper exposes this through an additive optional ABI symbol. The runtime calls
+it after validated configuration and generation services are available and
+before scheduler/orchestrator registration, so actor-owned schema preparation
+can finish before any message, notice, command, retry worker, or media buffer
+uses that state. `Ready` continues construction, `Failed` rejects the
+generation, and `RestartRequired` produces `reload_restart_required` without
+publishing the candidate.
+
+Actors built before this additive symbol and reflected actors without the hook
+remain `Ready`; their construction and dispatch behavior is unchanged. A hook
+must inspect `ActorGenerationInfo::purpose`: validation-only preparation may
+validate actor-specific configuration but must not mutate state, while a reload
+candidate must return restart-required before any startup-only migration.
+
 ## Reload operation
 
 Enter `reload` in either the TUI command box or the `--no-tui` standard-input
@@ -81,10 +115,10 @@ configuration values.
 
 The transaction has one observable order: `prepare -> gate -> drain ->
 publish -> reopen -> retire`. Parse, staging, contract checks, actor
-construction, and activation all occur during `prepare`, before ingress is
-closed. Publication is a single pointer exchange after the old generation has
-drained; no fallible actor work occurs between publication and reopening the
-gate.
+construction, typed actor generation preparation, and activation all occur
+during `prepare`, before ingress is closed. Publication is a single pointer
+exchange after the old generation has drained; no fallible actor work occurs
+between publication and reopening the gate.
 
 Common operator-facing failure codes are:
 
@@ -95,8 +129,9 @@ Common operator-facing failure codes are:
 | `reload_actor_unavailable` / `reload_contract_invalid` | An actor artifact or ABI 2 contract is invalid; restore a matching artifact set. |
 | `reload_dependency_identity_conflict` | A private shared-library closure could not be isolated; rebuild/package the complete actor closure. |
 | `reload_activation_failed` | Candidate actor construction or scheduler registration failed; inspect candidate logs. |
+| `reload_actor_initialization_failed` | An actor's pre-ingress generation preparation failed; correct its actor-specific configuration/state before retrying. |
 | `reload_bot_unavailable` | A configured identity is absent from the live process-owned registry; restore the startup identity or restart. |
-| `reload_restart_required` | A bot definition, database instance, or resolved thread budget changed; restart the process. |
+| `reload_restart_required` | A process-owned setting changed or an actor reported that startup-only state preparation is required; restart the process. |
 | `reload_drain_timeout` | Old work missed the deadline; ingress has reopened on the old generation. Diagnose the actor before retrying. |
 | `reload_shutdown` | Process shutdown won the race; do not retry in that process. |
 
@@ -119,6 +154,21 @@ proof that the candidate is active.
   blocking work, retires actor instances while retaining their DSO leases,
   drains generation I/O callbacks and completion bridges, and only then
   releases those leases and unloads the DSOs.
+- Installation HTTP clients bind transport resources to their constructor
+  executor, not the actor executor awaiting a request. Completions return to
+  the caller, whose admitted work must drain before its generation retires.
+  Request-local actor clients (including bridge image probes/downloads and GIF
+  detection) must use the running coroutine executor, not a temporary
+  `io_context` that nobody runs; otherwise requests and their deadlines stall.
+- HTTP `close()` is terminal and idempotent: it rejects new requests and queues
+  owned curl cancellation/cleanup. Keep the owning executor running until that
+  work drains; reconnect by constructing a fresh client. Synchronous legacy
+  calls use an isolated temporary client/context and drain it before return.
+- Bot stop requests cancellation without forcibly stopping its `io_context`.
+  Join bot runner threads before destroying installations; component teardown
+  happens only after pending polling, timer, socket, and completion work drains.
+  The application's existing deadline bounds bot-thread joins only, after
+  runtime shutdown returns; it does not bound generation I/O drain.
 
 Slow-resume warnings identify cooperative actor code that holds a worker too
 long. Blocking calls should use `ActorContext::run_blocking`; waiting for
@@ -129,42 +179,39 @@ network or timer operations should use `ActorContext::await_asio`.
 Run the standard checks with:
 
 ```bash
-ctest --test-dir build --output-on-failure
-ctest --test-dir build -L actor-runtime --output-on-failure
-ctest --test-dir build -R '^standalone_actor_v2_repositories$' \
-  --output-on-failure
+ctest --test-dir build --parallel 20 --output-on-failure
+ctest --test-dir build --parallel 20 -L actor-runtime --output-on-failure
+ctest --test-dir build --parallel 20 -R '^actor_sdk_v2_smoke$' --output-on-failure
 ```
 
-The generation-scoped actor configuration audit is `actor_architecture_test`;
-the clean external SDK and installed-surface check is `actor_sdk_v2_smoke`.
-The standalone-repository check
-also dynamically loads the installed bridge and message-store artifacts and
-runs a persisted `obcx::core::events::RawMessageEvent ->
-obcx::message_store::events::MessageStored ->
-bridge::events::MessageForwarded`
-pipeline before shutting down the native runtime. It then rewrites a bridge
-group mapping, reloads both installed actors, verifies all post-cutover
-messages use the new destination, and proves the original live bot instances
-were neither stopped nor reconnected.
+The clean external SDK and installed-surface check is `actor_sdk_v2_smoke`.
+That SDK smoke uses root-owned generic actor fixtures. Selected workspace
+packages contribute their own tests; this does not establish a coordinated
+standalone release.
 
-Run the isolated release install and continuous pipeline soak from an empty
-build/install root with:
+### Historical release commands — unavailable after package-v2 cutover
+
+The scripts below describe the pre-v2 release workflow, **not runnable current
+release instructions**. Their orchestration still assumes hardcoded actors,
+removed conformance targets and incomplete single-DSO archives. The CLI now
+refuses these operations before changing directories or producing release
+assets. Inventory/closure-based replacement is deferred; use the workspace
+build and SDK/stager regressions above in the meantime.
+
+The historical isolated install/soak command was:
 
 ```bash
 nix develop --ignore-environment --command \
   python3 scripts/verify_actor_release.py \
     --work-dir /tmp/obcx-actor-release-verification \
-    --soak-messages 100000 --jobs 2
+    --soak-messages 100000 --jobs 20
 ```
 
-The command removes loader-path overrides, performs a Release configure and
-build, installs core and all actor packages into one prefix, starts the
-installed application, and runs the installed message-store-to-bridge
-pipeline. `scripts/rehearse_actor_release_rollback.py` rehearses an atomic
+The old command removed loader-path overrides, built and installed core with
+hardcoded actor packages, and ran an installed message-store-to-bridge pipeline. `scripts/rehearse_actor_release_rollback.py` rehearses an atomic
 deployment-link switch between immutable candidate and previous install roots.
 
-After all source gates are green, prepare deterministic coordinated artifacts
-without publishing them:
+The retired coordinated-artifact command was:
 
 ```bash
 python3 scripts/package_actor_release.py \
@@ -173,8 +220,8 @@ python3 scripts/package_actor_release.py \
 sha256sum --check /tmp/obcx-actor-release-artifacts/SHA256SUMS
 ```
 
-The generated manifest remains `prepared-not-published`; repository rename,
-tagging, and upload are separate external release actions.
+Historical manifests used `prepared-not-published`; the current CLI does not
+generate one. Tagging and upload remain separate, unauthorized external actions.
 
 ## Failure handling
 

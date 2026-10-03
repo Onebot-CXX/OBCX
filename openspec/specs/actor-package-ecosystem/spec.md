@@ -60,16 +60,3 @@ removed behavior.
 #### Scenario: Active surface audit
 - **WHEN** the release source tree and installed artifacts are audited
 - **THEN** extension-facing paths and identifiers use actor terminology and expose no active plugin entry point
-
-### Requirement: Cross-repository actor conformance gates release
-The OBCX release SHALL verify the checked-out bridge, message-store, and
-actor-registry repositories. Every required repository SHALL pass its
-actor-only build and smoke tests against the installed SDK.
-
-#### Scenario: All actor repositories are ready
-- **WHEN** core, bridge, message-store, and registry pass the cross-repository test suite
-- **THEN** the coordinated actor-only release is eligible to proceed
-
-#### Scenario: One repository fails conformance
-- **WHEN** any required repository fails to build, load, publish metadata, or complete its smoke flow
-- **THEN** the actor-only cutover remains incomplete and unreleasable

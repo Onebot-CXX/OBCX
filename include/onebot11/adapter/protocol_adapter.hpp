@@ -1,7 +1,7 @@
-#pragma once
+#ifndef OBCX_INCLUDE_ONEBOT11_ADAPTER_PROTOCOL_ADAPTER_HPP_
+#define OBCX_INCLUDE_ONEBOT11_ADAPTER_PROTOCOL_ADAPTER_HPP_
 
 #include "common/message_type.hpp"
-#include "interfaces/protocol_adapter.hpp"
 #include <optional>
 #include <string>
 #include <string_view>
@@ -25,18 +25,16 @@ enum class MessageType : uint8_t {
  * @brief OneBot v11 协议适配器
  *
  * 协调 OneBot v11 协议和内部模型之间转换的顶层类。
- * 它继承自 BaseProtocolAdapter，实现了统一的接口，并提供了 OneBot v11
- * 特有的功能。
+ * 它作为 OneBot v11 具体协议 capability 提供序列化与事件解析。
  *
  * \~english
  * @brief OneBot v11 Protocol Adapter
  *
  * The top-level class that coordinates the conversion between the OneBot v11
- * protocol and the internal model. It inherits from BaseProtocolAdapter,
- * implements the unified interface, and provides OneBot v11 specific
- * functionalities.
+ * protocol and the internal model. It is installed as the concrete OneBot v11
+ * protocol capability and provides provider-specific functionality.
  */
-class ProtocolAdapter : public BaseProtocolAdapter {
+class ProtocolAdapter {
 public:
   ProtocolAdapter() = default;
 
@@ -53,8 +51,7 @@ public:
    * @return The converted internal Event object if it's a valid event;
    * otherwise returns std::nullopt.
    */
-  auto parse_event(std::string_view json_str)
-      -> std::optional<common::Event> override;
+  auto parse_event(std::string_view json_str) -> std::optional<common::Event>;
 
   /**
    * \~chinese
@@ -79,8 +76,7 @@ public:
   auto serialize_send_message_request(
       std::string_view target_id, const common::Message &message,
       const std::optional<uint64_t> &echo = std::nullopt,
-      const std::optional<uint8_t> &message_type = std::nullopt)
-      -> std::string override;
+      const std::optional<uint8_t> &message_type = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -100,8 +96,7 @@ public:
    */
   auto serialize_delete_message_request(
       std::string_view chat_id, std::string_view message_id,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -116,8 +111,7 @@ public:
    * @return The JSON string payload for the action request.
    */
   auto serialize_get_self_info_request(
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -139,8 +133,7 @@ public:
    */
   auto serialize_get_user_info_request(
       std::string_view chat_id, std::string_view user_id, bool no_cache = false,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -160,8 +153,7 @@ public:
    */
   auto serialize_get_chat_info_request(
       std::string_view chat_id, bool no_cache = false,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -183,8 +175,7 @@ public:
    */
   auto serialize_get_chat_member_info_request(
       std::string_view chat_id, std::string_view user_id, bool no_cache = false,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -203,8 +194,7 @@ public:
    */
   auto serialize_get_chat_admins_request(
       std::string_view chat_id,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -229,8 +219,7 @@ public:
   auto serialize_kick_chat_member_request(
       std::string_view chat_id, std::string_view user_id,
       bool reject_add_request = false, bool revoke_messages = false,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -252,8 +241,7 @@ public:
    */
   auto serialize_ban_chat_member_request(
       std::string_view chat_id, std::string_view user_id, int32_t duration,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -273,8 +261,7 @@ public:
    */
   auto serialize_unban_chat_member_request(
       std::string_view chat_id, std::string_view user_id,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -294,8 +281,7 @@ public:
    */
   auto serialize_ban_all_members_request(
       std::string_view chat_id, bool enable = true,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -315,8 +301,7 @@ public:
    */
   auto serialize_set_chat_title_request(
       std::string_view chat_id, std::string_view title,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -338,8 +323,7 @@ public:
    */
   auto serialize_set_chat_photo_request(
       std::string_view chat_id, std::string_view file, bool cache,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -361,8 +345,7 @@ public:
    */
   auto serialize_set_chat_admin_request(
       std::string_view chat_id, std::string_view user_id, bool is_admin = true,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -381,8 +364,7 @@ public:
    */
   auto serialize_leave_chat_request(
       std::string_view chat_id, bool is_dismiss = false,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -410,8 +392,7 @@ public:
   auto serialize_handle_join_request(
       const common::RequestEvent &request_event, bool approve = true,
       std::string_view reason = "", std::string_view remark = "",
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   /**
    * \~chinese
@@ -430,8 +411,7 @@ public:
    */
   auto serialize_download_file_request(
       std::string_view file_id,
-      const std::optional<uint64_t> &echo = std::nullopt)
-      -> std::string override;
+      const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
   // --- OneBot v11 特有接口 ---
 
@@ -702,3 +682,5 @@ public:
 };
 
 } // namespace obcx::adapter::onebot11
+
+#endif // OBCX_INCLUDE_ONEBOT11_ADAPTER_PROTOCOL_ADAPTER_HPP_

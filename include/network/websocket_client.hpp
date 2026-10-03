@@ -1,4 +1,5 @@
-#pragma once
+#ifndef OBCX_INCLUDE_NETWORK_WEBSOCKET_CLIENT_HPP_
+#define OBCX_INCLUDE_NETWORK_WEBSOCKET_CLIENT_HPP_
 
 #include "network/detail/websocket_write_queue.hpp"
 
@@ -81,3 +82,5 @@ private:
 };
 
 } // namespace obcx::network
+
+#endif // OBCX_INCLUDE_NETWORK_WEBSOCKET_CLIENT_HPP_

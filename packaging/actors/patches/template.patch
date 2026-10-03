@@ -1,18 +1,18 @@
-From c18cef88b586de95c927def3c30b273641c853e5 Mon Sep 17 00:00:00 2001
+From 30a1373f53b637eb8bf00250c8f9c3ca26578512 Mon Sep 17 00:00:00 2001
 From: Vollate <uint44t@gmail.com>
-Date: Tue, 14 Jul 2026 03:23:59 +0800
-Subject: [PATCH 1/3] feat: convert template to actor package
+Date: Tue, 15 Sep 2026 17:00:00 +0800
+Subject: [PATCH] chore: synchronize pinned actor source
 
 ---
- CMakeLists.txt         |  24 +++------
- README.md              | 118 ++++++++++++++++-------------------------
- actor.toml             |  29 ++++++++++
- plugin.toml            |  17 ------
- src/example_actor.cpp  |  24 +++++++++
- src/example_actor.hpp  |  17 ++++++
- src/example_plugin.cpp |  41 --------------
- src/example_plugin.hpp |  18 -------
- 8 files changed, 124 insertions(+), 164 deletions(-)
+ CMakeLists.txt         |  26 ++---
+ README.md              | 220 ++++++++++++++++++++++++++++-------------
+ actor.toml             |  33 +++++++
+ plugin.toml            |  17 ----
+ src/example_actor.cpp  |  52 ++++++++++
+ src/example_actor.hpp  |  72 ++++++++++++++
+ src/example_plugin.cpp |  41 --------
+ src/example_plugin.hpp |  18 ----
+ 8 files changed, 318 insertions(+), 161 deletions(-)
  create mode 100644 actor.toml
  delete mode 100644 plugin.toml
  create mode 100644 src/example_actor.cpp
@@ -21,12 +21,13 @@ Subject: [PATCH 1/3] feat: convert template to actor package
  delete mode 100644 src/example_plugin.hpp
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 3ca92913249704d229eb8813da0b5550f7e707da..d8f0ee75696bb3b5d12634851ab13ee56e5b66e0 100644
+index 3ca9291..6ff1a7d 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -1,21 +1,13 @@
- cmake_minimum_required(VERSION 3.20)
+-cmake_minimum_required(VERSION 3.20)
 -project(obcx-plugin-example LANGUAGES CXX)
++cmake_minimum_required(VERSION 3.25)
 +project(obcx_actor_example VERSION 0.1.0 LANGUAGES CXX)
  
 -# When built standalone (outside OBCX tree), find the installed SDK
@@ -55,81 +56,187 @@ index 3ca92913249704d229eb8813da0b5550f7e707da..d8f0ee75696bb3b5d12634851ab13ee5
 +target_include_directories(example_actor PRIVATE
 +  ${CMAKE_CURRENT_SOURCE_DIR}/src)
 diff --git a/README.md b/README.md
-index a41f3f5b971a213468879faa59bf9390b24362f0..33035b65501f6f86054d287829c77de5e55f64f4 100644
+index a41f3f5..ec854b9 100644
 --- a/README.md
 +++ b/README.md
-@@ -1,82 +1,56 @@
+@@ -1,82 +1,166 @@
 -# OBCX Plugin Template
--
--A template repository for creating [OBCX](https://github.com/Onebot-CXX/OBCX) plugins.
--
--## Usage
--
--Use this template to bootstrap a new OBCX plugin project:
 +# OBCX Actor Template
-+
-+This repository is the canonical starting point for a native V2 OBCX actor
-+package. It uses `IActorV2`, `ActorTask<ActorResult>`, `actor.toml`, the
-+installed `obcx-sdk`, and `OBCXActor.cmake`; it contains no runtime adapter or
-+alternate extension entry point.
-+
+ 
+-A template repository for creating [OBCX](https://github.com/Onebot-CXX/OBCX) plugins.
++This repository is the canonical starting point for a native ABI 2 OBCX actor
++package. It uses `ReflectedActor<Derived>`, typed `handle` overloads,
++`ActorTask<ActorResult>`, canonical `actor.toml` metadata, the installed
++`obcx-sdk`, and `OBCXActor.cmake`. It contains no runtime adapter or alternate
++extension system.
+ 
+-## Usage
 +## Create An Actor
-+
+ 
+-Use this template to bootstrap a new OBCX plugin project:
 +1. Copy or instantiate this repository as an actor-named project.
 +2. Update every required field in `actor.toml`. Keep `actor.abi = 2`,
 +   `artifact.kind = "shared-library"`, and
-+   `artifact.entrypoint = "obcx_create_actor_v2"`.
-+   List only built and verified release targets in `artifact.platforms`.
++   `artifact.entrypoint = "obcx_create_actor_v2"`. List only built and
++   verified release targets in `artifact.platforms`.
 +3. Rename `ExampleActor`, its source files, and the `obcx_add_actor` target.
 +   `artifact.target` must equal `<name>_actor`; `artifact.name` must equal the
 +   helper's `OUTPUT_NAME`.
-+4. Implement `handle_message` as an `ActorTask<ActorResult>`. Use
-+   `ActorContext::await_asio` for network, timer, or other Asio suspension.
-+
-+## Build And Install
-+
-+Install OBCX or point CMake to an SDK prefix, then run:
-+
-+```bash
-+cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/obcx-sdk-prefix
-+cmake --build build
-+cmake --install build --prefix /path/to/actor-prefix
-+```
++4. Define named message types with nlohmann ADL JSON conversions and implement
++   public direct `handle` overloads returning `ActorResult` or
++   `ActorTask<ActorResult>`. Keep bounded in-memory work synchronous, use
++   `ActorContext::run_blocking` for synchronous database, filesystem, or
++   CPU-heavy calls, and use `ActorContext::await_asio` for network, timer, or
++   other Asio suspension.
++5. For a platform command, derive one request type from
++   `command::RequestMessage`, expose it with `command_contract()`, and handle
++   that request like any other reflected actor message. Return exactly one
++   correlated `command::CommandCompleted`; its `Continue` or `Consume` value
++   controls whether the original `RawMessageEvent` enters ordinary pipelines.
++   An optional `command::re2(...)` adds normalized full-match aliases while the
++   ordinary command name remains the configuration, catalog, header, and
++   invocation identity. Do not put a handler name or callable in the command
++   declaration.
  
 -1. Click **"Use this template"** on GitHub, or clone manually:
-+The shared actor is installed under `lib/obcx/actors/` and its canonical
-+metadata under `share/obcx/actors/<actor-id>/actor.toml`.
++`OBCX_ACTOR_EXPORT_V2` supplies the numeric ABI generation, factory,
++destructor, actor name, actor version, and generated schema-2 input contract.
++The runtime validates this contract before actor construction.
  
 -   ```bash
 -   git clone https://github.com/Onebot-CXX/obcx-plugin-template.git my-plugin
 -   cd my-plugin
 -   ```
-+## Dependencies
++`ExampleRequested` demonstrates the synchronous handler shape.
++`ExampleBlockingRequested` demonstrates the blocking boundary:
  
 -2. Rename and edit files to match your plugin:
 -   - Update `plugin.toml` with your plugin metadata
 -   - Rename/replace `src/example_plugin.cpp` and `src/example_plugin.hpp`
 -   - Update `CMakeLists.txt` (plugin name, sources, dependencies)
-+Declare package-manager dependency names only in
-+`[dependencies].packages` and actor dependencies only in
-+`[dependencies].actors`. The OBCX vcpkg generator reads these canonical fields:
++```cpp
++auto value = co_await context.run_blocking([input] {
++  return synchronous_library_call(input);
++});
++```
++
++The callable runs on the process blocking pool and the continuation returns
++through the actor scheduler. It must not capture stack references that may
++expire, and it must return an owned value rather than a reference or an Asio
++awaitable. Do not move timers, sockets, bot sends, or an entire coroutine graph
++onto this pool.
  
 -3. Build (standalone):
-+```bash
-+python3 cmake/gen_vcpkg_manifest.py actors.toml
-+```
++## Build And Install
  
 -   ```bash
 -   cmake -B build
 -   cmake --build build
 -   ```
-+Use ordinary `find_package()` calls and pass linked CMake targets through the
-+`DEPS` argument of `obcx_add_actor`.
++The supported baseline is Linux x86_64/arm64, CMake 3.30+, GCC 16.1+, C++26,
++`-freflection`, and `__cpp_impl_reflection >= 202506L`.
  
 -## Project Structure
-+## Layout
++Install OBCX or point CMake to an SDK prefix, then run:
  
--```
++```bash
++cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/obcx-sdk-prefix
++cmake --build build
++cmake --install build --prefix /path/to/actor-prefix
+ ```
++
++The shared actor is installed under `lib/obcx/actors/` and its canonical
++metadata under `share/obcx/actors/<actor-id>/actor.toml`.
++
++## Dependencies
++
++`actor.toml` is the canonical identity, dependency, compatibility, and
++publication document. Declare package-manager dependency names only in
++`[dependencies].packages` and actor dependencies only in
++`[dependencies].actors`. The consuming OBCX checkout merges package
++dependencies from every package selected in its `actors.toml`; this standalone
++template repository does not contain or invoke the OBCX manifest generator.
++
++Use ordinary `find_package()` calls and pass linked CMake targets through the
++`DEPS` argument of `obcx_add_actor`.
++
++## Runtime Configuration
++
++The actor name in runtime TOML must match the exported name. Message types are
++fully qualified and must match the generated input contract exactly:
++
++```toml
++[actors.example]
++library = "example"
++enabled = true
++partition = "conversation_id"
++
++[actors.example.config]
++id_prefix = "example"
++
++[command_runtime]
++timeout_ms = 5000
++
++[command_runtime.help]
++page_bytes = 3500
++maximum_pages = 10
++
++[command_runtime.access.groups]
++mode = "unrestricted"
++entries = []
++
++[command_runtime.access.users]
++mode = "unrestricted"
++entries = []
++
++[[command_runtime.routes]]
++actor = "example"
++commands = ["example"]
++platforms = ["telegram"]
++bots = ["telegram_bot"]
++fallback = "continue"
++
++[pipelines.example]
++source = "obcx::actors::events::ExampleRequested"
++
++[[pipelines.example.stages]]
++name = "handle_example"
++actor = "example"
++input = "obcx::actors::events::ExampleRequested"
++output = "obcx::actors::events::ExampleHandled"
++mode = "await"
++```
++
++The actor declaration is only a capability description. A route activates it
++for explicit platform/bot scopes; the platform adapter detects syntax and the
++runtime delivers `commands::ExampleCommand`. Catalog publication, when the
++platform supports it, is aggregated by the runtime rather than performed by
++the actor. RE2 patterns are matched only after platform syntax and bot-target
++validation, are excluded from platform catalogs, and never change which typed
++`handle` overload receives the request. Help bounds and both access policies
++are explicit whenever routes exist. Core reserves `help`; actors cannot declare
++or own it. Use exact platform, bot-installation, and native IDs for scoped
++allowlists or denylists; see
++[`docs/architecture/actor-command-routing.md`](../../docs/architecture/actor-command-routing.md).
++
++Actor-owned configuration must be read from the immutable generation view:
++
++```cpp
++auto id_prefix = context.config()
++                     .get_value<std::string>("id_prefix")
++                     .value_or("example");
++```
++
++Keep any derived settings on the actor instance. Do not call
++`ConfigLoader::instance()`, use mutable namespace globals/function statics for
++configuration, or read configuration in the factory constructor. Bot
++installations, their component registries and transports are process-owned and
++are not actor services; actors use only `BotOperationGateway` for supported bot
++egress. Changing bot installation or database-instance definitions requires a
++process restart.
++
++## Layout
++
 +```text
  .
 -├── CMakeLists.txt      # Build configuration (find_package + obcx_add_plugin)
@@ -189,10 +296,10 @@ index a41f3f5b971a213468879faa59bf9390b24362f0..33035b65501f6f86054d287829c77de5
 -[MIT](LICENSE)
 diff --git a/actor.toml b/actor.toml
 new file mode 100644
-index 0000000000000000000000000000000000000000..7985ce9cd319d86ed75f3895d771146cea6a9842
+index 0000000..fe34463
 --- /dev/null
 +++ b/actor.toml
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,33 @@
 +schema_version = 1
 +
 +[actor]
@@ -206,7 +313,7 @@ index 0000000000000000000000000000000000000000..7985ce9cd319d86ed75f3895d771146c
 +target = "example_actor"
 +kind = "shared-library"
 +entrypoint = "obcx_create_actor_v2"
-+platforms = ["linux-x86_64"]
++platforms = ["linux-x86_64", "linux-arm64"]
 +
 +[dependencies]
 +packages = []
@@ -216,6 +323,10 @@ index 0000000000000000000000000000000000000000..7985ce9cd319d86ed75f3895d771146c
 +obcx = ">=1.1.0,<2.0.0"
 +actor_abi_min = 2
 +actor_abi_max = 2
++cpp_standard = 26
++compiler = "gcc>=16.1"
++reflection_macro = 202506
++input_contract_schema = 2
 +
 +[publication]
 +repository = "https://github.com/Onebot-CXX/obcx-actor-template"
@@ -224,7 +335,7 @@ index 0000000000000000000000000000000000000000..7985ce9cd319d86ed75f3895d771146c
 +description = "Template native V2 actor package for OBCX"
 diff --git a/plugin.toml b/plugin.toml
 deleted file mode 100644
-index fcc8f9fa3ca3fd4699429bb7f39b8434eef01c2a..0000000000000000000000000000000000000000
+index fcc8f9f..0000000
 --- a/plugin.toml
 +++ /dev/null
 @@ -1,17 +0,0 @@
@@ -247,29 +358,57 @@ index fcc8f9fa3ca3fd4699429bb7f39b8434eef01c2a..00000000000000000000000000000000
 -vcpkg_deps = []
 diff --git a/src/example_actor.cpp b/src/example_actor.cpp
 new file mode 100644
-index 0000000000000000000000000000000000000000..5dfc15811b7ca59df1ee6bb8bd1abcd692e07ba1
+index 0000000..8c51236
 --- /dev/null
 +++ b/src/example_actor.cpp
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,52 @@
 +#include "example_actor.hpp"
++
++#include <algorithm>
 +
 +namespace obcx::actors {
 +
-+auto ExampleActor::get_name() const -> std::string { return "example"; }
++auto ExampleActor::handle(const events::ExampleRequested &request,
++                          const core::MessageEnvelope &message,
++                          core::ActorContext &context) -> core::ActorResult {
++  context.throw_if_cancelled();
++  const auto id_prefix =
++      context.config().get_value<std::string>("id_prefix").value_or("example");
++  auto result = core::ActorResult::success();
++  result.emit(events::ExampleHandled{.text = request.text}, message,
++              core::ActorEmitOptions{.id = id_prefix + ":" + message.id});
++  return result;
++}
 +
-+auto ExampleActor::get_version() const -> std::string { return "0.1.0"; }
-+
-+auto ExampleActor::handle_message(const core::MessageEnvelope &message,
-+                                  core::ActorContext &context)
++auto ExampleActor::handle(const events::ExampleBlockingRequested &request,
++                          const core::MessageEnvelope &message,
++                          core::ActorContext &context)
 +    -> core::ActorTask<core::ActorResult> {
++  // Sorting stands in for a synchronous CPU/library call. Keep ordinary
++  // bounded transforms in a synchronous handler like ExampleRequested.
++  auto text = co_await context.run_blocking([text = request.text]() mutable {
++    std::ranges::sort(text);
++    return text;
++  });
++  auto result = core::ActorResult::success();
++  result.emit(events::ExampleHandled{.text = std::move(text)}, message);
++  co_return result;
++}
++
++auto ExampleActor::handle(const commands::ExampleCommand &request,
++                          const core::MessageEnvelope &message,
++                          core::ActorContext &context) -> core::ActorResult {
 +  context.throw_if_cancelled();
 +  auto result = core::ActorResult::success();
-+  auto emitted = message;
-+  emitted.id = "example:" + message.id;
-+  emitted.type = "ExampleHandled";
-+  emitted.causation_id = message.id;
-+  result.emit(std::move(emitted));
-+  co_return result;
++  result.emit(events::ExampleHandled{.text = request.invocation.arguments},
++              message);
++  result.emit(
++      command::CommandCompleted{
++          .transaction_id = request.invocation.transaction_id,
++          .propagation = command::Propagation::Consume,
++      },
++      message);
++  return result;
 +}
 +
 +} // namespace obcx::actors
@@ -277,30 +416,85 @@ index 0000000000000000000000000000000000000000..5dfc15811b7ca59df1ee6bb8bd1abcd6
 +OBCX_ACTOR_EXPORT_V2(obcx::actors::ExampleActor)
 diff --git a/src/example_actor.hpp b/src/example_actor.hpp
 new file mode 100644
-index 0000000000000000000000000000000000000000..6a783f27018eca84f9619b930ab69ebd82847756
+index 0000000..c723710
 --- /dev/null
 +++ b/src/example_actor.hpp
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,72 @@
 +#pragma once
 +
-+#include "core/actor.hpp"
++#include "core/actor/actor_commands.hpp"
++#include "core/actor/reflected_actor.hpp"
 +
 +namespace obcx::actors {
 +
-+class ExampleActor final : public core::IActorV2 {
-+public:
-+  [[nodiscard]] auto get_name() const -> std::string override;
-+  [[nodiscard]] auto get_version() const -> std::string override;
++namespace events {
 +
-+  auto handle_message(const core::MessageEnvelope &message,
-+                      core::ActorContext &context)
-+      -> core::ActorTask<core::ActorResult> override;
++struct ExampleRequested {
++  std::string text;
++};
++
++struct ExampleBlockingRequested {
++  std::string text;
++};
++
++struct ExampleHandled {
++  std::string text;
++};
++
++inline void from_json(const common::json &document, ExampleRequested &message) {
++  document.at("text").get_to(message.text);
++}
++
++inline void to_json(common::json &document, const ExampleRequested &message) {
++  document = {{"text", message.text}};
++}
++
++inline void from_json(const common::json &document,
++                      ExampleBlockingRequested &message) {
++  document.at("text").get_to(message.text);
++}
++
++inline void to_json(common::json &document,
++                    const ExampleBlockingRequested &message) {
++  document = {{"text", message.text}};
++}
++
++inline void to_json(common::json &document, const ExampleHandled &message) {
++  document = {{"text", message.text}};
++}
++
++} // namespace events
++
++namespace commands {
++struct ExampleCommand final : command::RequestMessage<ExampleCommand> {};
++} // namespace commands
++
++class ExampleActor final : public core::ReflectedActor<ExampleActor> {
++public:
++  static constexpr std::string_view actor_name = "example";
++  static constexpr std::string_view actor_version = "0.1.0";
++
++  static constexpr auto command_contract() {
++    return command::catalog(command::observe<commands::ExampleCommand>(
++        "example", "Run the example actor command",
++        command::re2(R"(^(?:example|example_alias)$)")));
++  }
++
++  auto handle(const events::ExampleRequested &request,
++              const core::MessageEnvelope &message, core::ActorContext &context)
++      -> core::ActorResult;
++  auto handle(const events::ExampleBlockingRequested &request,
++              const core::MessageEnvelope &message, core::ActorContext &context)
++      -> core::ActorTask<core::ActorResult>;
++  auto handle(const commands::ExampleCommand &request,
++              const core::MessageEnvelope &message, core::ActorContext &context)
++      -> core::ActorResult;
 +};
 +
 +} // namespace obcx::actors
 diff --git a/src/example_plugin.cpp b/src/example_plugin.cpp
 deleted file mode 100644
-index bb3711943399df85d7348b4831bc5287424e0985..0000000000000000000000000000000000000000
+index bb37119..0000000
 --- a/src/example_plugin.cpp
 +++ /dev/null
 @@ -1,41 +0,0 @@
@@ -347,7 +541,7 @@ index bb3711943399df85d7348b4831bc5287424e0985..00000000000000000000000000000000
 -OBCX_PLUGIN_EXPORT(obcx::plugins::ExamplePlugin)
 diff --git a/src/example_plugin.hpp b/src/example_plugin.hpp
 deleted file mode 100644
-index c6c0925880a2342bbe2eebbad8e3cf0f1d9ee92a..0000000000000000000000000000000000000000
+index c6c0925..0000000
 --- a/src/example_plugin.hpp
 +++ /dev/null
 @@ -1,18 +0,0 @@
@@ -369,286 +563,6 @@ index c6c0925880a2342bbe2eebbad8e3cf0f1d9ee92a..00000000000000000000000000000000
 -};
 -
 -} // namespace obcx::plugins
--- 
-2.54.0
-
-
-From 008af221e9bd4a881c1a5a3a8d6d78e913b8c93a Mon Sep 17 00:00:00 2001
-From: Vollate <uint44t@gmail.com>
-Date: Wed, 15 Jul 2026 18:59:50 +0800
-Subject: [PATCH 2/3] feat: update template for reflected actor dispatch
-
----
- CMakeLists.txt        |  2 +-
- README.md             | 12 +++++++++---
- actor.toml            |  6 +++++-
- src/example_actor.cpp | 19 ++++++-------------
- src/example_actor.hpp | 39 ++++++++++++++++++++++++++++++++-------
- 5 files changed, 53 insertions(+), 25 deletions(-)
-
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index d8f0ee75696bb3b5d12634851ab13ee56e5b66e0..6ff1a7db851d9c91e203b6ab88830383d72db927 100644
---- a/CMakeLists.txt
-+++ b/CMakeLists.txt
-@@ -1,4 +1,4 @@
--cmake_minimum_required(VERSION 3.20)
-+cmake_minimum_required(VERSION 3.25)
- project(obcx_actor_example VERSION 0.1.0 LANGUAGES CXX)
- 
- if(NOT TARGET obcx_core)
-diff --git a/README.md b/README.md
-index 33035b65501f6f86054d287829c77de5e55f64f4..b56eb8e14c0e581b17ef14f8adb851f2fbc29ca5 100644
---- a/README.md
-+++ b/README.md
-@@ -1,7 +1,8 @@
- # OBCX Actor Template
- 
- This repository is the canonical starting point for a native V2 OBCX actor
--package. It uses `IActorV2`, `ActorTask<ActorResult>`, `actor.toml`, the
-+package. It uses `ReflectedActor<Derived>`, typed `handle` overloads,
-+`ActorTask<ActorResult>`, `actor.toml`, the
- installed `obcx-sdk`, and `OBCXActor.cmake`; it contains no runtime adapter or
- alternate extension entry point.
- 
-@@ -15,13 +16,18 @@ alternate extension entry point.
- 3. Rename `ExampleActor`, its source files, and the `obcx_add_actor` target.
-    `artifact.target` must equal `<name>_actor`; `artifact.name` must equal the
-    helper's `OUTPUT_NAME`.
--4. Implement `handle_message` as an `ActorTask<ActorResult>`. Use
--   `ActorContext::await_asio` for network, timer, or other Asio suspension.
-+4. Define named message types with nlohmann ADL JSON conversions and implement
-+   public direct `handle` overloads returning `ActorResult` or
-+   `ActorTask<ActorResult>`. Use `ActorContext::await_asio` for network, timer,
-+   or other Asio suspension.
- 
- ## Build And Install
- 
- Install OBCX or point CMake to an SDK prefix, then run:
- 
-+The build requires Linux x86_64/arm64, CMake 3.25, GCC 16.1+, C++26, and
-+`-freflection`; `OBCXActor.cmake` enforces these target settings.
-+
- ```bash
- cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/obcx-sdk-prefix
- cmake --build build
-diff --git a/actor.toml b/actor.toml
-index 7985ce9cd319d86ed75f3895d771146cea6a9842..34449e1947f06efcb08ec37b4c5a97ba88a80118 100644
---- a/actor.toml
-+++ b/actor.toml
-@@ -11,7 +11,7 @@ name = "example"
- target = "example_actor"
- kind = "shared-library"
- entrypoint = "obcx_create_actor_v2"
--platforms = ["linux-x86_64"]
-+platforms = ["linux-x86_64", "linux-arm64"]
- 
- [dependencies]
- packages = []
-@@ -21,6 +21,10 @@ actors = []
- obcx = ">=1.1.0,<2.0.0"
- actor_abi_min = 2
- actor_abi_max = 2
-+cpp_standard = 26
-+compiler = "gcc>=16.1"
-+reflection_macro = 202506
-+input_contract_schema = 1
- 
- [publication]
- repository = "https://github.com/Onebot-CXX/obcx-actor-template"
-diff --git a/src/example_actor.cpp b/src/example_actor.cpp
-index 5dfc15811b7ca59df1ee6bb8bd1abcd692e07ba1..1aa0333ead2e815dafda7288f5b4d10a5a333450 100644
---- a/src/example_actor.cpp
-+++ b/src/example_actor.cpp
-@@ -2,21 +2,14 @@
- 
- namespace obcx::actors {
- 
--auto ExampleActor::get_name() const -> std::string { return "example"; }
--
--auto ExampleActor::get_version() const -> std::string { return "0.1.0"; }
--
--auto ExampleActor::handle_message(const core::MessageEnvelope &message,
--                                  core::ActorContext &context)
--    -> core::ActorTask<core::ActorResult> {
-+auto ExampleActor::handle(const events::ExampleRequested &request,
-+                          const core::MessageEnvelope &message,
-+                          core::ActorContext &context) -> core::ActorResult {
-   context.throw_if_cancelled();
-   auto result = core::ActorResult::success();
--  auto emitted = message;
--  emitted.id = "example:" + message.id;
--  emitted.type = "ExampleHandled";
--  emitted.causation_id = message.id;
--  result.emit(std::move(emitted));
--  co_return result;
-+  result.emit(events::ExampleHandled{.text = request.text}, message,
-+              core::ActorEmitOptions{.id = "example:" + message.id});
-+  return result;
- }
- 
- } // namespace obcx::actors
-diff --git a/src/example_actor.hpp b/src/example_actor.hpp
-index 6a783f27018eca84f9619b930ab69ebd82847756..bc02425df8c13eaba27ac1d8af247d9f6fdb7ba6 100644
---- a/src/example_actor.hpp
-+++ b/src/example_actor.hpp
-@@ -1,17 +1,42 @@
- #pragma once
- 
--#include "core/actor.hpp"
-+#include "core/reflected_actor.hpp"
- 
- namespace obcx::actors {
- 
--class ExampleActor final : public core::IActorV2 {
-+namespace events {
-+
-+struct ExampleRequested {
-+  std::string text;
-+};
-+
-+struct ExampleHandled {
-+  std::string text;
-+};
-+
-+inline void from_json(const common::json &document,
-+                      ExampleRequested &message) {
-+  document.at("text").get_to(message.text);
-+}
-+
-+inline void to_json(common::json &document, const ExampleRequested &message) {
-+  document = {{"text", message.text}};
-+}
-+
-+inline void to_json(common::json &document, const ExampleHandled &message) {
-+  document = {{"text", message.text}};
-+}
-+
-+} // namespace events
-+
-+class ExampleActor final : public core::ReflectedActor<ExampleActor> {
- public:
--  [[nodiscard]] auto get_name() const -> std::string override;
--  [[nodiscard]] auto get_version() const -> std::string override;
-+  static constexpr std::string_view actor_name = "example";
-+  static constexpr std::string_view actor_version = "0.1.0";
- 
--  auto handle_message(const core::MessageEnvelope &message,
--                      core::ActorContext &context)
--      -> core::ActorTask<core::ActorResult> override;
-+  auto handle(const events::ExampleRequested &request,
-+              const core::MessageEnvelope &message,
-+              core::ActorContext &context) -> core::ActorResult;
- };
- 
- } // namespace obcx::actors
--- 
-2.54.0
-
-
-From 4bc3c5558a6864d9a067c486a978f943b90cb1f6 Mon Sep 17 00:00:00 2001
-From: Vollate <uint44t@gmail.com>
-Date: Sun, 19 Jul 2026 20:00:21 +0800
-Subject: [PATCH 3/3] docs: refresh actor template guidance
-
----
- README.md | 55 ++++++++++++++++++++++++++++++++++++++++---------------
- 1 file changed, 40 insertions(+), 15 deletions(-)
-
-diff --git a/README.md b/README.md
-index b56eb8e14c0e581b17ef14f8adb851f2fbc29ca5..62702c721fa3d85c44bd91535a0bc4c7236354ce 100644
---- a/README.md
-+++ b/README.md
-@@ -1,18 +1,18 @@
- # OBCX Actor Template
- 
--This repository is the canonical starting point for a native V2 OBCX actor
-+This repository is the canonical starting point for a native ABI 2 OBCX actor
- package. It uses `ReflectedActor<Derived>`, typed `handle` overloads,
--`ActorTask<ActorResult>`, `actor.toml`, the
--installed `obcx-sdk`, and `OBCXActor.cmake`; it contains no runtime adapter or
--alternate extension entry point.
-+`ActorTask<ActorResult>`, canonical `actor.toml` metadata, the installed
-+`obcx-sdk`, and `OBCXActor.cmake`. It contains no runtime adapter or alternate
-+extension system.
- 
- ## Create An Actor
- 
- 1. Copy or instantiate this repository as an actor-named project.
- 2. Update every required field in `actor.toml`. Keep `actor.abi = 2`,
-    `artifact.kind = "shared-library"`, and
--   `artifact.entrypoint = "obcx_create_actor_v2"`.
--   List only built and verified release targets in `artifact.platforms`.
-+   `artifact.entrypoint = "obcx_create_actor_v2"`. List only built and
-+   verified release targets in `artifact.platforms`.
- 3. Rename `ExampleActor`, its source files, and the `obcx_add_actor` target.
-    `artifact.target` must equal `<name>_actor`; `artifact.name` must equal the
-    helper's `OUTPUT_NAME`.
-@@ -21,13 +21,17 @@ alternate extension entry point.
-    `ActorTask<ActorResult>`. Use `ActorContext::await_asio` for network, timer,
-    or other Asio suspension.
- 
-+`OBCX_ACTOR_EXPORT_V2` supplies the numeric ABI generation, factory,
-+destructor, actor name, actor version, and generated schema-1 input contract.
-+The runtime validates this contract before actor construction.
-+
- ## Build And Install
- 
-+The supported baseline is Linux x86_64/arm64, CMake 3.30+, GCC 16.1+, C++26,
-+`-freflection`, and `__cpp_impl_reflection >= 202506L`.
-+
- Install OBCX or point CMake to an SDK prefix, then run:
- 
--The build requires Linux x86_64/arm64, CMake 3.25, GCC 16.1+, C++26, and
--`-freflection`; `OBCXActor.cmake` enforces these target settings.
--
- ```bash
- cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/obcx-sdk-prefix
- cmake --build build
-@@ -39,17 +43,38 @@ metadata under `share/obcx/actors/<actor-id>/actor.toml`.
- 
- ## Dependencies
- 
--Declare package-manager dependency names only in
-+`actor.toml` is the canonical identity, dependency, compatibility, and
-+publication document. Declare package-manager dependency names only in
- `[dependencies].packages` and actor dependencies only in
--`[dependencies].actors`. The OBCX vcpkg generator reads these canonical fields:
--
--```bash
--python3 cmake/gen_vcpkg_manifest.py actors.toml
--```
-+`[dependencies].actors`. The consuming OBCX checkout merges package
-+dependencies from every package selected in its `actors.toml`; this standalone
-+template repository does not contain or invoke the OBCX manifest generator.
- 
- Use ordinary `find_package()` calls and pass linked CMake targets through the
- `DEPS` argument of `obcx_add_actor`.
- 
-+## Runtime Configuration
-+
-+The actor name in runtime TOML must match the exported name. Message types are
-+fully qualified and must match the generated input contract exactly:
-+
-+```toml
-+[actors.example]
-+library = "example"
-+enabled = true
-+partition = "conversation_id"
-+
-+[pipelines.example]
-+source = "obcx::actors::events::ExampleRequested"
-+
-+[[pipelines.example.stages]]
-+name = "handle_example"
-+actor = "example"
-+input = "obcx::actors::events::ExampleRequested"
-+output = "obcx::actors::events::ExampleHandled"
-+mode = "await"
-+```
-+
- ## Layout
- 
- ```text
 -- 
 2.54.0
 

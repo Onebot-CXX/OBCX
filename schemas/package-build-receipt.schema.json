@@ -1,0 +1,510 @@
+{
+  "$id": "https://onebot-cxx.github.io/obcx/schemas/package-build-receipt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "configuration": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "edges": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "libraries",
+              "actors",
+              "system"
+            ],
+            "type": "string"
+          },
+          "requirement": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "production",
+              "test"
+            ],
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+              "type": "string"
+            },
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "to": {
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "private",
+              "public",
+              "interface",
+              "logical"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "kind",
+          "scope",
+          "requirement",
+          "targets",
+          "visibility"
+        ],
+        "type": "object"
+      },
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "files": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "owner": {
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          "path": {
+            "format": "subdir",
+            "minLength": 1,
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "artifact",
+              "header",
+              "cmake",
+              "metadata",
+              "receipt",
+              "private-library"
+            ],
+            "type": "string"
+          },
+          "sha256": {
+            "minLength": 1,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "owner",
+          "sha256",
+          "role"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "graph_sha256": {
+      "minLength": 1,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "package_id": {
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+      "type": "string"
+    },
+    "platform": {
+      "enum": [
+        "linux-x86_64",
+        "linux-arm64"
+      ],
+      "type": "string"
+    },
+    "providers": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "components": {
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_.+-]+$",
+              "type": "string"
+            },
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "id": {
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "cmake-config",
+              "cmake-module",
+              "pkg-config",
+              "workspace-sdk",
+              "installed-sdk"
+            ],
+            "type": "string"
+          },
+          "package": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.+-]+$",
+            "type": "string"
+          },
+          "package_manager": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "none"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "baseline": {
+                    "minLength": 1,
+                    "pattern": "^[0-9a-f]{40}$",
+                    "type": "string"
+                  },
+                  "default_features": {
+                    "type": "boolean"
+                  },
+                  "features": {
+                    "items": {
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                      "type": "string"
+                    },
+                    "minItems": 0,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "kind": {
+                    "enum": [
+                      "vcpkg"
+                    ],
+                    "type": "string"
+                  },
+                  "port": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "port",
+                  "features",
+                  "default_features",
+                  "baseline"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "provenance": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "nix",
+                  "vcpkg",
+                  "environment",
+                  "workspace-sdk",
+                  "installed-sdk"
+                ],
+                "type": "string"
+              },
+              "path": {
+                "format": "relative-path",
+                "minLength": 1,
+                "type": "string"
+              },
+              "sha256": {
+                "minLength": 1,
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "targets": {
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "version": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version_probe": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "cmake-variable"
+                    ],
+                    "type": "string"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "target-property"
+                    ],
+                    "type": "string"
+                  },
+                  "property": {
+                    "minLength": 1,
+                    "pattern": "^[A-Z_][A-Z0-9_]*$",
+                    "type": "string"
+                  },
+                  "target": {
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "target",
+                  "property"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "pkg-config"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "receipt"
+                    ],
+                    "type": "string"
+                  },
+                  "path": {
+                    "format": "relative-path",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "minLength": 1,
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path",
+                  "sha256"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "version_scheme": {
+            "enum": [
+              "semver",
+              "numeric"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "package",
+          "components",
+          "targets",
+          "version",
+          "version_scheme",
+          "version_probe",
+          "package_manager",
+          "provenance"
+        ],
+        "type": "object"
+      },
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schema_version": {
+      "const": 2,
+      "type": "integer"
+    },
+    "sources": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "dirty": {
+            "type": "boolean"
+          },
+          "id": {
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          "sha256": {
+            "minLength": 1,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sha256",
+          "dirty"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "tool_version": {
+      "enum": [
+        "2.0.0"
+      ],
+      "type": "string"
+    },
+    "toolchain": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "compiler_sha256": {
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "compiler_version": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "cpp_standard": {
+          "enum": [
+            20,
+            23,
+            26
+          ],
+          "type": "integer"
+        },
+        "cxx11_abi": {
+          "enum": [
+            0,
+            1
+          ],
+          "type": "integer"
+        },
+        "flags_sha256": {
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "stdlib": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "stdlib_version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "compiler_id",
+        "compiler_version",
+        "compiler_sha256",
+        "stdlib",
+        "stdlib_version",
+        "cxx11_abi",
+        "cpp_standard",
+        "flags_sha256"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tool_version",
+    "package_id",
+    "graph_sha256",
+    "platform",
+    "configuration",
+    "sources",
+    "toolchain",
+    "providers",
+    "edges",
+    "files"
+  ],
+  "title": "OBCX v2 package-build-receipt",
+  "type": "object"
+}

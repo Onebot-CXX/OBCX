@@ -3,43 +3,55 @@
 `tests/` 只保存 OBCX 根仓库拥有的可重复自动化测试。QQ、LLOneBot、Docker
 Compose 和包含凭据的本地配置位于 `dev/onebot/`，不属于测试门禁。
 
+## 测试保留标准
+
+根仓库及 `local_actor/`、`local_library/` 的自有测试只保留边界与高风险场景：
+
+- 空值、缺项、非法输入、上下限及边界上的成功输入。
+- 超时、取消、并发竞态、重复调用、销毁与动态库卸载安全。
+- 权限与 installation/conversation/topic 隔离、敏感信息脱敏。
+- 数据完整性、迁移回滚、重复投递、失败后的恢复与原子性。
+- 历史缺陷回归，以及防止修复误伤所需的成功对照。
+- 真正执行的编译拒绝、SDK 隔离及跨动态库生命周期边界。
+
+不保留独立的普通成功流程、纯赋值/往返序列化、夹具自测或重复冒烟。
+边界用例需要的成功准备步骤不应删除；不要把普通用例藏进循环或大测试。
+删除用例时同时移除无人使用的辅助代码、独立夹具及 CMake 注册。
+
 ## 所有权边界
 
 根仓库测试可以覆盖：
 
-- actor runtime、scheduler、Asio/BlockingExecutor、reload 与通用 V2 ABI；
-- 根仓库网络、OneBot/Telegram adapter、CLI 与数据库组件；
-- metadata、registry、packaging、安装后 SDK 与通用 fixture actor。
+- actor runtime、scheduler、Asio/BlockingExecutor、reload 与通用 ABI 2；
+- `BotInstallation`/`BotComponent`/capability registry、固定 recipe、严格 bot
+  configuration、OneBot/Telegram protocol/transport/ingress/operation 组件；
+- CLI、数据库、metadata、registry、packaging、安装后 SDK 与通用 fixture actor。
 
-根测试不得包含生产 actor 的私有头文件、实现源码或业务断言。对应测试归属如下：
-
-| 行为 | 所有者 |
-| --- | --- |
-| Bridge 转发、mapping、媒体、重试、真实 Message Store → Bridge pipeline、bot-facing reload | `local_actor/obcx-actor-bridge/tests/` |
-| Message Store schema、持久化、identity、deduplication、MessageStored emission | `local_actor/obcx-actor-message-store/tests/` |
-| 通用 ABI、same-SONAME staging、dependency isolation、generation cutover | 根 `tests/fixtures/` 与 `tests/cpp/` |
-| 跨仓库安装与构建协调 | 根 conformance CMake 脚本；actor 仓库拥有业务测试源码和 CTest 注册 |
-
-本次迁移清单：
-
-- 根 `standalone_actor_pipeline_smoke.cpp` 与
-  `standalone_actor_reload_smoke.cpp` 已迁至 Bridge tests；
-- real Message Store/Bridge unmatched-slash regression 已由 Bridge installed
-  reload smoke 覆盖；
-- root reload 的 rebuilt Message Store fixture 已替换为通用 rebuilt actor；
-- Bridge/Message Store 嵌入根构建时只生成 DSO，不注册 actor-owned tests。
-
-Bridge 使用 `OBCX_BRIDGE_BUILD_TESTS`，Message Store 使用
-`OBCX_MESSAGE_STORE_BUILD_TESTS`。两者在 standalone top-level build 中跟随
-`BUILD_TESTING` 默认开启，作为子目录嵌入时默认关闭；特殊 consumer 可显式覆盖。
+根仓库自有测试不得包含生产 actor 的私有头文件、实现源码或业务断言，也不得
+遍历全部 `local_actor/`。工作区 tests profile 可加载明确选中的包，并注册由各包
+自己拥有的业务测试；这不改变测试源码的所有权。Bot component DAG、recipe、严格配置、
+ingress、operation endpoint、通用 ABI、same-SONAME staging、dependency
+isolation 和 generation cutover 使用根仓库自有源码与通用 fixture 验证。每个
+独立 actor 仓库自行拥有并执行其 standalone build、安装、业务测试和跨 actor
+集成测试。
 
 ## 目录职责
 
-- `cpp/`：GoogleTest 单元与小型集成测试。
-- `python/`：Python `unittest` metadata、packaging 与架构约束。
-- `cmake/`：由 CTest 调用的 SDK、CLI、inventory 与跨仓库协调脚本。
-- `compile/`：C++ 正向与负向反射编译契约。
-- `fixtures/`：根 runtime 专用的通用 actor DSO 与 standalone SDK consumer。
+测试源码按功能归类，不按 C++、Python 或测试执行方式拆分：
+
+- `actor/`：actor 配置、协程、调度、加载、staging、热重载与反射编译契约。
+- `bot/`：bot SDK、组件、平台协议、操作与消息入口。
+- `command/`：命令协调与平台适配。
+- `network/`：HTTP、curl、WebSocket、超时与取消。
+- `package/`：包契约、解析、来源、provider、registry、CMake 集成与发布工具。
+- `cli/`：命令行处理。
+- `database/`：数据库。
+- `tui/`：终端界面布局。
+
+共享测试基础设施单独保留：
+
+- `cmake/`：测试注册模块，以及由 CTest 调用的 SDK、CLI 与根仓库集成脚本。
+- `fixtures/`：通用 actor DSO、standalone SDK consumer 与静态测试数据。
 - `support/`：多个根测试共享的辅助代码。
 
 `CMakeLists.txt` 只负责引入注册模块：
@@ -52,34 +64,26 @@ Bridge 使用 `OBCX_BRIDGE_BUILD_TESTS`，Message Store 使用
 
 ## 测试层级
 
-快速根测试，不执行 compile/package/conformance 门禁：
+先按根 README 准备 v2 workspace。验证使用至少 6 个并行 worker；低负载时使用
+全部可用 CPU 核心。快速根测试，不执行 compile/package 门禁：
 
 ```bash
 cmake --preset actor-dev
-cmake --build --preset actor-dev --parallel
-ctest --preset actor-fast
+cmake --build --preset actor-dev --parallel "$(nproc)"
+ctest --preset actor-fast --parallel "$(nproc)"
 ```
 
-完整根测试，包括反射编译、Python 架构/package、CLI 与 installed-SDK：
+完整根测试，包括反射编译、Python package、CLI 与 installed-SDK：
 
 ```bash
-ctest --preset actor-full
-```
-
-干净安装 SDK 后构建并测试各 standalone actor 与 registry：
-
-```bash
-cmake --preset actor-conformance
-cmake --build --preset actor-conformance --parallel
-ctest --preset actor-conformance
+ctest --preset actor-full --parallel "$(nproc)"
 ```
 
 标签仍可用于进一步缩小范围：
 
 ```bash
-ctest --preset actor-dev -L actor-runtime
-ctest --preset actor-dev -L network
-ctest --preset actor-conformance -L conformance
+ctest --preset actor-dev --parallel "$(nproc)" -L actor-runtime
+ctest --preset actor-dev --parallel "$(nproc)" -L network
 ```
 
 ## 确定性 WebSocket 测试
@@ -87,15 +91,19 @@ ctest --preset actor-conformance -L conformance
 WebSocket FIFO、bounded backpressure、write failure、shutdown、OneBot echo
 response/timeout race 使用手动 write gate 与 deadline 驱动，并默认进入 fast/full
 门禁。测试不得用固定 `sleep_for` 或真实响应时长证明正确性；`wait_for` 只可作为
-发现 deadlock 的有界 watchdog。Beast loopback smoke 使用 listening、connected、message
-completion signal，不使用 startup sleep。
+发现 deadlock 的有界 watchdog。
 
 Python 测试也可以直接运行，例如：
 
 ```bash
-python3 -m unittest -v tests/python/actor_metadata_test.py
+ctest --test-dir build --parallel 20 --output-on-failure -R '^package_.*_test$'
 ```
 
-新增 C++ 测试时，使用 `cmake/unit_tests.cmake` 中的 `obcx_add_gtest`
-注册 target 与职责标签。Python 产生的 `__pycache__`、本地 bot 环境和 build
-outputs 必须保持 ignored，不属于测试源码。
+新增测试时，将源码放入对应功能目录。C++ 测试在 `cmake/unit_tests.cmake`
+中使用 `obcx_add_gtest(功能目录/名称.cpp "标签")` 注册；Python 测试在
+`cmake/python_tests.cmake` 中使用
+`obcx_add_python_unittest(功能目录/名称.py "标签")` 注册。target/CTest 名称
+由文件名推导，不包含目录；迁移目录不改变测试名称与标签。
+
+Python 产生的 `__pycache__`、本地 bot 环境和 build outputs 必须保持 ignored，
+不属于测试源码。

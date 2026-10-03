@@ -1,5 +1,5 @@
-#include "core/blocking_executor.hpp"
-#include "core/native_actor_scheduler.hpp"
+#include "core/actor/blocking_executor.hpp"
+#include "core/actor/native_actor_scheduler.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
@@ -29,7 +29,6 @@ namespace obcx::core {
 namespace {
 
 namespace asio = boost::asio;
-using namespace std::chrono_literals;
 
 struct CompletionSamples {
   std::vector<double> microseconds;
@@ -82,8 +81,10 @@ public:
       promise->set_value(42);
     });
 
-    while (future.wait_for(1ms) != std::future_status::ready) {
-      asio::steady_timer timer{co_await asio::this_coro::executor, 1ms};
+    while (future.wait_for(std::chrono::milliseconds{1}) !=
+           std::future_status::ready) {
+      asio::steady_timer timer{co_await asio::this_coro::executor,
+                               std::chrono::milliseconds{1}};
       co_await timer.async_wait(asio::use_awaitable);
     }
     co_return future.get();
@@ -179,7 +180,8 @@ public:
 
   void wait_for_start() {
     std::unique_lock lock(mutex_);
-    if (!changed_.wait_for(lock, 5s, [this] { return started_; })) {
+    if (!changed_.wait_for(lock, std::chrono::seconds{5},
+                           [this] { return started_; })) {
       throw std::runtime_error("blocking partition did not start");
     }
   }
@@ -305,7 +307,8 @@ auto measure_independent_partitions(const std::size_t count)
           "independent benchmark message was rejected");
     }
   }
-  if (all_completed.wait_for(30s) != std::future_status::ready) {
+  if (all_completed.wait_for(std::chrono::seconds{30}) !=
+      std::future_status::ready) {
     throw std::runtime_error("independent partitions did not complete");
   }
   const auto elapsed =
@@ -314,8 +317,9 @@ auto measure_independent_partitions(const std::size_t count)
       same_started->load(std::memory_order_acquire);
 
   gate->release();
-  if (blocked.wait_for(5s) != std::future_status::ready ||
-      same.wait_for(5s) != std::future_status::ready ||
+  if (blocked.wait_for(std::chrono::seconds{5}) !=
+          std::future_status::ready ||
+      same.wait_for(std::chrono::seconds{5}) != std::future_status::ready ||
       !blocked.get().ok() || !same.get().ok()) {
     throw std::runtime_error("held partition did not retire cleanly");
   }

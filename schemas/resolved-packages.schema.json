@@ -1,0 +1,1514 @@
+{
+  "$id": "https://onebot-cxx.github.io/obcx/schemas/resolved-packages.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "edges": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "libraries",
+              "actors",
+              "system"
+            ],
+            "type": "string"
+          },
+          "requirement": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "production",
+              "test"
+            ],
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+              "type": "string"
+            },
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "to": {
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "private",
+              "public",
+              "interface",
+              "logical"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "kind",
+          "scope",
+          "requirement",
+          "targets",
+          "visibility"
+        ],
+        "type": "object"
+      },
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "mode": {
+      "enum": [
+        "development",
+        "release"
+      ],
+      "type": "string"
+    },
+    "order": {
+      "items": {
+        "minLength": 1,
+        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+        "type": "string"
+      },
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "packages": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "actor",
+              "library"
+            ],
+            "type": "string"
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "actor": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "abi": {
+                        "const": 2,
+                        "type": "integer"
+                      },
+                      "entrypoint": {
+                        "enum": [
+                          "obcx_create_actor_v2"
+                        ],
+                        "type": "string"
+                      },
+                      "input_contract_schema": {
+                        "const": 2,
+                        "type": "integer"
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "pattern": "^[a-z][a-z0-9_-]*$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "abi",
+                      "entrypoint",
+                      "input_contract_schema"
+                    ],
+                    "type": "object"
+                  },
+                  "artifact": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "export_target": {
+                        "minLength": 1,
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "shared-library"
+                        ],
+                        "type": "string"
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "pattern": "^[a-z][a-z0-9_-]*$",
+                        "type": "string"
+                      },
+                      "platforms": {
+                        "items": {
+                          "enum": [
+                            "linux-x86_64",
+                            "linux-arm64"
+                          ],
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "target": {
+                        "minLength": 1,
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "name",
+                      "target",
+                      "export_target",
+                      "platforms"
+                    ],
+                    "type": "object"
+                  },
+                  "compatibility": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actor_abi_max": {
+                        "const": 2,
+                        "type": "integer"
+                      },
+                      "actor_abi_min": {
+                        "const": 2,
+                        "type": "integer"
+                      },
+                      "compiler": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "enum": [
+                              "GNU"
+                            ],
+                            "type": "string"
+                          },
+                          "version": {
+                            "format": "semver-range",
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "type": "object"
+                      },
+                      "cpp_standard": {
+                        "const": 26,
+                        "type": "integer"
+                      },
+                      "cxx11_abi": {
+                        "enum": [
+                          0,
+                          1
+                        ],
+                        "type": "integer"
+                      },
+                      "obcx": {
+                        "format": "semver-range",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "pic": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "reflection_macro": {
+                        "const": 202506,
+                        "type": "integer"
+                      },
+                      "stdlib": {
+                        "enum": [
+                          "libstdc++"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "cpp_standard",
+                      "compiler",
+                      "stdlib",
+                      "cxx11_abi",
+                      "pic",
+                      "obcx",
+                      "actor_abi_min",
+                      "actor_abi_max",
+                      "reflection_macro"
+                    ],
+                    "type": "object"
+                  },
+                  "dependencies": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actors": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                              "type": "string"
+                            },
+                            "version": {
+                              "format": "semver-range",
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "libraries": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                              "type": "string"
+                            },
+                            "target": {
+                              "minLength": 1,
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                              "type": "string"
+                            },
+                            "version": {
+                              "format": "semver-range",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "private",
+                                "public",
+                                "interface"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "target",
+                            "visibility"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "system": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                              "type": "string"
+                            },
+                            "targets": {
+                              "items": {
+                                "minLength": 1,
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "version": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "private",
+                                "public",
+                                "interface"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "targets",
+                            "visibility"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array",
+                        "uniqueItems": true
+                      }
+                    },
+                    "required": [
+                      "libraries",
+                      "actors",
+                      "system"
+                    ],
+                    "type": "object"
+                  },
+                  "package": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "actor"
+                        ],
+                        "type": "string"
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "pattern": "^[a-z][a-z0-9_-]*$",
+                        "type": "string"
+                      },
+                      "version": {
+                        "format": "semver",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "version",
+                      "kind"
+                    ],
+                    "type": "object"
+                  },
+                  "publication": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "description": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "homepage": {
+                        "format": "https",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "license": {
+                        "minLength": 1,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]*(?: (?:AND|OR) [A-Za-z0-9][A-Za-z0-9.+-]*)*$",
+                        "type": "string"
+                      },
+                      "repository": {
+                        "format": "https",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "repository",
+                      "homepage",
+                      "license",
+                      "description"
+                    ],
+                    "type": "object"
+                  },
+                  "schema_version": {
+                    "const": 2,
+                    "type": "integer"
+                  },
+                  "test_dependencies": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "libraries": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                              "type": "string"
+                            },
+                            "target": {
+                              "minLength": 1,
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                              "type": "string"
+                            },
+                            "version": {
+                              "format": "semver-range",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "private",
+                                "public",
+                                "interface"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "target",
+                            "visibility"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "system": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                              "type": "string"
+                            },
+                            "targets": {
+                              "items": {
+                                "minLength": 1,
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "version": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "private",
+                                "public",
+                                "interface"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "targets",
+                            "visibility"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array",
+                        "uniqueItems": true
+                      }
+                    },
+                    "required": [
+                      "libraries",
+                      "system"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "schema_version",
+                  "package",
+                  "artifact",
+                  "dependencies",
+                  "test_dependencies",
+                  "compatibility",
+                  "publication",
+                  "actor"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "artifact": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "export_target": {
+                        "minLength": 1,
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "static-library",
+                          "shared-library",
+                          "header-only"
+                        ],
+                        "type": "string"
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "pattern": "^[a-z][a-z0-9_-]*$",
+                        "type": "string"
+                      },
+                      "platforms": {
+                        "items": {
+                          "enum": [
+                            "linux-x86_64",
+                            "linux-arm64"
+                          ],
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "target": {
+                        "minLength": 1,
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "name",
+                      "target",
+                      "export_target",
+                      "platforms"
+                    ],
+                    "type": "object"
+                  },
+                  "compatibility": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "compiler": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "enum": [
+                              "GNU"
+                            ],
+                            "type": "string"
+                          },
+                          "version": {
+                            "format": "semver-range",
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "type": "object"
+                      },
+                      "cpp_standard": {
+                        "enum": [
+                          20,
+                          23,
+                          26
+                        ],
+                        "type": "integer"
+                      },
+                      "cxx11_abi": {
+                        "enum": [
+                          0,
+                          1
+                        ],
+                        "type": "integer"
+                      },
+                      "pic": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "stdlib": {
+                        "enum": [
+                          "libstdc++"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "cpp_standard",
+                      "compiler",
+                      "stdlib",
+                      "cxx11_abi",
+                      "pic"
+                    ],
+                    "type": "object"
+                  },
+                  "dependencies": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actors": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                              "type": "string"
+                            },
+                            "version": {
+                              "format": "semver-range",
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "libraries": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                              "type": "string"
+                            },
+                            "target": {
+                              "minLength": 1,
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                              "type": "string"
+                            },
+                            "version": {
+                              "format": "semver-range",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "private",
+                                "public",
+                                "interface"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "target",
+                            "visibility"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "system": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                              "type": "string"
+                            },
+                            "targets": {
+                              "items": {
+                                "minLength": 1,
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "version": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "private",
+                                "public",
+                                "interface"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "targets",
+                            "visibility"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array",
+                        "uniqueItems": true
+                      }
+                    },
+                    "required": [
+                      "libraries",
+                      "actors",
+                      "system"
+                    ],
+                    "type": "object"
+                  },
+                  "package": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "library"
+                        ],
+                        "type": "string"
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "pattern": "^[a-z][a-z0-9_-]*$",
+                        "type": "string"
+                      },
+                      "version": {
+                        "format": "semver",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "version",
+                      "kind"
+                    ],
+                    "type": "object"
+                  },
+                  "publication": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "description": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "homepage": {
+                        "format": "https",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "license": {
+                        "minLength": 1,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]*(?: (?:AND|OR) [A-Za-z0-9][A-Za-z0-9.+-]*)*$",
+                        "type": "string"
+                      },
+                      "repository": {
+                        "format": "https",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "repository",
+                      "homepage",
+                      "license",
+                      "description"
+                    ],
+                    "type": "object"
+                  },
+                  "schema_version": {
+                    "const": 2,
+                    "type": "integer"
+                  },
+                  "test_dependencies": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "libraries": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                              "type": "string"
+                            },
+                            "target": {
+                              "minLength": 1,
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                              "type": "string"
+                            },
+                            "version": {
+                              "format": "semver-range",
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "private",
+                                "public",
+                                "interface"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "target",
+                            "visibility"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "system": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                              "type": "string"
+                            },
+                            "targets": {
+                              "items": {
+                                "minLength": 1,
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "version": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "private",
+                                "public",
+                                "interface"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "targets",
+                            "visibility"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array",
+                        "uniqueItems": true
+                      }
+                    },
+                    "required": [
+                      "libraries",
+                      "system"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "schema_version",
+                  "package",
+                  "artifact",
+                  "dependencies",
+                  "test_dependencies",
+                  "compatibility",
+                  "publication"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "metadata_sha256": {
+            "minLength": 1,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "source": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "path"
+                    ],
+                    "type": "string"
+                  },
+                  "path": {
+                    "format": "relative-path",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "provenance": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "working-tree"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "commit": {
+                            "minLength": 1,
+                            "pattern": "^[0-9a-f]{40}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "git"
+                            ],
+                            "type": "string"
+                          },
+                          "repository": {
+                            "format": "https",
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "subdir": {
+                            "format": "subdir",
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "repository",
+                          "commit",
+                          "subdir"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "archive"
+                            ],
+                            "type": "string"
+                          },
+                          "path": {
+                            "format": "relative-path",
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "sha256": {
+                            "minLength": 1,
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "path",
+                          "sha256"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "path",
+                  "provenance"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "commit": {
+                    "minLength": 1,
+                    "pattern": "^[0-9a-f]{40}$",
+                    "type": "string"
+                  },
+                  "id": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "git"
+                    ],
+                    "type": "string"
+                  },
+                  "repository": {
+                    "format": "https",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "subdir": {
+                    "format": "subdir",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "repository",
+                  "commit",
+                  "subdir"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "source_dir": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "source_identity": {
+            "additionalProperties": false,
+            "properties": {
+              "digest": {
+                "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64}|metadata-only)$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "working-tree",
+                  "git",
+                  "archive"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "digest"
+            ],
+            "type": "object"
+          },
+          "source_receipt": {
+            "additionalProperties": false,
+            "properties": {
+              "dirty": {
+                "type": "boolean"
+              },
+              "sha256": {
+                "minLength": 1,
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "sha256",
+              "dirty"
+            ],
+            "type": "object"
+          },
+          "version": {
+            "format": "semver",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "version",
+          "source",
+          "source_identity",
+          "metadata_sha256",
+          "source_dir",
+          "metadata",
+          "source_receipt"
+        ],
+        "type": "object"
+      },
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "platform": {
+      "enum": [
+        "linux-x86_64",
+        "linux-arm64"
+      ],
+      "type": "string"
+    },
+    "profile": {
+      "enum": [
+        "production",
+        "tests"
+      ],
+      "type": "string"
+    },
+    "providers": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "components": {
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_.+-]+$",
+              "type": "string"
+            },
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "id": {
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "cmake-config",
+              "cmake-module",
+              "pkg-config",
+              "workspace-sdk",
+              "installed-sdk"
+            ],
+            "type": "string"
+          },
+          "package": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.+-]+$",
+            "type": "string"
+          },
+          "package_manager": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "none"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "baseline": {
+                    "minLength": 1,
+                    "pattern": "^[0-9a-f]{40}$",
+                    "type": "string"
+                  },
+                  "default_features": {
+                    "type": "boolean"
+                  },
+                  "features": {
+                    "items": {
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                      "type": "string"
+                    },
+                    "minItems": 0,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "kind": {
+                    "enum": [
+                      "vcpkg"
+                    ],
+                    "type": "string"
+                  },
+                  "port": {
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "port",
+                  "features",
+                  "default_features",
+                  "baseline"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "provenance": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "nix",
+                  "vcpkg",
+                  "environment",
+                  "workspace-sdk",
+                  "installed-sdk"
+                ],
+                "type": "string"
+              },
+              "path": {
+                "format": "relative-path",
+                "minLength": 1,
+                "type": "string"
+              },
+              "sha256": {
+                "minLength": 1,
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "targets": {
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "version": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version_probe": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "cmake-variable"
+                    ],
+                    "type": "string"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "target-property"
+                    ],
+                    "type": "string"
+                  },
+                  "property": {
+                    "minLength": 1,
+                    "pattern": "^[A-Z_][A-Z0-9_]*$",
+                    "type": "string"
+                  },
+                  "target": {
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.+-]*(?:::[A-Za-z_][A-Za-z0-9_.+-]*)+$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "target",
+                  "property"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "pkg-config"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "receipt"
+                    ],
+                    "type": "string"
+                  },
+                  "path": {
+                    "format": "relative-path",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "minLength": 1,
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path",
+                  "sha256"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "version_scheme": {
+            "enum": [
+              "semver",
+              "numeric"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "package",
+          "components",
+          "targets",
+          "version",
+          "version_scheme",
+          "version_probe",
+          "package_manager",
+          "provenance"
+        ],
+        "type": "object"
+      },
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "roots": {
+      "items": {
+        "minLength": 1,
+        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+        "type": "string"
+      },
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schema_version": {
+      "const": 2,
+      "type": "integer"
+    },
+    "tool_version": {
+      "enum": [
+        "2.0.0"
+      ],
+      "type": "string"
+    },
+    "unused_sources": {
+      "items": {
+        "minLength": 1,
+        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+        "type": "string"
+      },
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "workspace_sha256": {
+      "minLength": 1,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tool_version",
+    "workspace_sha256",
+    "platform",
+    "profile",
+    "mode",
+    "roots",
+    "packages",
+    "edges",
+    "providers",
+    "order",
+    "unused_sources"
+  ],
+  "title": "OBCX v2 resolved-packages",
+  "type": "object"
+}

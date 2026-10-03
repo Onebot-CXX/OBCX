@@ -1,14 +1,8 @@
 #include "onebot11/adapter/protocol_adapter.hpp"
 #include "common/logger.hpp"
-#include "onebot11/adapter/event_converter.hpp"
 #include "onebot11/adapter/message_converter.hpp"
 
 namespace obcx::adapter::onebot11 {
-
-auto ProtocolAdapter::parse_event(std::string_view json_str)
-    -> std::optional<common::Event> {
-  return EventConverter::from_v11_json(json_str);
-}
 
 auto ProtocolAdapter::serialize_send_message_request(
     std::string_view target_id, const common::Message &message,
@@ -744,7 +738,9 @@ auto ProtocolAdapter::serialize_send_group_forward_msg_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request: {}", j.dump());
+  // Forward nodes can contain private descriptions and complete base64 images.
+  // Keep their content out of diagnostics even when trace logging is enabled.
+  OBCX_DEBUG("Serialized group forward request: nodes={}", messages.size());
   return j.dump();
 }
 

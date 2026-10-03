@@ -1,9 +1,9 @@
 #include "common/config_loader.hpp"
 #include "common/logger.hpp"
 #include "core/bot_registry.hpp"
-#include "core/db_manager.hpp"
+#include "core/infrastructure/db_manager.hpp"
 #include "core/qq_bot.hpp"
-#include "core/runtime_generation.hpp"
+#include "core/runtime/runtime_generation.hpp"
 #include "core/tg_bot.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -36,7 +36,6 @@ namespace {
 
 namespace asio = boost::asio;
 namespace fs = std::filesystem;
-using namespace std::chrono_literals;
 
 struct Options {
   fs::path message_store_actor;
@@ -225,6 +224,14 @@ public:
   void run_write_task(
       std::function<void(obcx::core::IDbConnection &)> work) override {
     delegate_->run_write_task(
+        [this, work = std::move(work)](obcx::core::IDbConnection &) mutable {
+          work(*this);
+        });
+  }
+
+  void run_transaction_task(
+      std::function<void(obcx::core::IDbConnection &)> work) override {
+    delegate_->run_transaction_task(
         [this, work = std::move(work)](obcx::core::IDbConnection &) mutable {
           work(*this);
         });
@@ -530,7 +537,8 @@ auto run_batch(
         });
   }
 
-  require(done.wait_for(120s) == std::future_status::ready,
+  require(done.wait_for(std::chrono::seconds{120}) ==
+              std::future_status::ready,
           "bridge business batch timed out");
   require(state->failures.load(std::memory_order_relaxed) == 0,
           state->first_error.empty() ? "bridge business batch failed"

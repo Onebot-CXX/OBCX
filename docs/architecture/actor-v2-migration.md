@@ -8,42 +8,48 @@ A standalone package contains one canonical metadata document, a CMake entry,
 and actor sources:
 
 ```text
-actor.toml
+package.toml
 CMakeLists.txt
 src/example_actor.hpp
 src/example_actor.cpp
 tests/...
 ```
 
-Start from `local_actor/obcx-actor-template`. `actor.toml` declares identity,
-semantic version, ABI 2, artifact/target names, package and actor
-dependencies, supported OBCX range, repository, license, description, and only
-the release platforms whose binaries were built and verified. Unknown or
-missing fields fail validation; an undeclared platform cannot resolve from the
-actor registry.
+Start from `local_actor/obcx-actor-template`. V2 `package.toml` declares identity,
+semantic version, ABI 2, artifact/target names, typed library/actor/system
+dependencies, test dependencies, compatibility and publication information.
+Unknown or missing fields fail validation. The development registry records
+metadata only; a declared platform does not manufacture a verified download.
 
 ## CMake contract
 
 ```cmake
 cmake_minimum_required(VERSION 3.30)
-project(example_actor VERSION 0.1.0 LANGUAGES CXX)
+if(NOT DEFINED OBCX_CURRENT_PACKAGE)
+  project(example_actor VERSION 0.1.0 LANGUAGES CXX)
+  find_package(obcx-sdk CONFIG REQUIRED GLOBAL)
+  include(OBCXPackages)
+  obcx_load_configured_workspace()
+  return()
+endif()
 
-find_package(obcx-sdk CONFIG REQUIRED)
-include(OBCXActor)
-
-obcx_add_actor(example
-  SOURCES src/example_actor.cpp
-  OUTPUT_NAME example)
+obcx_add_actor(SOURCES src/example_actor.cpp)
 ```
 
-`artifact.target` must equal `example_actor`, and `artifact.name` must equal
-`example`. Installation places the library under `lib/obcx/actors` and
-metadata under `share/obcx/actors/<actor-id>/actor.toml`.
+Target, export and artifact names come from metadata, as do external links.
+Register internal and test targets with an explicit `obcx_package_target` role.
+Installation places the library under `lib/obcx/actors` and metadata under
+`share/obcx/packages/<package-id>/package.toml`.
+
+The bootstrap requires all four `OBCX_PACKAGES_WORKSPACE/CACHE/MODE/STATE_DIR`
+values and an explicit configuration. CMake resolves the graph offline internally; see
+[package CMake](package-cmake.md). Core workspace development is the current
+acceptance scope; expanded standalone distribution remains deferred.
 
 ## C++ contract
 
 ```cpp
-#include <core/reflected_actor.hpp>
+#include <core/actor/reflected_actor.hpp>
 
 namespace example::events {
 struct Requested { std::string text; };
@@ -55,9 +61,6 @@ void to_json(obcx::common::json&, const Handled&);
 class ExampleActor final
     : public obcx::core::ReflectedActor<ExampleActor> {
 public:
-  static constexpr std::string_view actor_name = "example";
-  static constexpr std::string_view actor_version = "0.1.0";
-
   auto handle(const example::events::Requested &request,
               const obcx::core::MessageEnvelope &message,
               obcx::core::ActorContext &context)
@@ -72,11 +75,44 @@ public:
 OBCX_ACTOR_EXPORT_V2(ExampleActor)
 ```
 
+The build derives inherited `actor_name` and `actor_version` from the admitted
+`package.toml` fields `actor.name` and `package.version`; do not redeclare them in
+C++. `obcx_add_actor` and registered actor implementation/test targets receive
+private generated bindings automatically. The SDK keeps the one-parameter base
+through a package-namespaced alias to an identity-parameterized implementation.
+One translation unit selects one actor package; exchange public messages rather
+than including another actor's authoring headers. Missing build metadata is a
+compile error, not a fallback identity.
+
+`OBCX_INFO`, `OBCX_WARN` and the other logging macros in actor-owned sources use
+`[actor.name]`, including background work and internal libraries. Host code uses
+`[core]`. Logs identify source ownership: a shared core HTTP implementation keeps
+its core tag even when an actor calls it. No runtime configuration is added.
+
 The export macro supplies the numeric ABI, factory, destructor, name, version,
-and generated schema-1 input contract. The compiler rejects inherited,
+and generated schema-2 input contract. The compiler rejects inherited,
 non-public, malformed, duplicate, or JSON-inconvertible handler inputs. Wire
 identity is exactly the fully qualified C++ type name; aliases are removed.
 Do not export a second factory or hand-written contract from the same library.
+
+## Configuration-derived command availability
+
+Commands restricted by actor-owned group/topic configuration can opt in with
+`obcx::command::actor_scoped(obcx::command::observe<Request>(...))`. Include
+`<core/actor/command_availability.hpp>` and publish `GroupScopes` through the
+owner-bound `AvailabilityPublisher` service during `prepare_generation`, using
+the same parsed configuration and matching helpers as the handler. Publish in
+validation-only mode too; an explicit empty set denies all contexts, while a
+missing publication for an active marked command fails generation construction.
+
+This is an additive data contract, not a new executable export, handler probe,
+or TOML option. No configuration defaults or duplicate group lists are needed.
+Core freezes copied values, intersects them with the existing ACL, and uses one
+eligibility check for both help and dispatch. Unmarked actors remain ACL-only;
+scoped actor binaries require a supporting runtime. See
+[actor command availability](actor-command-routing.md#actor-owned-command-availability)
+for topic semantics, publication validation, consume-on-unavailable behavior,
+and the distinction between filtered `/help` and unfiltered platform menus.
 
 ## Asio interop
 
@@ -135,10 +171,10 @@ timeouts.
 
 ## Services and protocol capabilities
 
-Resolve shared runtime services with `context.get_service<T>()`. Bot-specific
-features use installed capability interfaces such as `IQQBot` and
-`ITelegramBot`; actor packages must not include concrete bot or connection
-manager implementation headers.
+Resolve shared runtime services with `context.get_service<T>()`. Bot egress
+uses the installed `BotOperationGateway` plus data-only operation contracts;
+actor packages must not include process component, provider, transport, or
+connection-manager implementation headers.
 
 Database-aware actors read `context.db_instance()` and
 `context.db_namespace()`. Pipeline partition keys determine the mailbox
@@ -197,10 +233,11 @@ Run the same test against a clean installed SDK and installed actor artifacts.
 
 ## Package verification
 
+After configuring with the explicit workspace inputs described above:
+
 ```bash
-cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/obcx/install
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
+cmake --build build --parallel 20
+ctest --test-dir build --parallel 20 --output-on-failure
 cmake --install build --prefix /tmp/example-package
 ```
 
