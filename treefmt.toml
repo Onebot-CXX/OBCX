@@ -25,8 +25,6 @@ includes = [
   "include/**/*.hpp",
   "src/**/*.cpp",
   "src/**/*.hpp",
-  "tests/**/*.cpp",
-  "tests/**/*.hpp",
   "local_actor/**/*.cpp",
   "local_actor/**/*.hpp",
 ]

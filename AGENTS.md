@@ -30,15 +30,4 @@
 
 ## Unit test rule
 
-- Test current observable behavior and meaningful failure boundaries, not the
-  absence of deleted features. When A is replaced by B, update or replace A's
-  tests; do not keep a historical `not A` suite alongside B.
-- Do not add tests solely to reject retired names, assert deleted files/symbols
-  are absent, or repeat plain data-member assignments. Keep negative tests for
-  actual risks such as invalid current inputs, authorization, data loss and
-  lifecycle safety.
-- Check existing coverage before adding a case. Prefer extending a relevant
-  behavior test and reusing its expensive fixture over duplicate configure/build
-  cycles or source-text checks already covered by real compilation/execution.
-- Reduce redundant work, not just reported counts: do not hide unchanged test
-  volume inside loops or giant combined tests. Test totals are not a quality goal.
+- Do not write any unit test unless i asked

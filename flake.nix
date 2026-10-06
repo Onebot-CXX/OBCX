@@ -126,7 +126,6 @@
                   curl
                   fmt
                   zlib
-                  gtest
                   nlohmann_json
                   openspec
                   openssl

@@ -115,17 +115,11 @@
                 "format": "relative-path",
                 "minLength": 1,
                 "type": "string"
-              },
-              "sha256": {
-                "minLength": 1,
-                "pattern": "^[0-9a-f]{64}$",
-                "type": "string"
               }
             },
             "required": [
               "kind",
-              "path",
-              "sha256"
+              "path"
             ],
             "type": "object"
           },

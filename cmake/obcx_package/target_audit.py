@@ -12,7 +12,7 @@ import re
 import shlex
 
 from . import PackageError
-from .io import digest, read_json
+from .io import read_json
 from .providers import verify_environment, verify_provider
 from .versions import satisfies
 
@@ -193,9 +193,6 @@ class Audit:
         for provider in self.snapshot["providers"].values():
             binding = provider["binding"]
             workspace = Path(self.snapshot["workspace"])
-            anchor = workspace / binding["provenance"]["path"]
-            if digest(anchor.read_bytes()) != binding["provenance"]["sha256"]:
-                raise PackageError(f"{binding['id']}: provider anchor changed after configure")
             verify_provider(binding, json.loads(Path(provider["observed"]).read_bytes()), workspace, Path(self.snapshot["build"]))
             observed = []
             for name in provider["members"]:

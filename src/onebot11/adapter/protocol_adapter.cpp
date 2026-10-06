@@ -302,7 +302,7 @@ auto ProtocolAdapter::serialize_send_private_message_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request: {}", j.dump());
+  OBCX_DEBUG("Serialized private message request: segments={}", message.size());
   return j.dump();
 }
 

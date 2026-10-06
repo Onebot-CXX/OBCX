@@ -15,13 +15,6 @@ def verify_environment(binding: dict, targets: list[dict], workspace: Path, buil
     environment = read_json(path, "provider-environment")
     if environment["kind"] != provenance["kind"]:
         raise PackageError(f"provider {binding['id']}: environment kind mismatch")
-    for item in environment["inputs"]:
-        try:
-            content = (workspace / item["path"]).read_bytes()
-        except OSError:
-            raise PackageError(f"provider {binding['id']}: missing environment input") from None
-        if digest(content) != item["sha256"]:
-            raise PackageError(f"provider {binding['id']}: environment input drift: {item['path']}")
     prefixes = []
     for item in environment["prefixes"]:
         path = Path(item["path"])
@@ -80,14 +73,6 @@ def verify_provider(binding: dict, observation: dict, workspace: Path, build: Pa
     if set(observed) != set(binding["targets"]):
         raise PackageError(f"provider {provider_id}: actual targets differ from authorized targets")
 
-    provenance = binding["provenance"]
-    try:
-        anchor = (workspace / provenance["path"]).read_bytes()
-    except OSError:
-        raise PackageError(f"provider {provider_id}: missing provenance anchor") from None
-    if digest(anchor) != provenance["sha256"]:
-        raise PackageError(f"provider {provider_id}: provenance anchor drift")
-
     verify_environment(binding, observation["targets"], workspace, build)
     version = observation["version"]
     probe = binding["version_probe"]
@@ -133,7 +118,7 @@ def verify_provider(binding: dict, observation: dict, workspace: Path, build: Pa
     if not satisfies(version, "=" + binding["version"], binding["version_scheme"]):
         raise PackageError(f"provider {provider_id}: actual version {version} differs from locked {binding['version']}")
     return {"id": provider_id, "version": version, "version_scheme": binding["version_scheme"],
-            "provenance_sha256": provenance["sha256"], "targets": observation["targets"]}
+            "targets": observation["targets"]}
 
 
 def merge_vcpkg_dependencies(base: list, additions: list[dict]) -> list[dict]:

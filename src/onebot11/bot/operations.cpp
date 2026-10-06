@@ -44,6 +44,30 @@ public:
     return installation_;
   }
 
+  auto execute(const obcx::onebot11::bot::GetOneBotLoginInfoRequest &)
+      -> boost::asio::awaitable<
+          bot::BotOperationResult<obcx::onebot11::bot::OneBotLoginInfo>> {
+    using Result = obcx::onebot11::bot::OneBotLoginInfo;
+    const auto echo = next_echo();
+    const auto response = co_await transport().send_action(
+        protocol().serialize_get_self_info_request(echo), echo);
+    const auto parsed = parse_onebot11_operation_response(response, false);
+    if (!parsed.ok())
+      co_return provider_failure<Result>(parsed);
+    const auto user_id = provider_id(parsed_value(parsed), "user_id");
+    if (!user_id)
+      co_return malformed_read<Result>(
+          "OneBot login response is missing user_id");
+    Result result{.installation = installation_, .user_id = *user_id};
+    try {
+      result.validate();
+    } catch (...) {
+      co_return malformed_read<Result>(
+          "OneBot login response has invalid user_id");
+    }
+    co_return bot::BotOperationResult<Result>::success(std::move(result));
+  }
+
   auto execute(const bot::SendGroupMessageRequest &request)
       -> boost::asio::awaitable<
           bot::BotOperationResult<bot::SendMessageResult>> {

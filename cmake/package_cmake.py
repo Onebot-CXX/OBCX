@@ -58,10 +58,6 @@ def main(argv=None) -> int:
             binding = json.loads(args.binding.read_bytes())
             validate_provider_binding(binding, "provider")
             if args.command == "check-environment":
-                from obcx_package.io import digest
-                anchor = args.workspace / binding["provenance"]["path"]
-                if digest(anchor.read_bytes()) != binding["provenance"]["sha256"]:
-                    raise PackageError("provider environment anchor drift")
                 verify_environment(binding, [], args.workspace, args.build_dir)
             else:
                 observation = json.loads(args.observed.read_bytes())

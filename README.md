@@ -20,7 +20,6 @@ nix develop
 cp packages-example.toml packages.toml
 cmake --preset actor-dev
 cmake --build --preset actor-dev --parallel "$(nproc)"
-ctest --preset actor-dev --parallel "$(nproc)"
 ```
 
 也可以在系统环境中构建；需要 Linux x86_64/arm64、CMake 3.30、GCC 16.1+
@@ -266,14 +265,8 @@ message type，配置再按 platform/bot scope 激活路由；平台适配器不
 和迁移约束见
 [Actor command routing](docs/architecture/actor-command-routing.md)。
 
-根仓库使用自有的通用 fixture 验证干净安装 SDK：
-
-```bash
-ctest --preset actor-dev -R '^actor_sdk_v2_smoke$'
-```
-
-独立 actor 仓库各自负责其业务测试和跨 actor 集成；根构建只加载 workspace
-明确选中的包，tests profile 注册这些包的测试，不遍历全部 `local_actor/`。
+根构建只加载 workspace 明确选中的包，不遍历全部 `local_actor/`。
+当前工作区已移除源码测试目录内容及对应构建入口，使用 `production` profile。
 
 ## Package registry
 
@@ -288,10 +281,9 @@ python3 cmake/package_tool.py registry-index --entries actor-registry/entries \
 
 经验证的发行物、发布工具的正式版本固定和远程发布仍后置。
 
-## 验证与文档
+## 文档
 
 ```bash
-ctest --preset actor-dev
 python3 scripts/generate_api_docs.py
 ```
 

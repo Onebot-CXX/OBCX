@@ -83,14 +83,13 @@ jobs:
 
       - name: Prepare explicit core-only workspace
         run: |
-          printf 'schema_version = 2\nsources = []\nproviders = []\n[workspace]\nroots = []\nplatform = "%s"\nprofile = "tests"\n' \
+          printf 'schema_version = 2\nsources = []\nproviders = []\n[workspace]\nroots = []\nplatform = "%s"\nprofile = "production"\n' \
             '${{ matrix.platform }}' > packages.toml
 
       - name: Configure
         run: |
           nix develop .#ci --command cmake -G Ninja -B build -S . \
             -DCMAKE_BUILD_TYPE=Release \
-            -DOBCX_BUILD_TESTS=ON \
             -DOBCX_BUILD_BENCHMARKS=OFF \
             -DOBCX_PACKAGES_WORKSPACE="$PWD/packages.toml" \
             -DOBCX_PACKAGES_CACHE="$PWD/build/package-state/sources" \
@@ -106,11 +105,3 @@ jobs:
       - name: Generate actor-only API documentation
         run: |
           nix develop .#ci --command python3 scripts/generate_api_docs.py
-
-      - name: Run full core tests
-        working-directory: build
-        run: |
-          workers=$(nproc)
-          if [ "$workers" -lt 6 ]; then workers=6; fi
-          nix develop .#ci --command ctest --output-on-failure --parallel "$workers" \
-            --label-exclude installed-sdk

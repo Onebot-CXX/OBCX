@@ -1,5 +1,7 @@
 # API documentation
 
+- [OneBot11 通用群合并转发与 actor 策略边界](onebot11-forward.md)
+
 English and Chinese Doxygen outputs are generated and audited together:
 
 ```bash

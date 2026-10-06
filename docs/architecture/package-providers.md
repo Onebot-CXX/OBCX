@@ -36,44 +36,35 @@ numeric scheme. The resolver separately checks every consumer's range.
 
 ## Environment provenance
 
-`provenance.path` names a `provider-environment` JSON record and `provenance.sha256`
-fixes its content. Its required fields are:
+`provenance.path` names a `provider-environment` JSON record. Its required fields are:
 
 - `schema_version = 2`;
 - `kind`, matching the binding's provenance kind;
-- `inputs`: explicit workspace-relative file paths and SHA-256 digests;
 - `prefixes`: explicit `{base, path}` records, where base is `workspace`, `build`
   or `absolute`.
 
-For the core Nix development environment, the inputs record `flake.nix` and
-`flake.lock`; provider paths must come from the explicitly recorded store outputs.
-A Nix prefix cannot authorize all of `/nix/store`. The core/SDK baseline owns SDK
-internal dependencies; actor metadata owns additional direct dependencies. Do not
-copy actor-specific dependency lists into a second hand-maintained shell manifest.
+Provider bindings and environment records do not pin environment-file hashes.
+Changes to `flake.nix`, `flake.lock`, or CMake files require no provider hash refresh.
+When migrating an existing workspace, remove `provenance.sha256` from provider
+bindings and `inputs` from their environment records. Source archive hashes and
+binary version-receipt hashes are separate integrity checks and remain required.
 
-Environment input drift is checked **before** running a provider's CMake config
-or find module. Afterwards, discovered include directories and binary locations
-must exist and be contained in the declared prefixes. A matching version under an
-unrelated installation prefix is not accepted. Build-relative prefixes allow the
-in-tree SDK's generated headers without committing machine-specific build paths.
+Provider paths must come from the explicitly recorded store outputs. A Nix prefix
+cannot authorize all of `/nix/store`. Discovered include directories and binary
+locations must exist and be contained in the declared prefixes. A matching version
+under an unrelated installation prefix is not accepted. Build-relative prefixes
+allow the in-tree SDK's generated headers without committing machine-specific paths.
 
-The current local workspace records its reviewed environment files under
-`.package-state/providers/` and hashes them in `packages.toml`. Current bindings
-are verified on every configure. SDK evidence also hashes root and `src/CMakeLists.txt`;
-its version is read from the exported `obcx::obcx_core.OBCX_SDK_VERSION` property.
-Exact Nix output prefixes cover the observed SDK closure, including literal
-pkg-config library paths. SDK include roots are explicitly `workspace:include`
-and `build:generated`, not the whole checkout. GTest is test-profile-only;
-LibXml2/tomlplusplus and test SQLite have separate bindings. These local records
-verify the explicitly selected environment; they are not a dependency approval snapshot. The user explicitly rejected adding
-flake-generated dependency lists: the existing `flake.nix`/`flake.lock` own the
-third-party environment. Do not modify the flake or introduce another automatic
-list generator for this change. Package declarations and actual cross-package
-links remain the checks this work needs to add.
+The local workspace stores environment records under `.package-state/providers/`
+and references them from `packages.toml`. CMake tracks these records for
+reconfiguration and checks actual provider versions, targets, and paths on every
+configure. The SDK version comes from `obcx::obcx_core.OBCX_SDK_VERSION`; its include
+roots are explicitly `workspace:include` and `build:generated`, not the whole checkout.
 
-This is explicit provenance checking, not a Nix/vcpkg installer or a sandbox for
-malicious CMake. The real core/actor compilation path is verified; final build receipts remain a
-separate integration step.
+The core/SDK baseline owns SDK internal dependencies; actor metadata owns additional
+direct dependencies. `flake.nix`/`flake.lock` own the third-party environment; no
+second generated dependency list is required. These checks do not install packages
+or sandbox malicious CMake. Final build receipts remain a separate integration step.
 
 ## Unversioned providers
 

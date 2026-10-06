@@ -6,6 +6,35 @@
 
 namespace obcx::onebot11::bot {
 
+struct GetOneBotLoginInfoRequest {
+  using obcx_bot_json_factory = void;
+  inline static const auto &action = actions::get_login_info;
+  BotInstallationRef installation;
+
+  void validate() const {
+    detail::require_onebot(installation, "GetOneBotLoginInfoRequest");
+  }
+
+  static auto from_json(const Json &document) -> GetOneBotLoginInfoRequest {
+    obcx::bot::detail::require_only_keys(document, "GetOneBotLoginInfoRequest",
+                                         {"action", "installation"});
+    if (document.contains("action") &&
+        document.at("action").get<obcx::bot::ActionId>() != action) {
+      throw std::invalid_argument("GetOneBotLoginInfoRequest action mismatch");
+    }
+    GetOneBotLoginInfoRequest result{
+        .installation = document.at("installation").get<BotInstallationRef>()};
+    result.validate();
+    return result;
+  }
+};
+
+inline void to_json(Json &document, const GetOneBotLoginInfoRequest &request) {
+  request.validate();
+  document = {{"action", request.action},
+              {"installation", request.installation}};
+}
+
 struct GetOneBotGroupMemberRequest {
   using obcx_bot_json_factory = void;
   static auto from_json(const Json &document) -> GetOneBotGroupMemberRequest;
@@ -290,6 +319,27 @@ inline auto PokeOneBotGroupRequest::from_json(const Json &document)
 } // namespace obcx::onebot11::bot
 
 namespace obcx::bot {
+
+template <>
+struct OperationTraits<onebot11::bot::GetOneBotLoginInfoRequest>
+    : OperationContract<onebot11::bot::GetOneBotLoginInfoRequest,
+                        onebot11::bot::OneBotLoginInfo, false> {
+  static auto supports_surface(const SurfaceId &surface) -> bool {
+    return surface == onebot11::bot::surface;
+  }
+  static auto installation(const request_type &request)
+      -> const BotInstallationRef & {
+    return request.installation;
+  }
+  static void validate_result(const request_type &request,
+                              const result_type &result) {
+    result.validate();
+    if (result.installation != request.installation) {
+      throw std::invalid_argument(
+          "OneBot login result does not match installation");
+    }
+  }
+};
 
 template <>
 struct OperationTraits<onebot11::bot::GetOneBotGroupMemberRequest>

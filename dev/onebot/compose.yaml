@@ -1,14 +1,22 @@
 services:
   llonebot:
-    image: initialencounter/llonebot:latest
+    image: docker.io/linyuchen/llbot:latest
     container_name: llonebot
     restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      VNC_PASSWD: ${OBCX_LLOB_VNC_PASSWORD:-nopasswd}
+      HTTP_PROXY: http://host.docker.internal:20122
+      HTTPS_PROXY: http://host.docker.internal:20122
+      http_proxy: http://host.docker.internal:20122
+      https_proxy: http://host.docker.internal:20122
+      NO_PROXY: localhost,127.0.0.1,::1,llonebot,obcx
+      no_proxy: localhost,127.0.0.1,::1,llonebot,obcx
+      PROTOCOL_MODE: direct
+      AUTO_LOGIN_QQ: "106046931"
+      PMHQ_AUTH_TOKEN: "${PMHQ_AUTH_TOKEN:?Set PMHQ_AUTH_TOKEN in .env or the environment}"
     volumes:
-      - ./QQ:/root/.config/QQ
-      - ./llonebot:/root/llonebot
-      - ./config:/workspace/tests
+      - ./llonebot:/app/llbot/data:rw
     ports:
       - ${OBCX_LLOB_HTTP_BIND:-127.0.0.1:3000}:3000
       - ${OBCX_LLOB_WS_BIND:-127.0.0.1:3001}:3001

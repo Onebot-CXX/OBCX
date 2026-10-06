@@ -34,7 +34,6 @@ RUN nix develop .#default --command \
 RUN rm -rf build \
   && nix develop .#default --command cmake -S . -B build -GNinja \
        -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
-       -DOBCX_BUILD_TESTS=OFF \
        -DOBCX_BUILD_BENCHMARKS=OFF \
   && if [ -n "${CMAKE_BUILD_PARALLEL_LEVEL:-}" ]; then \
        nix develop .#default --command cmake --build build --parallel "${CMAKE_BUILD_PARALLEL_LEVEL}"; \

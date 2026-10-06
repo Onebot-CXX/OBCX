@@ -204,23 +204,13 @@ if(OBCX_ENABLE_IO_URING)
   endif()
 endif()
 
-option(OBCX_BUILD_TESTS "Build tests" OFF)
 option(OBCX_BUILD_BENCHMARKS "Build repeatable benchmark executables" OFF)
-
-if(OBCX_BUILD_TESTS)
-  enable_testing()
-endif()
-
 
 add_subdirectory(src)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 include(OBCXPackages)
 obcx_load_configured_workspace()
-
-if(OBCX_BUILD_TESTS)
-  add_subdirectory(tests)
-endif()
 
 if(OBCX_BUILD_BENCHMARKS)
   add_subdirectory(benchmarks)

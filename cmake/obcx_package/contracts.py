@@ -109,10 +109,9 @@ PROVIDER = obj({"id": ID,
                 "version_scheme": choice("semver", "numeric"),
                 "version_probe": VERSION_PROBE, "package_manager": PACKAGE_MANAGER,
                 "provenance": obj({"kind": choice("nix", "vcpkg", "environment", "workspace-sdk", "installed-sdk"),
-                                   "path": PATH, "sha256": SHA})})
+                                   "path": PATH})})
 PROVIDER_ENVIRONMENT = obj({"schema_version": integer(SCHEMA_VERSION),
                             "kind": choice("nix", "vcpkg", "environment", "workspace-sdk", "installed-sdk"),
-                            "inputs": array(obj({"path": PATH, "sha256": SHA}), 1),
                             "prefixes": array(obj({"base": choice("workspace", "build", "absolute"), "path": text()}), 1)})
 PROVIDER_RECEIPT = obj({"schema_version": integer(SCHEMA_VERSION), "id": ID,
                         "version": text(), "version_scheme": choice("semver", "numeric"),

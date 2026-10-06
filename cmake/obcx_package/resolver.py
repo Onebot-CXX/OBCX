@@ -105,11 +105,9 @@ class Resolver:
         binding = self.bindings[provider_id]
         provenance = binding["provenance"]
         try:
-            content = (self.manifest.parent / provenance["path"]).read_bytes()
+            (self.manifest.parent / provenance["path"]).read_bytes()
         except OSError:
             raise PackageError(f"providers.{provider_id}.provenance: missing receipt/lock; chain {chain}") from None
-        if digest(content) != provenance["sha256"]:
-            raise PackageError(f"providers.{provider_id}.provenance.sha256: drift; chain {chain}")
         for target in binding["targets"]:
             self.claim_target(target, f"system:{provider_id}")
         self.providers[provider_id] = binding

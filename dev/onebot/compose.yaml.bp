@@ -1,0 +1,27 @@
+services:
+  llonebot:
+    image: docker.io/initialencounter/llonebot:latest
+    container_name: llonebot
+    restart: always
+    environment:
+      AUTH_TOKEN: "${AUTH_TOKEN:?Set AUTH_TOKEN in .env or the environment}"
+    volumes:
+      - ./QQ:/root/.config/QQ
+      - ./llonebot:/root/llonebot
+      - ./config:/workspace/tests
+    ports:
+      - ${OBCX_LLOB_HTTP_BIND:-127.0.0.1:3000}:3000
+      - ${OBCX_LLOB_WS_BIND:-127.0.0.1:3001}:3001
+      - ${OBCX_LLOB_WEBUI_BIND:-127.0.0.1:3080}:3080
+      - ${OBCX_LLOB_SATORI_BIND:-127.0.0.1:5600}:5600
+      - ${OBCX_LLOB_PMHQ_BIND:-127.0.0.1:13000}:13000
+
+  obcx:
+    profiles: [server]
+    image: localhost/obcx:nix-amd64
+    container_name: obcx
+    restart: always
+    volumes:
+      - ./config:/workspace/tests
+    depends_on:
+      - llonebot

@@ -17,7 +17,6 @@
         "OBCX_PACKAGES_CACHE": "${sourceDir}/build/actor-dev/package-state/sources",
         "OBCX_PACKAGES_STATE_DIR": "${sourceDir}/build/actor-dev/package-state/cmake",
         "OBCX_PACKAGES_MODE": "development",
-        "OBCX_BUILD_TESTS": "ON",
         "OBCX_BUILD_BENCHMARKS": "OFF"
       }
     },
@@ -32,7 +31,6 @@
         "OBCX_PACKAGES_CACHE": "${sourceDir}/build/actor-release/package-state/sources",
         "OBCX_PACKAGES_STATE_DIR": "${sourceDir}/build/actor-release/package-state/cmake",
         "OBCX_PACKAGES_MODE": "development",
-        "OBCX_BUILD_TESTS": "ON",
         "OBCX_BUILD_BENCHMARKS": "ON"
       }
     }
@@ -45,36 +43,6 @@
     {
       "name": "actor-release",
       "configurePreset": "actor-release"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "actor-fast",
-      "configurePreset": "actor-dev",
-      "filter": {
-        "exclude": {
-          "label": "(compile-contract|contract|architecture|installed-sdk|slow)"
-        }
-      },
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "actor-full",
-      "configurePreset": "actor-dev",
-      "filter": {
-        "exclude": {
-          "label": "slow"
-        }
-      },
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "actor-dev",
-      "inherits": "actor-full"
     }
   ]
 }

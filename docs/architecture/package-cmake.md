@@ -35,7 +35,7 @@ nor chooses alternative versions. An explicit empty roots list configures no pac
 Missing remote cache entries fail with an offline diagnostic.
 
 State must be outside package source roots. Workspace, selected package metadata,
-tool sources and provider environment inputs participate in CMake reconfiguration
+tool sources and provider environment records participate in CMake reconfiguration
 tracking. The graph is generated under `STATE_DIR/current-graph.json`; it is not
 an input or an approval snapshot. Valid metadata changes need no separate acceptance,
 and generated state can be deleted and recreated. Identical atomic outputs retain

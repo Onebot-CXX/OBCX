@@ -4,6 +4,8 @@
 #include "core/bot/references.hpp"
 #include "onebot11/bot/actions.hpp"
 
+#include <algorithm>
+
 namespace obcx::onebot11::bot {
 
 using obcx::bot::BotInstallationRef;
@@ -23,6 +25,37 @@ inline void require_onebot(const BotInstallationRef &installation,
   }
 }
 } // namespace detail
+
+struct OneBotLoginInfo {
+  using obcx_bot_json_factory = void;
+  BotInstallationRef installation;
+  std::string user_id;
+
+  void validate() const {
+    detail::require_onebot(installation, "OneBotLoginInfo");
+    detail::validate_identifier(user_id, "OneBot self user_id", 20);
+    if (user_id.front() == '0' || !std::ranges::all_of(user_id, [](char c) {
+          return c >= '0' && c <= '9';
+        })) {
+      throw std::invalid_argument("Invalid OneBot self user_id");
+    }
+  }
+
+  static auto from_json(const Json &document) -> OneBotLoginInfo {
+    detail::require_object(document, "OneBotLoginInfo");
+    OneBotLoginInfo result{
+        .installation = document.at("installation").get<BotInstallationRef>(),
+        .user_id =
+            detail::require_string(document, "user_id", "OneBotLoginInfo")};
+    result.validate();
+    return result;
+  }
+};
+
+inline void to_json(Json &document, const OneBotLoginInfo &value) {
+  value.validate();
+  document = {{"installation", value.installation}, {"user_id", value.user_id}};
+}
 
 struct OneBotGroupMember {
   using obcx_bot_json_factory = void;
