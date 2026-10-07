@@ -189,39 +189,14 @@ That SDK smoke uses root-owned generic actor fixtures. Selected workspace
 packages contribute their own tests; this does not establish a coordinated
 standalone release.
 
-### Historical release commands — unavailable after package-v2 cutover
+### Release packaging
 
-The scripts below describe the pre-v2 release workflow, **not runnable current
-release instructions**. Their orchestration still assumes hardcoded actors,
-removed conformance targets and incomplete single-DSO archives. The CLI now
-refuses these operations before changing directories or producing release
-assets. Inventory/closure-based replacement is deferred; use the workspace
-build and SDK/stager regressions above in the meantime.
-
-The historical isolated install/soak command was:
-
-```bash
-nix develop --ignore-environment --command \
-  python3 scripts/verify_actor_release.py \
-    --work-dir /tmp/obcx-actor-release-verification \
-    --soak-messages 100000 --jobs 20
-```
-
-The old command removed loader-path overrides, built and installed core with
-hardcoded actor packages, and ran an installed message-store-to-bridge pipeline. `scripts/rehearse_actor_release_rollback.py` rehearses an atomic
-deployment-link switch between immutable candidate and previous install roots.
-
-The retired coordinated-artifact command was:
-
-```bash
-python3 scripts/package_actor_release.py \
-  --deployment /tmp/obcx-actor-release-verification/build/actor-package-conformance/sdk \
-  --output-dir /tmp/obcx-actor-release-artifacts
-sha256sum --check /tmp/obcx-actor-release-artifacts/SHA256SUMS
-```
-
-Historical manifests used `prepared-not-published`; the current CLI does not
-generate one. Tagging and upload remain separate, unauthorized external actions.
+Use the explicit workspace build and SDK installation described above. A
+verified inventory/closure-based container and coordinated release workflow is
+not provided. Retired pre-package-v2 recipes, snapshot replay tools and their
+bundled inputs have been removed; they are not alternate build entry points.
+Git history and OpenSpec retain the design history. Tagging, upload, deployment
+and rollback remain separately authorized operations.
 
 ## Failure handling
 

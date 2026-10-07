@@ -1,5 +1,5 @@
 #include "common/config_snapshot.hpp"
-#include "bot_metadata_document.hpp"
+#include "common/bot_metadata_document.hpp"
 
 #include <algorithm>
 #include <queue>

@@ -293,6 +293,7 @@ python3 scripts/generate_api_docs.py
 - [QQ/Telegram operation boundary](docs/architecture/qq-telegram-bot-operations.md)
 - [Actor runtime ADR](docs/architecture/actor-runtime-adr.md)
 - [Actor operations](docs/architecture/actor-runtime-v2-operations.md)
+- [Current-only runtime and schemas](docs/architecture/current-schema-only.md)
 - [Actor author guide](docs/architecture/actor-v2-migration.md)
 - [Actor package registry](actor-registry/README.md)
 

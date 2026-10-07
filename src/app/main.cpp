@@ -1,4 +1,4 @@
-#include "builtin_bot_platforms.hpp"
+#include "app/builtin_bot_platforms.hpp"
 #include "common/cli_handler.hpp"
 #include "common/config_snapshot.hpp"
 #include "common/logger.hpp"

@@ -18,11 +18,9 @@ namespace obcx::core::configuration {
   throw BotConfigurationError(std::move(code), std::move(path), message);
 }
 
-inline void validate_keys(
-    const toml::table &table,
-    const std::unordered_set<std::string_view> &allowed,
-    const std::string_view path,
-    const std::unordered_set<std::string_view> &legacy_keys) {
+inline void validate_keys(const toml::table &table,
+                          const std::unordered_set<std::string_view> &allowed,
+                          const std::string_view path) {
   for (const auto &[key, value] : table) {
     (void)value;
     const auto key_view = key.str();
@@ -30,14 +28,8 @@ inline void validate_keys(
       continue;
     }
     const auto field = std::string{path} + "." + std::string{key_view};
-    const auto legacy = legacy_keys.contains(key_view);
-    bot_configuration_error(
-        legacy ? "legacy_bot_configuration_key"
-               : "unknown_bot_configuration_key",
-        field,
-        legacy ? field + " is a legacy key; use exact surface/transport and "
-                         "explicit *_ms/use_tls fields"
-               : field + " is not supported");
+    bot_configuration_error("unknown_bot_configuration_key", field,
+                            field + " is not supported");
   }
 }
 

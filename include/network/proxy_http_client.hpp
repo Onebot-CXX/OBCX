@@ -77,16 +77,6 @@ public:
             const std::map<std::string, std::string> &headers = {})
       -> asio::awaitable<HttpResponse> override;
 
-  [[deprecated("Use post() awaitable instead")]]
-  auto post_sync(std::string_view path, std::string_view body,
-                 const std::map<std::string, std::string> &headers = {})
-      -> HttpResponse override;
-
-  [[deprecated("Use get() awaitable instead")]]
-  auto get_sync(std::string_view path,
-                const std::map<std::string, std::string> &headers = {})
-      -> HttpResponse override;
-
   void close() override;
 };
 

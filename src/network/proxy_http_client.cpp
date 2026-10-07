@@ -1,7 +1,7 @@
 #include "network/proxy_http_client.hpp"
 
 #include "common/logger.hpp"
-#include "http_client_impl.hpp"
+#include "network/http_client_impl.hpp"
 
 #include <utility>
 
@@ -63,32 +63,6 @@ auto ProxyHttpClient::head(std::string_view path,
     -> asio::awaitable<HttpResponse> {
   return HttpClient::head(path, headers);
 }
-
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-#elif defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
-
-auto ProxyHttpClient::post_sync(
-    std::string_view path, std::string_view body,
-    const std::map<std::string, std::string> &headers) -> HttpResponse {
-  return HttpClient::post_sync(path, body, headers);
-}
-
-auto ProxyHttpClient::get_sync(
-    std::string_view path, const std::map<std::string, std::string> &headers)
-    -> HttpResponse {
-  return HttpClient::get_sync(path, headers);
-}
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#elif defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
 
 void ProxyHttpClient::close() { HttpClient::close(); }
 

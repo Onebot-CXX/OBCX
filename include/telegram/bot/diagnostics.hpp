@@ -1,5 +1,5 @@
-#ifndef OBCX_SRC_TELEGRAM_BOT_DIAGNOSTICS_HPP_
-#define OBCX_SRC_TELEGRAM_BOT_DIAGNOSTICS_HPP_
+#ifndef OBCX_INCLUDE_TELEGRAM_BOT_DIAGNOSTICS_HPP_
+#define OBCX_INCLUDE_TELEGRAM_BOT_DIAGNOSTICS_HPP_
 
 #include "core/bot/operation_error.hpp"
 
@@ -33,4 +33,4 @@ inline auto redact_diagnostic(const std::string_view value) -> std::string {
 
 } // namespace obcx::telegram::bot
 
-#endif // OBCX_SRC_TELEGRAM_BOT_DIAGNOSTICS_HPP_
+#endif // OBCX_INCLUDE_TELEGRAM_BOT_DIAGNOSTICS_HPP_

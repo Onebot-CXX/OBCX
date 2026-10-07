@@ -1,8 +1,8 @@
 #include "network/http_client.hpp"
 
 #include "common/logger.hpp"
-#include "curl_asio_multi.hpp"
-#include "http_client_impl.hpp"
+#include "network/curl_asio_multi.hpp"
+#include "network/http_client_impl.hpp"
 
 #include <boost/system/system_error.hpp>
 #include <cctype>

@@ -45,14 +45,6 @@ public:
   [[nodiscard]] auto get_connection_type() const -> std::string;
 
   /**
-   * @brief 通过 WebSocket 启动连接过程。(兼容方法)
-   * @param host 主机
-   * @param port 端口
-   * @param access_token 访问令牌
-   */
-  void connect_ws(std::string host, uint16_t port, std::string access_token);
-
-  /**
    * @brief 获取发送操作的strand，用于确保发送操作的线程安全
    * @return 发送操作的strand引用
    */

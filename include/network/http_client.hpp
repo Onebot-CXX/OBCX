@@ -137,33 +137,6 @@ public:
       -> asio::awaitable<HttpResponse>;
 
   /**
-   * @brief 同步发送POST请求
-   * @deprecated 使用 post() awaitable 版本代替
-   */
-  [[deprecated("Use post() awaitable instead")]]
-  virtual auto post_sync(std::string_view path, std::string_view body,
-                         const std::map<std::string, std::string> &headers = {})
-      -> HttpResponse;
-
-  /**
-   * @brief 同步发送GET请求
-   * @deprecated 使用 get() awaitable 版本代替
-   */
-  [[deprecated("Use get() awaitable instead")]]
-  virtual auto get_sync(std::string_view path,
-                        const std::map<std::string, std::string> &headers = {})
-      -> HttpResponse;
-
-  /**
-   * @brief 同步发送HEAD请求
-   * @deprecated 使用 head() awaitable 版本代替
-   */
-  [[deprecated("Use head() awaitable instead")]]
-  virtual auto head_sync(std::string_view path,
-                         const std::map<std::string, std::string> &headers = {})
-      -> HttpResponse;
-
-  /**
    * @brief 设置请求超时
    * @param timeout 超时时间
    */

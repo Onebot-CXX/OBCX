@@ -45,13 +45,17 @@ void WebSocketConnectionManager::set_event_callback(EventCallback callback) {
 
 void WebSocketConnectionManager::connect(
     const common::ConnectionConfig &config) {
-  // Per-API-request timeout (for action echo responses) is distinct from the
-  // TCP connect timeout. Using connect_timeout (5s default) here previously
-  // caused duplicate QQ deliveries: first-time media sends can take ~8s for
-  // llonebot to ack, which tripped the timeout, fired a retry, and then the
-  // original response also arrived successfully on the server.
+  if (is_running_) {
+    OBCX_WARN("ConnectionManager already has a running connection.");
+    return;
+  }
+  // Action echo deadlines are distinct from TCP connection deadlines.
   action_timeout_ = config.action_timeout;
-  connect_ws(config.host, config.port, config.access_token);
+  host_ = config.host;
+  port_ = config.port;
+  access_token_ = config.access_token;
+  is_running_ = true;
+  do_connect();
 }
 
 void WebSocketConnectionManager::disconnect() { shutdown(); }
@@ -80,20 +84,6 @@ void WebSocketConnectionManager::shutdown() {
 
 auto WebSocketConnectionManager::get_connection_type() const -> std::string {
   return "WebSocket";
-}
-
-void WebSocketConnectionManager::connect_ws(std::string host, uint16_t port,
-                                            std::string access_token) {
-  if (is_running_) {
-    OBCX_WARN("ConnectionManager already has a running connection.");
-    return;
-  }
-  host_ = std::move(host);
-  port_ = port;
-  access_token_ = std::move(access_token);
-  is_running_ = true;
-
-  do_connect();
 }
 
 void WebSocketConnectionManager::do_connect() {

@@ -9,7 +9,6 @@ set(OBCX_GENERIC_RUNTIME_SOURCES
     core/runtime/process_configuration.cpp
     network/curl_asio_multi.cpp
     network/http_client.cpp
-    network/http_client_sync.cpp
     network/websocket_client.cpp
     network/websocket_write_queue.cpp
     network/proxy_http_client.cpp

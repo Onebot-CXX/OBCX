@@ -10,9 +10,7 @@
 #include <cstddef>
 #include <memory>
 #include <mutex>
-#include <stdexcept>
 #include <string>
-#include <string_view>
 #include <typeindex>
 #include <unordered_map>
 #include <utility>

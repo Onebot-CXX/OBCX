@@ -4,11 +4,9 @@
 #include "core/bot/operation_gateway.hpp"
 
 #include <boost/asio/awaitable.hpp>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace obcx::core {
 

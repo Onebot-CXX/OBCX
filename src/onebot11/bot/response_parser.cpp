@@ -1,6 +1,6 @@
 #include "onebot11/bot/response_parser.hpp"
-#include "../../core/bot/operation_parser_helpers.hpp"
-#include "diagnostics.hpp"
+#include "core/bot/operation_parser_helpers.hpp"
+#include "onebot11/bot/diagnostics.hpp"
 
 #include <limits>
 

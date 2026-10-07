@@ -43,7 +43,6 @@ struct ActorInputContract {
   struct BotInstallationConfigurationConstraint {
     std::string key;
     std::vector<std::string> expected_types;
-    std::string alternative_group;
   };
 
   struct BotInstallationCollectionConstraint {
@@ -52,7 +51,6 @@ struct ActorInputContract {
     std::string identity_key;
     std::vector<BotInstallationConfigurationConstraint> installation_fields;
     std::vector<std::string> unique_fields;
-    std::string alternative_group;
   };
 
   struct CollectionIdentityReferenceConstraint {
@@ -62,7 +60,6 @@ struct ActorInputContract {
     std::string target_collection;
     std::string target_identity;
     bool optional = false;
-    bool required_when_target_multiple = false;
   };
 
   std::uint32_t schema_version = 0;

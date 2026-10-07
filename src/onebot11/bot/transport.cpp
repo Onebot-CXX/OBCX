@@ -9,7 +9,7 @@
 namespace obcx::core {
 namespace {
 
-auto legacy_config(
+auto network_config(
     const obcx::onebot11::configuration::WebSocketConnection &typed)
     -> common::ConnectionConfig {
   common::ConnectionConfig config;
@@ -21,7 +21,7 @@ auto legacy_config(
   return config;
 }
 
-auto legacy_config(const obcx::onebot11::configuration::HttpConnection &typed)
+auto network_config(const obcx::onebot11::configuration::HttpConnection &typed)
     -> common::ConnectionConfig {
   common::ConnectionConfig config;
   config.host = typed.host;
@@ -104,14 +104,14 @@ void OneBot11TransportCapability::start() {
   if (auto *manager =
           std::get_if<std::unique_ptr<network::WebSocketConnectionManager>>(
               &impl_->manager)) {
-    (*manager)->connect(legacy_config(
+    (*manager)->connect(network_config(
         std::get<obcx::onebot11::configuration::WebSocketConnection>(
             impl_->config)));
   } else if (auto *manager =
                  std::get_if<std::unique_ptr<network::HttpConnectionManager>>(
                      &impl_->manager)) {
     (*manager)->connect(
-        legacy_config(std::get<obcx::onebot11::configuration::HttpConnection>(
+        network_config(std::get<obcx::onebot11::configuration::HttpConnection>(
             impl_->config)));
   } else {
     throw BotComponentRuntimeError("OneBot transport is not configured");

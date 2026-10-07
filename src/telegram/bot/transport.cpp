@@ -21,7 +21,7 @@ auto proxy_type_id(const obcx::telegram::configuration::ProxyType type)
   throw BotComponentRuntimeError("unsupported typed proxy type");
 }
 
-auto legacy_config(const obcx::telegram::configuration::HttpConnection &typed)
+auto network_config(const obcx::telegram::configuration::HttpConnection &typed)
     -> common::ConnectionConfig {
   common::ConnectionConfig config;
   config.host = typed.host;
@@ -87,7 +87,7 @@ void TelegramTransportCapability::start() {
   if (impl_->manager == nullptr) {
     throw BotComponentRuntimeError("Telegram transport is not configured");
   }
-  impl_->manager->connect(legacy_config(impl_->config));
+  impl_->manager->connect(network_config(impl_->config));
   impl_->running = true;
 }
 

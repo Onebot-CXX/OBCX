@@ -10,16 +10,6 @@ using core::configuration::required_port;
 using core::configuration::required_string;
 using core::configuration::required_string_value;
 using core::configuration::validate_keys;
-const std::unordered_set<std::string_view> legacy_keys = {"type",
-                                                          "timeout",
-                                                          "connect_timeout",
-                                                          "action_timeout",
-                                                          "poll_timeout",
-                                                          "poll_force_close",
-                                                          "poll_retry_interval",
-                                                          "heartbeat_interval",
-                                                          "use_ssl",
-                                                          "secret"};
 } // namespace
 
 auto parse_proxy_type(const std::string_view value, const std::string_view path)
@@ -56,7 +46,7 @@ auto parse_http(const toml::table &table, const std::string_view path)
       "proxy_type",
       "proxy_username",
       "proxy_password"};
-  validate_keys(table, keys, path, legacy_keys);
+  validate_keys(table, keys, path);
   HttpConnection config;
   config.host = required_string(table, "host", path);
   config.port = required_port(table, path);

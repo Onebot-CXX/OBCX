@@ -433,47 +433,12 @@ auto parse_actor_contract(const char *document,
         return std::nullopt;
       }
 
-      const common::json *types = &declaration;
-      std::string alternative_group;
-      if (declaration.is_object()) {
-        for (const auto &[member, value] : declaration.items()) {
-          (void)value;
-          if (member != "types" && member != "alternative_group") {
-            error = "actor bot installation constraint contains an "
-                    "unsupported member '" +
-                    member + "'";
-            return std::nullopt;
-          }
-        }
-        if (!declaration.contains("types")) {
-          error = "actor bot installation constraint requires types";
-          return std::nullopt;
-        }
-        types = &declaration["types"];
-        if (declaration.contains("alternative_group")) {
-          if (!declaration["alternative_group"].is_string()) {
-            error = "actor bot installation alternative_group must be a "
-                    "string";
-            return std::nullopt;
-          }
-          alternative_group =
-              declaration["alternative_group"].get<std::string>();
-          if (alternative_group.empty()) {
-            error = "actor bot installation alternative_group must not be "
-                    "empty";
-            return std::nullopt;
-          }
-        }
-      }
-
-      auto expected_types = parse_bot_installation_types(*types, error);
+      auto expected_types = parse_bot_installation_types(declaration, error);
       if (!expected_types) {
         return std::nullopt;
       }
       contract.bot_installation_configuration.push_back(
-          {.key = key,
-           .expected_types = std::move(*expected_types),
-           .alternative_group = std::move(alternative_group)});
+          {.key = key, .expected_types = std::move(*expected_types)});
     }
   }
 
@@ -494,8 +459,7 @@ auto parse_actor_contract(const char *document,
       for (const auto &[member, value] : declaration.items()) {
         (void)value;
         if (member != "minimum_items" && member != "identity" &&
-            member != "bot_installations" && member != "unique_fields" &&
-            member != "alternative_group") {
+            member != "bot_installations" && member != "unique_fields") {
           error = "actor bot installation collection contains an unsupported "
                   "member '" +
                   member + "'";
@@ -580,51 +544,8 @@ auto parse_actor_contract(const char *document,
           return std::nullopt;
         }
       }
-      if (declaration.contains("alternative_group")) {
-        if (!declaration["alternative_group"].is_string()) {
-          error = "actor bot installation collection alternative_group must "
-                  "be a string";
-          return std::nullopt;
-        }
-        collection.alternative_group =
-            declaration["alternative_group"].get<std::string>();
-        if (collection.alternative_group.empty()) {
-          error = "actor bot installation collection alternative_group must "
-                  "not be empty";
-          return std::nullopt;
-        }
-      }
       contract.bot_installation_collection_configuration.push_back(
           std::move(collection));
-    }
-  }
-
-  std::unordered_map<std::string, std::size_t> scalar_alternatives;
-  std::unordered_map<std::string, std::size_t> collection_alternatives;
-  for (const auto &constraint : contract.bot_installation_configuration) {
-    if (!constraint.alternative_group.empty()) {
-      ++scalar_alternatives[constraint.alternative_group];
-    }
-  }
-  for (const auto &constraint :
-       contract.bot_installation_collection_configuration) {
-    if (!constraint.alternative_group.empty()) {
-      ++collection_alternatives[constraint.alternative_group];
-    }
-  }
-  for (const auto &[group, count] : scalar_alternatives) {
-    (void)count;
-    if (collection_alternatives[group] != 1) {
-      error = "actor bot installation alternative group '" + group +
-              "' must contain one collection form";
-      return std::nullopt;
-    }
-  }
-  for (const auto &[group, count] : collection_alternatives) {
-    if (count != 1 || !scalar_alternatives.contains(group)) {
-      error = "actor bot installation collection alternative group '" + group +
-              "' must contain one scalar form";
-      return std::nullopt;
     }
   }
 
@@ -645,8 +566,7 @@ auto parse_actor_contract(const char *document,
         (void)value;
         if (member != "source_key" && member != "root_section" &&
             member != "source_collections" && member != "target_collection" &&
-            member != "target_identity" && member != "optional" &&
-            member != "required_when_target_multiple") {
+            member != "target_identity" && member != "optional") {
           error = "actor collection identity reference contains an "
                   "unsupported member '" +
                   member + "'";
@@ -707,17 +627,13 @@ auto parse_actor_contract(const char *document,
                 "both root_section and source_collections";
         return std::nullopt;
       }
-      for (const auto boolean : {"optional", "required_when_target_multiple"}) {
-        if (declaration.contains(boolean) &&
-            !declaration[boolean].is_boolean()) {
-          error = "actor collection identity reference boolean members must "
-                  "be booleans";
-          return std::nullopt;
-        }
+      if (declaration.contains("optional") &&
+          !declaration["optional"].is_boolean()) {
+        error =
+            "actor collection identity reference optional must be a boolean";
+        return std::nullopt;
       }
       reference.optional = declaration.value("optional", false);
-      reference.required_when_target_multiple =
-          declaration.value("required_when_target_multiple", false);
 
       const auto target = std::ranges::find(
           contract.bot_installation_collection_configuration,

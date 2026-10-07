@@ -1,6 +1,6 @@
 #include "telegram/bot/response_parser.hpp"
-#include "../../core/bot/operation_parser_helpers.hpp"
-#include "diagnostics.hpp"
+#include "core/bot/operation_parser_helpers.hpp"
+#include "telegram/bot/diagnostics.hpp"
 
 #include <limits>
 

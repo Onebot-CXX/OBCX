@@ -1,5 +1,5 @@
 #include "core/runtime/process_configuration.hpp"
-#include "../../common/bot_metadata_document.hpp"
+#include "common/bot_metadata_document.hpp"
 #include "common/logger.hpp"
 #include "core/bot/configuration_fingerprint.hpp"
 #include "core/bot/configuration_validation.hpp"
@@ -53,7 +53,7 @@ auto parse_bot_plans(const toml::table &document,
                               path + " must be an installation table");
     }
     validate_keys(*table, {"enabled", "surface", "transport", "connection"},
-                  path, {"type", "plugins"});
+                  path);
     const auto enabled = required_bool(*table, "enabled", path);
     const auto surface = required_string(*table, "surface", path);
     if (!bot::detail::valid_bot_id(surface)) {

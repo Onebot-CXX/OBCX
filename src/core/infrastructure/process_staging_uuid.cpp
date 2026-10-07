@@ -8,7 +8,7 @@ namespace obcx::core::detail {
 namespace {
 
 const std::string process_start_staging_uuid =
-    boost::uuids::to_string(boost::uuids::random_generator{}());
+    boost::uuids::to_string(boost::uuids::random_generator_pure{}());
 
 } // namespace
 

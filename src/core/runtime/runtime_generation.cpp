@@ -214,68 +214,7 @@ auto validate_actor_configuration(const common::RuntimeConfigSnapshot &snapshot,
     }
     return std::nullopt;
   };
-  const auto configured = [&](const std::string &key) {
-    return section && static_cast<bool>(section->at_path(key));
-  };
-
-  std::unordered_map<std::string, bool> scalar_alternative_selected;
-  std::unordered_map<std::string, bool> collection_alternative_selected;
-  std::unordered_map<std::string, std::string> scalar_alternative_key;
-  std::unordered_map<std::string, std::string> collection_alternative_key;
   for (const auto &constraint : contract.bot_installation_configuration) {
-    if (!constraint.alternative_group.empty()) {
-      scalar_alternative_key.try_emplace(constraint.alternative_group,
-                                         constraint.key);
-      if (configured(constraint.key)) {
-        scalar_alternative_selected[constraint.alternative_group] = true;
-      }
-    }
-  }
-  for (const auto &constraint :
-       contract.bot_installation_collection_configuration) {
-    if (!constraint.alternative_group.empty()) {
-      collection_alternative_key.emplace(constraint.alternative_group,
-                                         constraint.key);
-      if (configured(constraint.key)) {
-        collection_alternative_selected[constraint.alternative_group] = true;
-      }
-    }
-  }
-  std::unordered_set<std::string> alternative_groups;
-  for (const auto &[group, selected] : scalar_alternative_selected) {
-    (void)selected;
-    alternative_groups.insert(group);
-  }
-  for (const auto &constraint : contract.bot_installation_configuration) {
-    if (!constraint.alternative_group.empty()) {
-      alternative_groups.insert(constraint.alternative_group);
-    }
-  }
-  for (const auto &constraint :
-       contract.bot_installation_collection_configuration) {
-    if (!constraint.alternative_group.empty()) {
-      alternative_groups.insert(constraint.alternative_group);
-    }
-  }
-  for (const auto &group : alternative_groups) {
-    const auto scalar = scalar_alternative_selected[group];
-    const auto collection = collection_alternative_selected[group];
-    if (!scalar && !collection) {
-      return actor + "." + scalar_alternative_key[group] + " or " + actor +
-             "." + collection_alternative_key[group] +
-             " must provide one form for " + group;
-    }
-    if (scalar && collection) {
-      return actor + " configuration must provide exactly one form for " +
-             group;
-    }
-  }
-
-  for (const auto &constraint : contract.bot_installation_configuration) {
-    if (!constraint.alternative_group.empty() &&
-        !scalar_alternative_selected[constraint.alternative_group]) {
-      continue;
-    }
     if (!section) {
       return actor + "." + constraint.key +
              " must name an enabled configured bot";
@@ -295,10 +234,6 @@ auto validate_actor_configuration(const common::RuntimeConfigSnapshot &snapshot,
 
   for (const auto &constraint :
        contract.bot_installation_collection_configuration) {
-    if (!constraint.alternative_group.empty() &&
-        !collection_alternative_selected[constraint.alternative_group]) {
-      continue;
-    }
     if (!section) {
       return actor + "." + constraint.key + " must be a non-empty array";
     }
@@ -377,8 +312,7 @@ auto validate_actor_configuration(const common::RuntimeConfigSnapshot &snapshot,
             const std::string &path) -> std::optional<std::string> {
       const auto value = source[reference.source_key].value<std::string>();
       if (!value || value->empty()) {
-        if (reference.optional && !(reference.required_when_target_multiple &&
-                                    target_identities.size() > 1)) {
+        if (reference.optional) {
           return std::nullopt;
         }
         return path + "." + reference.source_key +

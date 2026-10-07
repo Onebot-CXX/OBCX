@@ -7,7 +7,7 @@ component registries, or process command publishers.
 
 ## Module ownership and composition
 
-`src/app/builtin_bot_platforms.hpp` explicitly registers the two production
+`include/app/builtin_bot_platforms.hpp` explicitly registers the two production
 modules into a `BotPlatformCatalog`, seals it, and injects it into configuration
 and generation building. No static self-registration or global config loader is
 used. A reload keeps the same process catalog, gateway and installations.

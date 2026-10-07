@@ -7,7 +7,6 @@
 #include <boost/asio/awaitable.hpp>
 
 #include <memory>
-#include <vector>
 
 namespace obcx::core {
 

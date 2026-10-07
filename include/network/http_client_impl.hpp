@@ -1,7 +1,7 @@
-#ifndef OBCX_SRC_NETWORK_HTTP_CLIENT_IMPL_HPP_
-#define OBCX_SRC_NETWORK_HTTP_CLIENT_IMPL_HPP_
+#ifndef OBCX_INCLUDE_NETWORK_HTTP_CLIENT_IMPL_HPP_
+#define OBCX_INCLUDE_NETWORK_HTTP_CLIENT_IMPL_HPP_
 
-#include "curl_asio_multi.hpp"
+#include "network/curl_asio_multi.hpp"
 #include "network/http_client.hpp"
 
 #include <atomic>
@@ -97,4 +97,4 @@ struct HttpClient::Impl {
 
 } // namespace obcx::network
 
-#endif // OBCX_SRC_NETWORK_HTTP_CLIENT_IMPL_HPP_
+#endif // OBCX_INCLUDE_NETWORK_HTTP_CLIENT_IMPL_HPP_
