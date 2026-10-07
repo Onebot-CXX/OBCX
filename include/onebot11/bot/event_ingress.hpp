@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_BOT_EVENT_INGRESS_HPP_
-#define OBCX_INCLUDE_ONEBOT11_BOT_EVENT_INGRESS_HPP_
+#pragma once
 
 #include "core/bot/bot_event_components.hpp"
 #include "onebot11/bot/capability_ids.hpp"
@@ -22,5 +21,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif

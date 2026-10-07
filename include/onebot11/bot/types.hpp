@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_BOT_TYPES_HPP_
-#define OBCX_INCLUDE_ONEBOT11_BOT_TYPES_HPP_
+#pragma once
 
 #include "core/bot/references.hpp"
 #include "onebot11/bot/actions.hpp"
@@ -325,5 +324,3 @@ inline auto OneBotGroupPokeResult::from_json(const Json &document)
 }
 
 } // namespace obcx::onebot11::bot
-
-#endif // OBCX_INCLUDE_ONEBOT11_BOT_TYPES_HPP_

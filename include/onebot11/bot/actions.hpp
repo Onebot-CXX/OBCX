@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_BOT_ACTIONS_HPP_
-#define OBCX_INCLUDE_ONEBOT11_BOT_ACTIONS_HPP_
+#pragma once
 
 #include "core/bot/ids.hpp"
 
@@ -20,5 +19,3 @@ inline const obcx::bot::ActionId poke_group{"onebot11.group.poke"};
 } // namespace actions
 
 } // namespace obcx::onebot11::bot
-
-#endif // OBCX_INCLUDE_ONEBOT11_BOT_ACTIONS_HPP_

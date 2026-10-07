@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_INSTALLATION_PLAN_HPP_
-#define OBCX_INCLUDE_CORE_BOT_INSTALLATION_PLAN_HPP_
+#pragma once
 
 #include "common/bot_installation_metadata.hpp"
 #include "core/bot/component_descriptor.hpp"
@@ -69,5 +68,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_TUI_TUI_LAYOUT_HPP_
-#define OBCX_INCLUDE_TUI_TUI_LAYOUT_HPP_
+#pragma once
 
 #include "tui/tui_sink.hpp"
 
@@ -143,5 +142,3 @@ private:
 };
 
 } // namespace obcx::common::tui_layout
-
-#endif // OBCX_INCLUDE_TUI_TUI_LAYOUT_HPP_

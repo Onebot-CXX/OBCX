@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_BOT_OPERATIONS_HPP_
-#define OBCX_INCLUDE_ONEBOT11_BOT_OPERATIONS_HPP_
+#pragma once
 
 #include "core/bot/operation_traits.hpp"
 #include "onebot11/bot/types.hpp"
@@ -450,5 +449,3 @@ struct OperationTraits<onebot11::bot::PokeOneBotGroupRequest>
 };
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_ONEBOT11_BOT_OPERATIONS_HPP_

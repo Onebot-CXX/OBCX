@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_COMMON_CONFIG_SNAPSHOT_HPP_
-#define OBCX_INCLUDE_COMMON_CONFIG_SNAPSHOT_HPP_
+#pragma once
 
 #include "common/bot_installation_metadata.hpp"
 #include <chrono>
@@ -364,5 +363,3 @@ private:
     const ProcessOwnedConfigFingerprint &candidate) -> std::string;
 
 } // namespace obcx::common
-
-#endif // OBCX_INCLUDE_COMMON_CONFIG_SNAPSHOT_HPP_

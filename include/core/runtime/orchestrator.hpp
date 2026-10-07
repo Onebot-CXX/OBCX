@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_ORCHESTRATOR_HPP_
-#define OBCX_INCLUDE_CORE_ORCHESTRATOR_HPP_
+#pragma once
 
 #include "common/config_snapshot.hpp"
 #include "core/actor/actor.hpp"
@@ -75,5 +74,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_ORCHESTRATOR_HPP_

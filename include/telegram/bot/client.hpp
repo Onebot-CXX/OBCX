@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_TELEGRAM_BOT_CLIENT_HPP_
-#define OBCX_INCLUDE_TELEGRAM_BOT_CLIENT_HPP_
+#pragma once
 
 #include "core/bot/typed_operation.hpp"
 #include "telegram/bot/operations.hpp"
@@ -29,5 +28,3 @@ private:
 };
 
 } // namespace obcx::telegram::bot
-
-#endif // OBCX_INCLUDE_TELEGRAM_BOT_CLIENT_HPP_

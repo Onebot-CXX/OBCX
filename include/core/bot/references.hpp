@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_REFERENCES_HPP_
-#define OBCX_INCLUDE_CORE_BOT_REFERENCES_HPP_
+#pragma once
 
 #include "core/bot/ids.hpp"
 #include "core/bot/json_codec.hpp"
@@ -171,5 +170,3 @@ inline void to_json(Json &document, const BotMessageRef &message) {
 }
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_CORE_BOT_REFERENCES_HPP_

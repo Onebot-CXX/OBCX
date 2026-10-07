@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_COMMAND_PLATFORM_ADAPTER_HPP_
-#define OBCX_INCLUDE_CORE_COMMAND_PLATFORM_ADAPTER_HPP_
+#pragma once
 
 #include "core/bot/operation_gateway.hpp"
 
@@ -82,5 +81,3 @@ public:
 };
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_COMMAND_PLATFORM_ADAPTER_HPP_

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_NETWORK_HTTP_CONNECTION_MANAGER_HPP_
-#define OBCX_INCLUDE_ONEBOT11_NETWORK_HTTP_CONNECTION_MANAGER_HPP_
+#pragma once
 
 #include "common/message_type.hpp"
 #include "network/connection_config.hpp"
@@ -85,5 +84,3 @@ private:
 };
 
 } // namespace obcx::network
-
-#endif // OBCX_INCLUDE_ONEBOT11_NETWORK_HTTP_CONNECTION_MANAGER_HPP_

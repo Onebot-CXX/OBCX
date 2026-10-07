@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_TELEGRAM_BOT_TRANSPORT_HPP_
-#define OBCX_INCLUDE_TELEGRAM_BOT_TRANSPORT_HPP_
+#pragma once
 
 #include "common/message_type.hpp"
 #include "core/bot/bot_component_runtime.hpp"
@@ -105,5 +104,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif

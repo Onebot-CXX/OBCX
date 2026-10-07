@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_TELEGRAM_BOT_PROTOCOL_HPP_
-#define OBCX_INCLUDE_TELEGRAM_BOT_PROTOCOL_HPP_
+#pragma once
 
 #include "core/bot/bot_component_runtime.hpp"
 #include "telegram/adapter/protocol_adapter.hpp"
@@ -23,5 +22,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif

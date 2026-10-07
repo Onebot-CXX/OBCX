@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_CONFIGURATION_FINGERPRINT_HPP_
-#define OBCX_INCLUDE_CORE_BOT_CONFIGURATION_FINGERPRINT_HPP_
+#pragma once
 
 #include <array>
 #include <iomanip>
@@ -35,5 +34,3 @@ namespace obcx::core {
 }
 
 } // namespace obcx::core
-
-#endif

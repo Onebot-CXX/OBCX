@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_ACTOR_COMMANDS_HPP_
-#define OBCX_INCLUDE_CORE_ACTOR_COMMANDS_HPP_
+#pragma once
 
 #include "core/actor/actor.hpp"
 
@@ -202,5 +201,3 @@ requires(std::same_as<std::remove_cvref_t<Observations>, Observation> && ...)
 }
 
 } // namespace obcx::command
-
-#endif // OBCX_INCLUDE_CORE_ACTOR_COMMANDS_HPP_

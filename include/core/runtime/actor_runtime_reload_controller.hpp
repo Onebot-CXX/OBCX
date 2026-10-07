@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_ACTOR_RUNTIME_RELOAD_CONTROLLER_HPP_
-#define OBCX_INCLUDE_CORE_ACTOR_RUNTIME_RELOAD_CONTROLLER_HPP_
+#pragma once
 
 #include "core/runtime/runtime_generation.hpp"
 
@@ -136,5 +135,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_ACTOR_RUNTIME_RELOAD_CONTROLLER_HPP_

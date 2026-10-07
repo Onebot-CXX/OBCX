@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_NETWORK_HTTP_CLIENT_IMPL_HPP_
-#define OBCX_INCLUDE_NETWORK_HTTP_CLIENT_IMPL_HPP_
+#pragma once
 
 #include "network/curl_asio_multi.hpp"
 #include "network/http_client.hpp"
@@ -96,5 +95,3 @@ struct HttpClient::Impl {
 };
 
 } // namespace obcx::network
-
-#endif // OBCX_INCLUDE_NETWORK_HTTP_CLIENT_IMPL_HPP_

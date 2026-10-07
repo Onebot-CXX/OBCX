@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_COMMON_CLI_HANDLER_HPP_
-#define OBCX_INCLUDE_COMMON_CLI_HANDLER_HPP_
+#pragma once
 
 #include <atomic>
 #include <condition_variable>
@@ -145,5 +144,3 @@ private:
 };
 
 } // namespace obcx::common
-
-#endif // OBCX_INCLUDE_COMMON_CLI_HANDLER_HPP_

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_NETWORK_PROXY_HTTP_CLIENT_HPP_
-#define OBCX_INCLUDE_NETWORK_PROXY_HTTP_CLIENT_HPP_
+#pragma once
 
 #include "common/message_type.hpp"
 #include "network/http_client.hpp"
@@ -81,5 +80,3 @@ public:
 };
 
 } // namespace obcx::network
-
-#endif // OBCX_INCLUDE_NETWORK_PROXY_HTTP_CLIENT_HPP_

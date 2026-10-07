@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_BOT_RESPONSE_PARSER_HPP_
-#define OBCX_INCLUDE_ONEBOT11_BOT_RESPONSE_PARSER_HPP_
+#pragma once
 
 // Process-only provider parser; not part of the installed Actor SDK.
 #include "core/bot/operation_result.hpp"
@@ -9,5 +8,3 @@ namespace obcx::onebot11::bot {
                                                      bool side_effecting)
     -> obcx::bot::BotOperationResult<obcx::bot::Json>;
 } // namespace obcx::onebot11::bot
-
-#endif

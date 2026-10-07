@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_NETWORK_HTTP_CLIENT_HPP_
-#define OBCX_INCLUDE_NETWORK_HTTP_CLIENT_HPP_
+#pragma once
 
 #include "common/message_type.hpp"
 #include "network/connection_config.hpp"
@@ -209,5 +208,3 @@ private:
 };
 
 } // namespace obcx::network
-
-#endif // OBCX_INCLUDE_NETWORK_HTTP_CLIENT_HPP_

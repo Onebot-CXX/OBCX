@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_OPERATION_PARSER_HELPERS_HPP_
-#define OBCX_INCLUDE_CORE_BOT_OPERATION_PARSER_HELPERS_HPP_
+#pragma once
 #include "core/bot/operation_result.hpp"
 
 namespace obcx::core::parser_detail {
@@ -52,4 +51,3 @@ inline auto malformed(const std::string_view provider,
 }
 
 } // namespace obcx::core::parser_detail
-#endif

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_COMPONENT_RUNTIME_HPP_
-#define OBCX_INCLUDE_CORE_BOT_COMPONENT_RUNTIME_HPP_
+#pragma once
 
 #include "core/bot/component_descriptor.hpp"
 #include "core/bot/ids.hpp"
@@ -158,5 +157,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_BOT_COMPONENT_RUNTIME_HPP_

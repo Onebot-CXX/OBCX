@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_PLATFORM_CATALOG_HPP_
-#define OBCX_INCLUDE_CORE_BOT_PLATFORM_CATALOG_HPP_
+#pragma once
 
 #include "core/bot/installation_plan.hpp"
 
@@ -62,5 +61,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif

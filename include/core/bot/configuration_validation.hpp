@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_CONFIGURATION_VALIDATION_HPP_
-#define OBCX_INCLUDE_CORE_BOT_CONFIGURATION_VALIDATION_HPP_
+#pragma once
 
 #include "core/bot/configuration_error.hpp"
 #include <chrono>
@@ -121,5 +120,3 @@ inline auto required_duration(const toml::table &table,
 }
 
 } // namespace obcx::core::configuration
-
-#endif

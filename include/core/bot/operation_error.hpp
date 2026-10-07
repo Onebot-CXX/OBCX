@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_OPERATION_ERROR_HPP_
-#define OBCX_INCLUDE_CORE_BOT_OPERATION_ERROR_HPP_
+#pragma once
 
 #include "core/bot/validation.hpp"
 
@@ -232,5 +231,3 @@ inline void from_json(const Json &document, BotOperationError &error) {
 }
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_CORE_BOT_OPERATION_ERROR_HPP_

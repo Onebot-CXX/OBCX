@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_COMMON_LOGGER_HPP_
-#define OBCX_INCLUDE_COMMON_LOGGER_HPP_
+#pragma once
 
 #include <memory>
 #include <mutex>
@@ -113,5 +112,3 @@ private:
 #endif
 
 } // namespace obcx::common
-
-#endif // OBCX_INCLUDE_COMMON_LOGGER_HPP_

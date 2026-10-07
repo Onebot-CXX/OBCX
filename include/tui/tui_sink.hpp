@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_TUI_TUI_SINK_HPP_
-#define OBCX_INCLUDE_TUI_TUI_SINK_HPP_
+#pragma once
 
 #include <atomic>
 #include <cstdint>
@@ -150,5 +149,3 @@ public:
 };
 
 } // namespace obcx::common
-
-#endif // OBCX_INCLUDE_TUI_TUI_SINK_HPP_

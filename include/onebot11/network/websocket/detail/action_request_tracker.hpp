@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_NETWORK_WEBSOCKET_DETAIL_ACTION_REQUEST_TRACKER_HPP_
-#define OBCX_INCLUDE_ONEBOT11_NETWORK_WEBSOCKET_DETAIL_ACTION_REQUEST_TRACKER_HPP_
+#pragma once
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -93,5 +92,3 @@ private:
 [[nodiscard]] auto default_action_deadline_factory() -> ActionDeadlineFactory;
 
 } // namespace obcx::network::detail
-
-#endif // OBCX_INCLUDE_ONEBOT11_NETWORK_WEBSOCKET_DETAIL_ACTION_REQUEST_TRACKER_HPP_

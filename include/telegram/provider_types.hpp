@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_TELEGRAM_PROVIDER_TYPES_HPP_
-#define OBCX_INCLUDE_TELEGRAM_PROVIDER_TYPES_HPP_
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -63,5 +62,3 @@ inline void to_json(nlohmann::json &document,
 }
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_TELEGRAM_PROVIDER_TYPES_HPP_

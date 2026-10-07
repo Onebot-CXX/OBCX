@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_JSON_CODEC_HPP_
-#define OBCX_INCLUDE_CORE_BOT_JSON_CODEC_HPP_
+#pragma once
 
 #include <nlohmann/json.hpp>
 
@@ -26,5 +25,3 @@ struct adl_serializer<
   }
 };
 NLOHMANN_JSON_NAMESPACE_END
-
-#endif // OBCX_INCLUDE_CORE_BOT_JSON_CODEC_HPP_

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_IDS_HPP_
-#define OBCX_INCLUDE_CORE_BOT_IDS_HPP_
+#pragma once
 
 #include <nlohmann/json.hpp>
 
@@ -95,5 +94,3 @@ template <typename Tag> struct hash<obcx::bot::detail::StableBotId<Tag>> {
   }
 };
 } // namespace std
-
-#endif // OBCX_INCLUDE_CORE_BOT_IDS_HPP_

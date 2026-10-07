@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_REFLECTED_ACTOR_HPP_
-#define OBCX_INCLUDE_CORE_REFLECTED_ACTOR_HPP_
+#pragma once
 
 // The build supplies a package-specific alias to the shared implementation.
 // Host runtime utilities use reflected_actor_impl.hpp directly.
@@ -9,5 +8,3 @@
 #else
 #include OBCX_ACTOR_BINDING_HEADER
 #endif
-
-#endif // OBCX_INCLUDE_CORE_REFLECTED_ACTOR_HPP_

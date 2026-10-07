@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_RUNTIME_THREAD_BUDGET_HPP_
-#define OBCX_INCLUDE_CORE_RUNTIME_THREAD_BUDGET_HPP_
+#pragma once
 
 #include <cstddef>
 
@@ -24,5 +23,3 @@ struct RuntimeThreadBudget {
     RuntimeThreadBudgetRequest request) -> RuntimeThreadBudget;
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_RUNTIME_THREAD_BUDGET_HPP_

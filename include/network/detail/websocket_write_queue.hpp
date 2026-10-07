@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_NETWORK_DETAIL_WEBSOCKET_WRITE_QUEUE_HPP_
-#define OBCX_INCLUDE_NETWORK_DETAIL_WEBSOCKET_WRITE_QUEUE_HPP_
+#pragma once
 
 #include <atomic>
 #include <boost/asio/any_io_executor.hpp>
@@ -60,5 +59,3 @@ private:
 };
 
 } // namespace obcx::network::detail
-
-#endif // OBCX_INCLUDE_NETWORK_DETAIL_WEBSOCKET_WRITE_QUEUE_HPP_

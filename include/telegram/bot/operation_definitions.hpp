@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_TELEGRAM_BOT_OPERATION_DEFINITIONS_HPP_
-#define OBCX_INCLUDE_TELEGRAM_BOT_OPERATION_DEFINITIONS_HPP_
+#pragma once
 
 #include "core/bot/operation_registry.hpp"
 #include "telegram/bot/operations.hpp"
@@ -56,5 +55,3 @@ inline auto operation_dependencies(bool include_upload)
 }
 
 } // namespace obcx::telegram::bot
-
-#endif // OBCX_INCLUDE_TELEGRAM_BOT_OPERATION_DEFINITIONS_HPP_

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_VALIDATION_HPP_
-#define OBCX_INCLUDE_CORE_BOT_VALIDATION_HPP_
+#pragma once
 
 #include "common/json_utils.hpp"
 
@@ -70,5 +69,3 @@ inline void validate_identifier(const std::string_view value,
 } // namespace detail
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_CORE_BOT_VALIDATION_HPP_

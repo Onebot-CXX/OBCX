@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_BOT_OPERATION_COMPONENT_HPP_
-#define OBCX_INCLUDE_ONEBOT11_BOT_OPERATION_COMPONENT_HPP_
+#pragma once
 
 #include "core/bot/bot_component_runtime.hpp"
 #include "core/bot/operation_registry.hpp"
@@ -23,5 +22,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif

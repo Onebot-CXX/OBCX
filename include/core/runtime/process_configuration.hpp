@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_PROCESS_CONFIGURATION_HPP_
-#define OBCX_INCLUDE_CORE_PROCESS_CONFIGURATION_HPP_
+#pragma once
 
 #include "common/config_snapshot.hpp"
 #include "core/bot/platform_catalog.hpp"
@@ -93,5 +92,3 @@ private:
 };
 
 } // namespace obcx::common
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_BOT_CLIENT_HPP_
-#define OBCX_INCLUDE_ONEBOT11_BOT_CLIENT_HPP_
+#pragma once
 
 #include "core/bot/typed_operation.hpp"
 #include "onebot11/bot/group_forward.hpp"
@@ -31,5 +30,3 @@ private:
 };
 
 } // namespace obcx::onebot11::bot
-
-#endif // OBCX_INCLUDE_ONEBOT11_BOT_CLIENT_HPP_

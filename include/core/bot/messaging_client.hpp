@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_MESSAGING_CLIENT_HPP_
-#define OBCX_INCLUDE_CORE_BOT_MESSAGING_CLIENT_HPP_
+#pragma once
 
 #include "core/bot/messaging.hpp"
 #include "core/bot/typed_operation.hpp"
@@ -25,5 +24,3 @@ private:
 };
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_CORE_BOT_MESSAGING_CLIENT_HPP_

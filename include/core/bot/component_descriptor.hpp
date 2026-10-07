@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_COMPONENT_DESCRIPTOR_HPP_
-#define OBCX_INCLUDE_CORE_BOT_COMPONENT_DESCRIPTOR_HPP_
+#pragma once
 
 #include <cstddef>
 #include <stdexcept>
@@ -56,5 +55,3 @@ struct ComponentRecipeValidation {
     -> ComponentRecipeValidation;
 
 } // namespace obcx::core
-
-#endif

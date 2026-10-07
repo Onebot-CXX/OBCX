@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_TYPED_OPERATION_HPP_
-#define OBCX_INCLUDE_CORE_BOT_TYPED_OPERATION_HPP_
+#pragma once
 
 #include "core/bot/gateway_codec.hpp"
 #include "core/bot/operation_gateway.hpp"
@@ -76,5 +75,3 @@ template <TypedOperation Request>
 }
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_CORE_BOT_TYPED_OPERATION_HPP_

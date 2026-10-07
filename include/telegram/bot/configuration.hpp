@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_TELEGRAM_BOT_CONFIGURATION_HPP_
-#define OBCX_INCLUDE_TELEGRAM_BOT_CONFIGURATION_HPP_
+#pragma once
 
 #include <chrono>
 #include <cstdint>
@@ -46,5 +45,3 @@ struct HttpConnection {
     -> HttpConnection;
 
 } // namespace obcx::telegram::configuration
-
-#endif

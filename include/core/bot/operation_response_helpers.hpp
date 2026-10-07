@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_OPERATION_RESPONSE_HELPERS_HPP_
-#define OBCX_INCLUDE_CORE_BOT_OPERATION_RESPONSE_HELPERS_HPP_
+#pragma once
 #include "core/bot/messaging.hpp"
 
 namespace obcx::core::operation_detail {
@@ -67,4 +66,3 @@ inline auto optional_string(const bot::Json &document,
 }
 
 } // namespace obcx::core::operation_detail
-#endif

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_INSTALLATION_DIRECTORY_HPP_
-#define OBCX_INCLUDE_CORE_BOT_INSTALLATION_DIRECTORY_HPP_
+#pragma once
 
 #include "core/bot/bot_component_runtime.hpp"
 #include "core/bot/bot_operation_dispatcher.hpp"
@@ -42,5 +41,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_BOT_INSTALLATION_DIRECTORY_HPP_

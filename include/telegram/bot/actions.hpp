@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_TELEGRAM_BOT_ACTIONS_HPP_
-#define OBCX_INCLUDE_TELEGRAM_BOT_ACTIONS_HPP_
+#pragma once
 
 #include "core/bot/ids.hpp"
 
@@ -21,5 +20,3 @@ inline const obcx::bot::ActionId fetch_file{"telegram.media.fetch_file"};
 } // namespace actions
 
 } // namespace obcx::telegram::bot
-
-#endif // OBCX_INCLUDE_TELEGRAM_BOT_ACTIONS_HPP_

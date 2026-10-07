@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_COMMON_MESSAGE_TYPE_HPP_
-#define OBCX_INCLUDE_COMMON_MESSAGE_TYPE_HPP_
+#pragma once
 
 #include "json_utils.hpp"
 
@@ -252,5 +251,3 @@ using Event = std::variant<MessageEvent, NoticeEvent, RequestEvent, MetaEvent,
                            HeartbeatEvent, ErrorEvent>;
 
 } // namespace obcx::common
-
-#endif // OBCX_INCLUDE_COMMON_MESSAGE_TYPE_HPP_

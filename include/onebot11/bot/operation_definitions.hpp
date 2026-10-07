@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_BOT_OPERATION_DEFINITIONS_HPP_
-#define OBCX_INCLUDE_ONEBOT11_BOT_OPERATION_DEFINITIONS_HPP_
+#pragma once
 
 // Process-only definitions shared by recipe manifests and handler installation.
 #include "core/bot/messaging.hpp"
@@ -50,5 +49,3 @@ inline auto operation_dependencies() -> std::vector<std::string> {
 }
 
 } // namespace obcx::onebot11::bot
-
-#endif // OBCX_INCLUDE_ONEBOT11_BOT_OPERATION_DEFINITIONS_HPP_

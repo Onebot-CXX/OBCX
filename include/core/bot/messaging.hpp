@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_MESSAGING_HPP_
-#define OBCX_INCLUDE_CORE_BOT_MESSAGING_HPP_
+#pragma once
 
 #include "common/message_type.hpp"
 #include "core/bot/operation_result.hpp"
@@ -355,5 +354,3 @@ struct OperationTraits<DeleteMessageRequest>
 };
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_CORE_BOT_MESSAGING_HPP_

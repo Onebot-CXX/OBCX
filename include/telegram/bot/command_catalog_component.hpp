@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_COMMAND_CATALOG_COMPONENT_HPP_
-#define OBCX_INCLUDE_CORE_BOT_COMMAND_CATALOG_COMPONENT_HPP_
+#pragma once
 
 #include "core/bot/bot_component_runtime.hpp"
 #include "core/command/command_platform_adapter.hpp"
@@ -26,5 +25,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_BOT_COMMAND_CATALOG_COMPONENT_HPP_

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_BOT_DIAGNOSTICS_HPP_
-#define OBCX_INCLUDE_ONEBOT11_BOT_DIAGNOSTICS_HPP_
+#pragma once
 
 #include "core/bot/operation_error.hpp"
 
@@ -12,5 +11,3 @@ inline auto redact_diagnostic(const std::string_view value) -> std::string {
 }
 
 } // namespace obcx::onebot11::bot
-
-#endif // OBCX_INCLUDE_ONEBOT11_BOT_DIAGNOSTICS_HPP_

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_OPERATION_GATEWAY_HPP_
-#define OBCX_INCLUDE_CORE_BOT_OPERATION_GATEWAY_HPP_
+#pragma once
 
 #include "core/bot/operation_result.hpp"
 #include "core/bot/references.hpp"
@@ -95,5 +94,3 @@ public:
 };
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_CORE_BOT_OPERATION_GATEWAY_HPP_

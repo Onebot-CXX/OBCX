@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_COMMAND_COORDINATOR_HPP_
-#define OBCX_INCLUDE_CORE_COMMAND_COORDINATOR_HPP_
+#pragma once
 
 #include "common/config_snapshot.hpp"
 #include "core/actor/actor_commands.hpp"
@@ -227,5 +226,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_COMMAND_COORDINATOR_HPP_

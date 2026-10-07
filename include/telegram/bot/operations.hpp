@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_TELEGRAM_BOT_OPERATIONS_HPP_
-#define OBCX_INCLUDE_TELEGRAM_BOT_OPERATIONS_HPP_
+#pragma once
 
 #include "core/bot/operation_traits.hpp"
 #include "telegram/bot/types.hpp"
@@ -847,5 +846,3 @@ struct GatewayCodec<telegram::bot::SendTelegramMediaGroupUploadsRequest> {
 };
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_TELEGRAM_BOT_OPERATIONS_HPP_

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_CONFIGURATION_ERROR_HPP_
-#define OBCX_INCLUDE_CORE_BOT_CONFIGURATION_ERROR_HPP_
+#pragma once
 
 #include <stdexcept>
 #include <string>
@@ -27,5 +26,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif

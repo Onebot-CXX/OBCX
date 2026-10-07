@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_INSTALLATION_ASSEMBLER_HPP_
-#define OBCX_INCLUDE_CORE_BOT_INSTALLATION_ASSEMBLER_HPP_
+#pragma once
 
 #include "core/bot/bot_component_runtime.hpp"
 #include "core/bot/capability_ids.hpp"
@@ -20,5 +19,3 @@ public:
 };
 
 } // namespace obcx::core
-
-#endif

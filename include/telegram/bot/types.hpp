@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_TELEGRAM_BOT_TYPES_HPP_
-#define OBCX_INCLUDE_TELEGRAM_BOT_TYPES_HPP_
+#pragma once
 
 #include "core/bot/gateway_codec.hpp"
 #include "core/bot/messaging.hpp"
@@ -490,5 +489,3 @@ template <> struct GatewayCodec<telegram::bot::FetchedTelegramFile> {
 };
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_TELEGRAM_BOT_TYPES_HPP_

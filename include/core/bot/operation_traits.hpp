@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_OPERATION_TRAITS_HPP_
-#define OBCX_INCLUDE_CORE_BOT_OPERATION_TRAITS_HPP_
+#pragma once
 
 #include "core/bot/references.hpp"
 
@@ -22,5 +21,3 @@ struct OperationContract {
 };
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_CORE_BOT_OPERATION_TRAITS_HPP_

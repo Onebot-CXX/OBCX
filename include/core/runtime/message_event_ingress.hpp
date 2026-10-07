@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_MESSAGE_EVENT_INGRESS_HPP_
-#define OBCX_INCLUDE_CORE_MESSAGE_EVENT_INGRESS_HPP_
+#pragma once
 
 #include "common/message_type.hpp"
 #include "core/actor/actor.hpp"
@@ -29,5 +28,3 @@ auto bot_message_sent_envelope(const std::string &source_platform,
                                const bot::ActionId &action) -> MessageEnvelope;
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_MESSAGE_EVENT_INGRESS_HPP_

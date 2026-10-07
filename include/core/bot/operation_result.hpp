@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_OPERATION_RESULT_HPP_
-#define OBCX_INCLUDE_CORE_BOT_OPERATION_RESULT_HPP_
+#pragma once
 
 #include "core/bot/operation_error.hpp"
 
@@ -93,5 +92,3 @@ template <typename T>
 }
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_CORE_BOT_OPERATION_RESULT_HPP_

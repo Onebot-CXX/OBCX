@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_COMMAND_DETECTION_HPP_
-#define OBCX_INCLUDE_CORE_COMMAND_DETECTION_HPP_
+#pragma once
 #include "core/actor/actor.hpp"
 #include "core/actor/actor_commands.hpp"
 #include "core/command/command_matcher.hpp"
@@ -71,4 +70,3 @@ inline auto command_from_token(std::string token,
 }
 
 } // namespace obcx::core::command_detail
-#endif

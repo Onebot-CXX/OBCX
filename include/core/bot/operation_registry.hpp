@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_OPERATION_REGISTRY_HPP_
-#define OBCX_INCLUDE_CORE_BOT_OPERATION_REGISTRY_HPP_
+#pragma once
 
 // Process-only infrastructure. Never installed as an Actor SDK header.
 #include "core/bot/typed_operation.hpp"
@@ -172,5 +171,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_BOT_OPERATION_REGISTRY_HPP_

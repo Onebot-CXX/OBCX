@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_COMMON_BOT_INSTALLATION_METADATA_HPP_
-#define OBCX_INCLUDE_COMMON_BOT_INSTALLATION_METADATA_HPP_
+#pragma once
 
 #include "core/bot/references.hpp"
 
@@ -32,5 +31,3 @@ struct BotInstallationMetadata {
 };
 
 } // namespace obcx::common
-
-#endif

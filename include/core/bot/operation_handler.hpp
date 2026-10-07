@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_OPERATION_HANDLER_HPP_
-#define OBCX_INCLUDE_CORE_BOT_OPERATION_HANDLER_HPP_
+#pragma once
 
 // Process-only binding helper. The dispatcher never knows transport exceptions.
 #include "core/bot/operation_registry.hpp"
@@ -46,5 +45,3 @@ auto bind_operation_handler(std::shared_ptr<Implementation> implementation,
 }
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_BOT_OPERATION_HANDLER_HPP_

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_BOT_GATEWAY_CODEC_HPP_
-#define OBCX_INCLUDE_CORE_BOT_GATEWAY_CODEC_HPP_
+#pragma once
 
 #include "core/bot/validation.hpp"
 
@@ -15,5 +14,3 @@ template <typename T> struct GatewayCodec {
 };
 
 } // namespace obcx::bot
-
-#endif // OBCX_INCLUDE_CORE_BOT_GATEWAY_CODEC_HPP_

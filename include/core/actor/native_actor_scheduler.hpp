@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_NATIVE_ACTOR_SCHEDULER_HPP_
-#define OBCX_INCLUDE_CORE_NATIVE_ACTOR_SCHEDULER_HPP_
+#pragma once
 
 #include "core/actor/actor.hpp"
 #include "core/actor/actor_work_stealing_executor.hpp"
@@ -125,5 +124,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_NATIVE_ACTOR_SCHEDULER_HPP_

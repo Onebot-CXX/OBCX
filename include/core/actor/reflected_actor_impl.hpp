@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_REFLECTED_ACTOR_IMPL_HPP_
-#define OBCX_INCLUDE_CORE_REFLECTED_ACTOR_IMPL_HPP_
+#pragma once
 
 #include "core/actor/actor.hpp"
 #include "core/actor/actor_commands.hpp"
@@ -503,5 +502,3 @@ public:
   }
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_REFLECTED_ACTOR_IMPL_HPP_

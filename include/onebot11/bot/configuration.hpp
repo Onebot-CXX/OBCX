@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_ONEBOT11_BOT_CONFIGURATION_HPP_
-#define OBCX_INCLUDE_ONEBOT11_BOT_CONFIGURATION_HPP_
+#pragma once
 
 #include <chrono>
 #include <cstdint>
@@ -39,5 +38,3 @@ struct HttpConnection {
     -> HttpConnection;
 
 } // namespace obcx::onebot11::configuration
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef OBCX_INCLUDE_CORE_RUNTIME_GENERATION_HPP_
-#define OBCX_INCLUDE_CORE_RUNTIME_GENERATION_HPP_
+#pragma once
 
 #include "common/config_snapshot.hpp"
 #include "core/actor/actor_package_stager.hpp"
@@ -217,5 +216,3 @@ private:
 };
 
 } // namespace obcx::core
-
-#endif // OBCX_INCLUDE_CORE_RUNTIME_GENERATION_HPP_
