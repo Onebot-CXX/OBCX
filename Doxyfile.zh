@@ -1,3 +1,0 @@
-@INCLUDE                = Doxyfile
-OUTPUT_DIRECTORY        = docs/api/zh
-OUTPUT_LANGUAGE         = Chinese
