@@ -3,6 +3,8 @@
 #include "core/bot/operation_traits.hpp"
 #include "telegram/bot/types.hpp"
 
+#include <charconv>
+
 namespace obcx::telegram::bot {
 
 struct SendTelegramTopicMessageRequest {
@@ -138,6 +140,8 @@ struct SendTelegramPhotoRequest {
   std::string photo;
   std::string caption;
   std::vector<TelegramTextEntity> caption_entities;
+  std::optional<std::int64_t> topic_id;
+  std::optional<BotMessageRef> reply_to;
 
   void validate() const {
     target.validate();
@@ -145,6 +149,23 @@ struct SendTelegramPhotoRequest {
     detail::validate_identifier(photo, "Telegram photo source", 16384);
     if (caption.size() > 65536U) {
       throw std::invalid_argument("Telegram photo caption exceeds SDK bound");
+    }
+    detail::validate_optional_topic(topic_id, "SendTelegramPhotoRequest");
+    if (reply_to) {
+      reply_to->validate();
+      if (reply_to->group != target) {
+        throw std::invalid_argument(
+            "Telegram photo reply must belong to its target group");
+      }
+      const auto &id = reply_to->native_message_id;
+      std::int64_t numeric_id = 0;
+      const auto [end, error] =
+          std::from_chars(id.data(), id.data() + id.size(), numeric_id);
+      if (error != std::errc{} || end != id.data() + id.size() ||
+          numeric_id <= 0) {
+        throw std::invalid_argument(
+            "Telegram photo reply requires a positive message ID");
+      }
     }
     for (const auto &entity : caption_entities) {
       entity.validate();
@@ -159,6 +180,12 @@ inline void to_json(Json &document, const SendTelegramPhotoRequest &request) {
               {"photo", request.photo},
               {"caption", request.caption},
               {"caption_entities", request.caption_entities}};
+  if (request.topic_id) {
+    document["topic_id"] = *request.topic_id;
+  }
+  if (request.reply_to) {
+    document["reply_to"] = *request.reply_to;
+  }
 }
 
 inline void from_json(const Json &document, SendTelegramPhotoRequest &request) {
@@ -173,6 +200,8 @@ inline void from_json(const Json &document, SendTelegramPhotoRequest &request) {
   request.target = document.at("target").get<GroupTarget>();
   request.photo =
       detail::require_string(document, "photo", "SendTelegramPhotoRequest");
+  request.topic_id = detail::optional_topic_from_json(document);
+  request.reply_to = detail::optional_reply_from_json(document);
   request.caption.clear();
   if (document.contains("caption")) {
     request.caption =

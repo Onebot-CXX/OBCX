@@ -26,7 +26,15 @@
 
 ## Commit message
 
-- Allow to commit without gpg sign but **must remind user to amend them with gpg sign**
+- Unsigned commits are allowed, but **must remind the user to amend them with
+  GPG signatures**.
+- Provide a complete, copy-pasteable shell command covering every repository
+  where unsigned commits were created, not just a generic
+  `git commit --amend --no-edit -S`. Include `cd` to the repository root,
+  `export GPG_TTY=$(tty)`, and a loop listing the actual affected repository
+  paths (including `.` for core when applicable). Run `treefmt` from the root
+  before each amend, use `git -C "$repo" commit --amend --no-edit -S`, and stop
+  on failure.
 
 ## Unit test rule
 

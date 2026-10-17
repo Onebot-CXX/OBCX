@@ -635,7 +635,13 @@ public:
       std::string_view reason = "",
       const std::optional<uint64_t> &echo = std::nullopt) -> std::string;
 
-  // --- 扩展 API (go-cqhttp/NapCat) ---
+  // --- 扩展 API (go-cqhttp/NapCat/LLOneBot) ---
+
+  // LLOneBot group-message reaction extension. Always supply the set state.
+  auto serialize_set_msg_emoji_like_request(std::string_view message_id,
+                                            std::string_view emoji_id, bool set,
+                                            const std::optional<uint64_t> &echo)
+      -> std::string;
 
   /**
    * \~chinese

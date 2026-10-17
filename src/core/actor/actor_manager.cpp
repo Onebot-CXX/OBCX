@@ -8,6 +8,7 @@
 #include <cctype>
 #include <dlfcn.h>
 #include <filesystem>
+#include <format>
 #include <limits>
 #include <utility>
 
@@ -154,9 +155,10 @@ auto parse_actor_contract(const char *document,
     return std::nullopt;
   }
   if (*signed_schema_version != 2) {
-    error = "unsupported actor input contract schema_version " +
-            std::to_string(*signed_schema_version) +
-            "; rebuild the actor with the matching schema-2 OBCX SDK";
+    error = std::format(
+        "unsupported actor input contract schema_version {}; rebuild the actor "
+        "with the matching schema-2 OBCX SDK",
+        *signed_schema_version);
     return std::nullopt;
   }
   const auto schema_version =
@@ -167,8 +169,10 @@ auto parse_actor_contract(const char *document,
   }
   const auto actor = parsed["actor"].get<std::string>();
   if (actor.empty() || actor != exported_name) {
-    error = "actor input contract identity '" + actor +
-            "' does not match exported actor name '" + exported_name + "'";
+    error = std::format(
+        "actor input contract identity '{}' does not match exported actor name "
+        "'{}'",
+        actor, exported_name);
     return std::nullopt;
   }
   if (!parsed.contains("accepted_inputs") ||
@@ -187,13 +191,14 @@ auto parse_actor_contract(const char *document,
     }
     auto canonical = input.get<std::string>();
     if (!is_canonical_actor_input(canonical)) {
-      error = "actor input contract contains a malformed canonical input '" +
-              canonical + "'";
+      error = std::format(
+          "actor input contract contains a malformed canonical input '{}'",
+          canonical);
       return std::nullopt;
     }
     if (!contract.accepted_input_set.insert(canonical).second) {
-      error =
-          "actor input contract contains duplicate input '" + canonical + "'";
+      error = std::format("actor input contract contains duplicate input '{}'",
+                          canonical);
       return std::nullopt;
     }
     contract.accepted_inputs.push_back(std::move(canonical));
@@ -224,9 +229,9 @@ auto parse_actor_contract(const char *document,
         (void)value;
         if (key != "name" && key != "description" && key != "request_type" &&
             key != "matcher" && key != "availability") {
-          error =
-              "actor command registration contains an unsupported member '" +
-              key + "'";
+          error = std::format(
+              "actor command registration contains an unsupported member '{}'",
+              key);
           return std::nullopt;
         }
       }
@@ -260,8 +265,9 @@ auto parse_actor_contract(const char *document,
         for (const auto &[key, value] : matcher.items()) {
           (void)value;
           if (key != "kind" && key != "pattern" && key != "mode") {
-            error = "actor command matcher contains an unsupported member '" +
-                    key + "'";
+            error = std::format(
+                "actor command matcher contains an unsupported member '{}'",
+                key);
             return std::nullopt;
           }
         }
@@ -293,8 +299,9 @@ auto parse_actor_contract(const char *document,
         registration.matcher.emplace(std::move(parsed_matcher));
       }
       if (!is_canonical_command_name(registration.name)) {
-        error = "actor command registration contains invalid command name '" +
-                registration.name + "'";
+        error = std::format(
+            "actor command registration contains invalid command name '{}'",
+            registration.name);
         return std::nullopt;
       }
       if (registration.name == command::help_name) {
@@ -306,8 +313,9 @@ auto parse_actor_contract(const char *document,
         return std::nullopt;
       }
       if (!is_canonical_actor_input(registration.request_type)) {
-        error = "actor command registration contains malformed request type '" +
-                registration.request_type + "'";
+        error = std::format(
+            "actor command registration contains malformed request type '{}'",
+            registration.request_type);
         return std::nullopt;
       }
       if (!contract.accepted_input_set.contains(registration.request_type)) {
@@ -317,11 +325,13 @@ auto parse_actor_contract(const char *document,
         return std::nullopt;
       }
       if (!previous_name.empty() && previous_name >= registration.name) {
-        error = previous_name == registration.name
-                    ? "actor input contract contains duplicate command '" +
-                          registration.name + "'"
-                    : "actor input contract commands must be deterministic and "
-                      "sorted";
+        error =
+            previous_name == registration.name
+                ? std::format(
+                      "actor input contract contains duplicate command '{}'",
+                      registration.name)
+                : "actor input contract commands must be deterministic and "
+                  "sorted";
         return std::nullopt;
       }
       previous_name = registration.name;
@@ -342,8 +352,9 @@ auto parse_actor_contract(const char *document,
     if (key != "integers" && key != "required_strings" &&
         key != "bot_installations" && key != "bot_installation_collections" &&
         key != "collection_identity_references" && key != "less_equal") {
-      error = "actor configuration contract contains an unsupported member '" +
-              key + "'";
+      error = std::format(
+          "actor configuration contract contains an unsupported member '{}'",
+          key);
       return std::nullopt;
     }
   }
@@ -365,9 +376,10 @@ auto parse_actor_contract(const char *document,
       for (const auto &[member, value] : constraint.items()) {
         (void)value;
         if (member != "default" && member != "minimum" && member != "maximum") {
-          error = "actor integer configuration constraint contains an "
-                  "unsupported member '" +
-                  member + "'";
+          error = std::format(
+              "actor integer configuration constraint contains an unsupported "
+              "member '{}'",
+              member);
           return std::nullopt;
         }
       }
@@ -384,8 +396,8 @@ auto parse_actor_contract(const char *document,
           (minimum && maximum && *minimum > *maximum) ||
           (minimum && *default_value < *minimum) ||
           (maximum && *default_value > *maximum)) {
-        error = "actor integer configuration constraint is invalid for '" +
-                key + "'";
+        error = std::format(
+            "actor integer configuration constraint is invalid for '{}'", key);
         return std::nullopt;
       }
       configuration_keys.insert(key);
@@ -567,9 +579,10 @@ auto parse_actor_contract(const char *document,
         if (member != "source_key" && member != "root_section" &&
             member != "source_collections" && member != "target_collection" &&
             member != "target_identity" && member != "optional") {
-          error = "actor collection identity reference contains an "
-                  "unsupported member '" +
-                  member + "'";
+          error = std::format(
+              "actor collection identity reference contains an unsupported "
+              "member '{}'",
+              member);
           return std::nullopt;
         }
       }
@@ -1096,8 +1109,8 @@ auto ActorManager::discover_actor_library(const std::string &actor_path)
   void *handle = dlopen(actor_path.c_str(), RTLD_NOW);
   if (!handle) {
     const char *error = dlerror();
-    last_error_ = "failed to load actor library: " +
-                  std::string{error ? error : "unknown dlopen error"};
+    last_error_ = std::format("failed to load actor library: {}",
+                              error ? error : "unknown dlopen error");
     OBCX_ERROR("Failed to load actor library {}: {}", actor_path, last_error_);
     return nullptr;
   }
@@ -1117,8 +1130,8 @@ auto ActorManager::discover_actor_library(const std::string &actor_path)
     dlerror();
     void *resolved = dlsym(handle, symbol);
     if (const char *error = dlerror()) {
-      close_with_error("failed to load " + std::string{symbol} +
-                       " symbol: " + error);
+      close_with_error(
+          std::format("failed to load {} symbol: {}", symbol, error));
       return nullptr;
     }
     return resolved;
@@ -1145,8 +1158,8 @@ auto ActorManager::discover_actor_library(const std::string &actor_path)
     return nullptr;
   }
   if (abi_generation != OBCX_ACTOR_ABI_GENERATION_V2) {
-    close_with_error("unsupported actor ABI generation " +
-                     std::to_string(abi_generation));
+    close_with_error(
+        std::format("unsupported actor ABI generation {}", abi_generation));
     return nullptr;
   }
 

@@ -5,6 +5,82 @@
 
 namespace obcx::onebot11::bot {
 
+struct SetOneBotMessageEmojiLikeRequest {
+  using obcx_bot_json_factory = void;
+  inline static const auto &action = actions::set_message_emoji_like;
+  obcx::bot::BotMessageRef message;
+  std::string emoji_id;
+  bool set;
+
+  void validate() const { detail::validate_emoji_like(message, emoji_id); }
+
+  static auto from_json(const Json &document)
+      -> SetOneBotMessageEmojiLikeRequest {
+    obcx::bot::detail::require_only_keys(
+        document, "SetOneBotMessageEmojiLikeRequest",
+        {"action", "message", "emoji_id", "set"});
+    if (document.contains("action") &&
+        document.at("action").get<obcx::bot::ActionId>() != action) {
+      throw std::invalid_argument(
+          "SetOneBotMessageEmojiLikeRequest action mismatch");
+    }
+    SetOneBotMessageEmojiLikeRequest result{
+        .message = document.at("message").get<obcx::bot::BotMessageRef>(),
+        .emoji_id = detail::require_string(document, "emoji_id",
+                                           "SetOneBotMessageEmojiLikeRequest"),
+        .set = document.at("set").get<bool>()};
+    result.validate();
+    return result;
+  }
+};
+
+inline void to_json(Json &document,
+                    const SetOneBotMessageEmojiLikeRequest &request) {
+  request.validate();
+  document = {{"action", request.action},
+              {"message", request.message},
+              {"emoji_id", request.emoji_id},
+              {"set", request.set}};
+}
+
+struct GetOneBotUserInfoRequest {
+  using obcx_bot_json_factory = void;
+  inline static const auto &action = actions::get_user_info;
+  BotInstallationRef installation;
+  std::string user_id;
+  bool no_cache;
+
+  void validate() const {
+    detail::require_onebot(installation, "GetOneBotUserInfoRequest");
+    detail::validate_user_id(user_id);
+  }
+
+  static auto from_json(const Json &document) -> GetOneBotUserInfoRequest {
+    obcx::bot::detail::require_only_keys(
+        document, "GetOneBotUserInfoRequest",
+        {"action", "installation", "user_id", "no_cache"});
+    if (document.contains("action") &&
+        document.at("action").get<obcx::bot::ActionId>() != action) {
+      throw std::invalid_argument("GetOneBotUserInfoRequest action mismatch");
+    }
+    GetOneBotUserInfoRequest result{
+        .installation = document.at("installation").get<BotInstallationRef>(),
+        .user_id = detail::require_string(document, "user_id",
+                                          "GetOneBotUserInfoRequest"),
+        .no_cache = document.at("no_cache").get<bool>()};
+    result.validate();
+    return result;
+  }
+};
+
+inline void to_json(Json &document, const GetOneBotUserInfoRequest &request) {
+  request.validate();
+  document = {{"action", request.action},
+              {"installation", request.installation},
+              {"user_id", request.user_id},
+              {"no_cache", request.no_cache}};
+}
+
 struct GetOneBotLoginInfoRequest {
   using obcx_bot_json_factory = void;
   inline static const auto &action = actions::get_login_info;
@@ -318,6 +394,50 @@ inline auto PokeOneBotGroupRequest::from_json(const Json &document)
 } // namespace obcx::onebot11::bot
 
 namespace obcx::bot {
+
+template <>
+struct OperationTraits<onebot11::bot::SetOneBotMessageEmojiLikeRequest>
+    : OperationContract<onebot11::bot::SetOneBotMessageEmojiLikeRequest,
+                        onebot11::bot::OneBotMessageEmojiLikeResult, true> {
+  static auto supports_surface(const SurfaceId &surface) -> bool {
+    return surface == onebot11::bot::surface;
+  }
+  static auto installation(const request_type &request)
+      -> const BotInstallationRef & {
+    return request.message.group.installation;
+  }
+  static void validate_result(const request_type &request,
+                              const result_type &result) {
+    result.validate();
+    if (result.message != request.message ||
+        result.emoji_id != request.emoji_id || result.set != request.set) {
+      throw std::invalid_argument(
+          "OneBot emoji like result does not match request");
+    }
+  }
+};
+
+template <>
+struct OperationTraits<onebot11::bot::GetOneBotUserInfoRequest>
+    : OperationContract<onebot11::bot::GetOneBotUserInfoRequest,
+                        onebot11::bot::OneBotUserInfo, false> {
+  static auto supports_surface(const SurfaceId &surface) -> bool {
+    return surface == onebot11::bot::surface;
+  }
+  static auto installation(const request_type &request)
+      -> const BotInstallationRef & {
+    return request.installation;
+  }
+  static void validate_result(const request_type &request,
+                              const result_type &result) {
+    result.validate();
+    if (result.installation != request.installation ||
+        result.user_id != request.user_id) {
+      throw std::invalid_argument(
+          "OneBot user info result does not match request");
+    }
+  }
+};
 
 template <>
 struct OperationTraits<onebot11::bot::GetOneBotLoginInfoRequest>

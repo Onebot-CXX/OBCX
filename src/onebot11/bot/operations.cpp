@@ -44,6 +44,36 @@ public:
     return installation_;
   }
 
+  auto execute(const obcx::onebot11::bot::GetOneBotUserInfoRequest &request)
+      -> boost::asio::awaitable<
+          bot::BotOperationResult<obcx::onebot11::bot::OneBotUserInfo>> {
+    using Result = obcx::onebot11::bot::OneBotUserInfo;
+    const auto echo = next_echo();
+    const auto response = co_await transport().send_action(
+        protocol().serialize_get_user_info_request({}, request.user_id,
+                                                   request.no_cache, echo),
+        echo);
+    const auto parsed = parse_onebot11_operation_response(response, false);
+    if (!parsed.ok()) {
+      co_return provider_failure<Result>(parsed);
+    }
+    const auto user_id = provider_id(parsed_value(parsed), "user_id");
+    if (!user_id || *user_id != request.user_id) {
+      co_return malformed_read<Result>(
+          "OneBot user info response has mismatched user_id");
+    }
+    try {
+      auto document = parsed_value(parsed);
+      document["installation"] = installation_;
+      document["user_id"] = *user_id;
+      co_return bot::BotOperationResult<Result>::success(
+          Result::from_json(document));
+    } catch (const std::exception &) {
+      co_return malformed_read<Result>(
+          "OneBot user info response has invalid profile fields");
+    }
+  }
+
   auto execute(const obcx::onebot11::bot::GetOneBotLoginInfoRequest &)
       -> boost::asio::awaitable<
           bot::BotOperationResult<obcx::onebot11::bot::OneBotLoginInfo>> {
@@ -277,6 +307,29 @@ public:
                  .user_id = request.user_id,
                  .file_id = request.file_id,
                  .url = url});
+  }
+
+  auto execute(
+      const obcx::onebot11::bot::SetOneBotMessageEmojiLikeRequest &request)
+      -> boost::asio::awaitable<bot::BotOperationResult<
+          obcx::onebot11::bot::OneBotMessageEmojiLikeResult>> {
+    using Result = obcx::onebot11::bot::OneBotMessageEmojiLikeResult;
+    const auto echo = next_echo();
+    const auto response = co_await transport().send_action(
+        protocol().serialize_set_msg_emoji_like_request(
+            request.message.native_message_id, request.emoji_id, request.set,
+            echo),
+        echo);
+    const auto parsed = parse_onebot11_operation_response(response, true);
+    if (!parsed.ok()) {
+      co_return provider_failure<Result>(parsed);
+    }
+    // LLOneBot acknowledges this mutation with null data, not a message
+    // receipt.
+    co_return bot::BotOperationResult<Result>::success(
+        {.message = request.message,
+         .emoji_id = request.emoji_id,
+         .set = request.set});
   }
 
   auto execute(const obcx::onebot11::bot::PokeOneBotGroupRequest &request)

@@ -19,6 +19,7 @@ template <typename Visitor> void for_each_operation(Visitor visit) {
       dependencies});
   visit(
       core::OperationDefinition<obcx::bot::DeleteMessageRequest>{dependencies});
+  visit(core::OperationDefinition<GetOneBotUserInfoRequest>{dependencies});
   visit(core::OperationDefinition<GetOneBotLoginInfoRequest>{dependencies});
   visit(core::OperationDefinition<GetOneBotGroupMemberRequest>{dependencies});
   visit(
@@ -27,6 +28,8 @@ template <typename Visitor> void for_each_operation(Visitor visit) {
   visit(
       core::OperationDefinition<ResolveOneBotPrivateFileRequest>{dependencies});
   visit(core::OperationDefinition<PokeOneBotGroupRequest>{dependencies});
+  visit(core::OperationDefinition<SetOneBotMessageEmojiLikeRequest>{
+      dependencies});
   visit(core::OperationDefinition<SendOneBotGroupForwardMessageRequest>{
       dependencies});
 }

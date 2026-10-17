@@ -9,12 +9,14 @@ namespace obcx::onebot11::bot {
 template <typename Request>
 concept OwnedRequest =
     std::same_as<Request, SendOneBotGroupForwardMessageRequest> ||
+    std::same_as<Request, GetOneBotUserInfoRequest> ||
     std::same_as<Request, GetOneBotLoginInfoRequest> ||
     std::same_as<Request, GetOneBotGroupMemberRequest> ||
     std::same_as<Request, GetOneBotForwardMessageRequest> ||
     std::same_as<Request, ResolveOneBotGroupFileRequest> ||
     std::same_as<Request, ResolveOneBotPrivateFileRequest> ||
-    std::same_as<Request, PokeOneBotGroupRequest>;
+    std::same_as<Request, PokeOneBotGroupRequest> ||
+    std::same_as<Request, SetOneBotMessageEmojiLikeRequest>;
 
 class Client {
 public:

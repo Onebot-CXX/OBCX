@@ -8,6 +8,7 @@
 #include <chrono>
 #include <deque>
 #include <exception>
+#include <format>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -19,12 +20,12 @@ namespace obcx::core {
 
 auto format_native_actor_slow_resume(
     const NativeActorSlowResumeDiagnostic &diagnostic) -> std::string {
-  return "slow actor resume task_id=" + std::to_string(diagnostic.task_id) +
-         " actor_id=" + diagnostic.actor_id +
-         " partition_key=" + diagnostic.partition_key + " mailbox_generation=" +
-         std::to_string(diagnostic.mailbox_generation) +
-         " worker_id=" + std::to_string(diagnostic.worker_id) +
-         " elapsed_ns=" + std::to_string(diagnostic.elapsed_ns);
+  return std::format(
+      "slow actor resume task_id={} actor_id={} partition_key={} "
+      "mailbox_generation={} worker_id={} elapsed_ns={}",
+      diagnostic.task_id, diagnostic.actor_id, diagnostic.partition_key,
+      diagnostic.mailbox_generation, diagnostic.worker_id,
+      diagnostic.elapsed_ns);
 }
 
 namespace {

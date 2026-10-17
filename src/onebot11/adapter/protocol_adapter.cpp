@@ -2,6 +2,9 @@
 #include "common/logger.hpp"
 #include "onebot11/adapter/message_converter.hpp"
 
+#include <charconv>
+#include <stdexcept>
+
 namespace obcx::adapter::onebot11 {
 
 auto ProtocolAdapter::serialize_send_message_request(
@@ -55,12 +58,20 @@ auto ProtocolAdapter::serialize_get_self_info_request(
 auto ProtocolAdapter::serialize_get_user_info_request(
     std::string_view chat_id, std::string_view user_id, bool no_cache,
     const std::optional<uint64_t> &echo) -> std::string {
-  // For OneBot11, chat_id is not needed for get_stranger_info
+  // For OneBot11, chat_id is not needed for get_stranger_info.
+  // The standard API takes an int64 QQ ID, not a JSON string.
+  std::int64_t numeric_user_id = 0;
+  const auto [end, error] = std::from_chars(
+      user_id.data(), user_id.data() + user_id.size(), numeric_user_id);
+  if (error != std::errc{} || end != user_id.data() + user_id.size() ||
+      numeric_user_id <= 0) {
+    throw std::invalid_argument("Invalid OneBot user_id");
+  }
   nlohmann::json j;
   j["action"] = "get_stranger_info";
 
   nlohmann::json params;
-  params["user_id"] = user_id;
+  params["user_id"] = numeric_user_id;
   params["no_cache"] = no_cache;
 
   j["params"] = params;
@@ -708,6 +719,20 @@ auto ProtocolAdapter::serialize_get_private_file_url_request(
 
   OBCX_DEBUG("Serialized action request: {}", j.dump());
   return j.dump();
+}
+
+auto ProtocolAdapter::serialize_set_msg_emoji_like_request(
+    std::string_view message_id, std::string_view emoji_id, bool set,
+    const std::optional<uint64_t> &echo) -> std::string {
+  nlohmann::json request{{"action", "set_msg_emoji_like"},
+                         {"params",
+                          {{"message_id", std::string{message_id}},
+                           {"emoji_id", std::string{emoji_id}},
+                           {"set", set}}}};
+  if (echo) {
+    request["echo"] = *echo;
+  }
+  return request.dump();
 }
 
 auto ProtocolAdapter::serialize_group_poke_request(

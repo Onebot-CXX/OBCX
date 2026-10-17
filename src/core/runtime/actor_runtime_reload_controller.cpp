@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <fmt/format.h>
+#include <format>
 #include <mutex>
 #include <string_view>
 #include <utility>
@@ -74,12 +75,13 @@ auto describe_config_load_failure(
     const std::optional<common::ConfigLoadDiagnostic> &diagnostic)
     -> std::string {
   if (!diagnostic) {
-    return "reload configuration could not be parsed: path=" + requested_path;
+    return std::format("reload configuration could not be parsed: path={}",
+                       requested_path);
   }
-  return "reload configuration could not be parsed: diagnostic_code=" +
-         diagnostic->code + " path=" + diagnostic->path +
-         " line=" + std::to_string(diagnostic->line) +
-         " column=" + std::to_string(diagnostic->column);
+  return std::format(
+      "reload configuration could not be parsed: diagnostic_code={} path={} "
+      "line={} column={}",
+      diagnostic->code, diagnostic->path, diagnostic->line, diagnostic->column);
 }
 
 auto shutdown_ingress_result() -> OrchestratorResult {

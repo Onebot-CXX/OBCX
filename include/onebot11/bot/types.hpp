@@ -4,6 +4,8 @@
 #include "onebot11/bot/actions.hpp"
 
 #include <algorithm>
+#include <charconv>
+#include <cstdint>
 
 namespace obcx::onebot11::bot {
 
@@ -23,7 +25,113 @@ inline void require_onebot(const BotInstallationRef &installation,
     throw std::invalid_argument(std::string{type} + " requires onebot11.qq");
   }
 }
+inline void validate_user_id(const std::string_view user_id) {
+  std::int64_t value = 0;
+  const auto [end, error] =
+      std::from_chars(user_id.data(), user_id.data() + user_id.size(), value);
+  if (user_id.empty() || user_id.front() == '0' || value <= 0 ||
+      error != std::errc{} || end != user_id.data() + user_id.size()) {
+    throw std::invalid_argument("Invalid OneBot user_id");
+  }
+}
+inline void validate_emoji_like(const obcx::bot::BotMessageRef &message,
+                                const std::string_view emoji_id) {
+  message.validate();
+  require_onebot(message.group.installation, "OneBot message emoji like");
+  validate_user_id(message.group.native_group_id);
+  const auto &id = message.native_message_id;
+  std::int64_t value = 0;
+  const auto [end, error] =
+      std::from_chars(id.data(), id.data() + id.size(), value);
+  if (error != std::errc{} || end != id.data() + id.size()) {
+    throw std::invalid_argument("Invalid OneBot message_id");
+  }
+  validate_identifier(emoji_id, "OneBot emoji_id", 20);
+  if (!std::ranges::all_of(emoji_id,
+                           [](char c) { return c >= '0' && c <= '9'; })) {
+    throw std::invalid_argument("OneBot emoji_id must be decimal digits");
+  }
+}
 } // namespace detail
+
+struct OneBotMessageEmojiLikeResult {
+  using obcx_bot_json_factory = void;
+  obcx::bot::BotMessageRef message;
+  std::string emoji_id;
+  bool set;
+
+  void validate() const { detail::validate_emoji_like(message, emoji_id); }
+
+  static auto from_json(const Json &document) -> OneBotMessageEmojiLikeResult {
+    obcx::bot::detail::require_only_keys(document,
+                                         "OneBotMessageEmojiLikeResult",
+                                         {"message", "emoji_id", "set"});
+    OneBotMessageEmojiLikeResult result{
+        .message = document.at("message").get<obcx::bot::BotMessageRef>(),
+        .emoji_id = detail::require_string(document, "emoji_id",
+                                           "OneBotMessageEmojiLikeResult"),
+        .set = document.at("set").get<bool>()};
+    result.validate();
+    return result;
+  }
+
+  auto operator==(const OneBotMessageEmojiLikeResult &) const -> bool = default;
+};
+
+inline void to_json(Json &document,
+                    const OneBotMessageEmojiLikeResult &result) {
+  result.validate();
+  document = {{"message", result.message},
+              {"emoji_id", result.emoji_id},
+              {"set", result.set}};
+}
+
+struct OneBotUserInfo {
+  using obcx_bot_json_factory = void;
+  BotInstallationRef installation;
+  std::string user_id;
+  std::string nickname;
+  std::string sex;
+  std::int64_t age;
+
+  void validate() const {
+    detail::require_onebot(installation, "OneBotUserInfo");
+    detail::validate_user_id(user_id);
+    if (!nickname.empty()) {
+      detail::validate_identifier(nickname, "OneBot nickname", 1024);
+    }
+    if ((sex != "male" && sex != "female" && sex != "unknown") || age < 0) {
+      throw std::invalid_argument("Invalid OneBot user profile");
+    }
+  }
+
+  static auto from_json(const Json &document) -> OneBotUserInfo {
+    detail::require_object(document, "OneBotUserInfo");
+    const auto &age = document.at("age");
+    if (!age.is_number_integer() ||
+        (age.is_number_unsigned() && age.get<std::uint64_t>() > INT64_MAX)) {
+      throw std::invalid_argument("OneBot age must be a signed-range integer");
+    }
+    OneBotUserInfo result{
+        .installation = document.at("installation").get<BotInstallationRef>(),
+        .user_id =
+            detail::require_string(document, "user_id", "OneBotUserInfo"),
+        .nickname = document.at("nickname").get<std::string>(),
+        .sex = document.at("sex").get<std::string>(),
+        .age = age.get<std::int64_t>()};
+    result.validate();
+    return result;
+  }
+};
+
+inline void to_json(Json &document, const OneBotUserInfo &value) {
+  value.validate();
+  document = {{"installation", value.installation},
+              {"user_id", value.user_id},
+              {"nickname", value.nickname},
+              {"sex", value.sex},
+              {"age", value.age}};
+}
 
 struct OneBotLoginInfo {
   using obcx_bot_json_factory = void;

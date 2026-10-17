@@ -290,6 +290,13 @@ public:
                            {"chat_id", request.target.native_group_id},
                            {"photo", request.photo},
                            {"echo", echo}};
+    if (request.topic_id) {
+      payload["message_thread_id"] = *request.topic_id;
+    }
+    if (request.reply_to) {
+      payload["reply_parameters"] = {
+          {"message_id", std::stoll(request.reply_to->native_message_id)}};
+    }
     if (!request.caption.empty()) {
       payload["caption"] = request.caption;
     }
