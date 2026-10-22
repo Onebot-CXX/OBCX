@@ -27,6 +27,13 @@ cmake --build --preset actor-dev --parallel "$(nproc)"
 `vcpkg-base.json` 中列出的依赖。Linux 默认在检测到 liburing 时启用 Asio 的
 io_uring reactor，可用 `-DOBCX_ENABLE_IO_URING=OFF` 关闭。
 
+以上是 **core + actor 的完整 workspace 构建**，不是热重载隔离构建。
+即使指定单个 actor target，过期的 core 依赖仍会被重新编译。
+只修改 actor 并准备热重载时，请使用
+[固定 SDK 的隔离构建流程](packaging/actors/README.md)，不要覆盖运行中进程的
+`libobcx_core.so`。现有 `actor-dev` / `actor-release` preset 名称保留兼容，
+不代表它们只构建 actor。
+
 安装 SDK 与运行时：
 
 ```bash

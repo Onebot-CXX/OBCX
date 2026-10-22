@@ -17,6 +17,11 @@
 - Use at least 6 parallel workers for compilation and test execution.
 - When system load is low, use all available CPU cores to reduce build and test
   time.
+- For hot-reloadable actor builds, use `scripts/actor_build.py` with a frozen
+  installed SDK; see `packaging/actors/README.md`. Do not build actor targets in
+  the live core's workspace: their transitive dependencies can rebuild and
+  replace `libobcx_core.so`. Core/SDK updates and process restarts are separate,
+  explicit operations.
 
 ## Commit Checks
 
@@ -30,11 +35,8 @@
   GPG signatures**.
 - Provide a complete, copy-pasteable shell command covering every repository
   where unsigned commits were created, not just a generic
-  `git commit --amend --no-edit -S`. Include `cd` to the repository root,
-  `export GPG_TTY=$(tty)`, and a loop listing the actual affected repository
-  paths (including `.` for core when applicable). Run `treefmt` from the root
-  before each amend, use `git -C "$repo" commit --amend --no-edit -S`, and stop
-  on failure.
+  `git commit --amend --no-edit -S`. Include a 'for loop' meet user using shell
+  as the `git -C` workdir.
 
 ## Unit test rule
 

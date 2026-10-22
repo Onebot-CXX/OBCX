@@ -22,6 +22,7 @@
 #include <boost/asio/thread_pool.hpp>
 #include <boost/date_time/posix_time/time_formatters.hpp>
 #include <boost/program_options.hpp>
+#include <boost/scope/scope_exit.hpp>
 #include <cctype>
 #include <cerrno>
 #include <csignal>
@@ -39,6 +40,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace po = boost::program_options;
@@ -348,8 +350,95 @@ public:
         actor_runtime ? std::make_shared<core::ActorRuntimeReloadController>(
                             actor_runtime)
                       : nullptr;
+    std::optional<boost::asio::thread_pool> notification_pool;
+    if (reload_controller) {
+      notification_pool.emplace(1);
+    }
+
+    bool shutdown_started = false;
+    const auto shutdown = [&]() noexcept {
+      if (std::exchange(shutdown_started, true)) {
+        return;
+      }
+      try {
+        OBCX_INFO("Shutting down OBCX Framework...");
+        process_bot_operation_dispatcher->close_success_notifications();
+
+        if (process_blocking_executor) {
+          process_blocking_executor->close_admission();
+          const auto metrics = process_blocking_executor->metrics();
+          OBCX_INFO(
+              "BlockingExecutor lifecycle phase=admission_closed submitted={} "
+              "running={} pending={} completed={} failed={} rejected={}",
+              metrics.submitted, metrics.running, metrics.pending,
+              metrics.completed, metrics.failed, metrics.rejected);
+        }
+        if (reload_controller) {
+          reload_controller->begin_shutdown();
+        }
+        if (process_blocking_executor) {
+          process_blocking_executor->shutdown();
+          const auto metrics = process_blocking_executor->metrics();
+          OBCX_INFO(
+              "BlockingExecutor lifecycle phase=joined submitted={} running={} "
+              "pending={} completed={} failed={} rejected={}",
+              metrics.submitted, metrics.running, metrics.pending,
+              metrics.completed, metrics.failed, metrics.rejected);
+        }
+        if (reload_controller) {
+          reload_controller->shutdown();
+        }
+        if (notification_pool) {
+          // Gate waiters and actor completions can run until runtime retirement
+          // finishes. Only this application thread joins the process pool.
+          notification_pool->join();
+        }
+
+        process_bot_operation_dispatcher->clear_endpoints();
+        for (auto &bot : bots) {
+          bot->stop();
+        }
+
+        const auto bot_shutdown_deadline =
+            std::chrono::steady_clock::now() +
+            std::chrono::seconds(BOT_SHUTDOWN_TIMEOUT_SECONDS);
+        bool bot_shutdown_timed_out = false;
+        for (size_t i = 0; i < bot_thread_completions.size(); ++i) {
+          OBCX_INFO("Waiting for bot thread {} to finish...", i);
+          if (bot_thread_completions[i].wait_until(bot_shutdown_deadline) !=
+              std::future_status::ready) {
+            OBCX_ERROR("Bot thread {} did not finish within {} seconds", i,
+                       BOT_SHUTDOWN_TIMEOUT_SECONDS);
+            bot_shutdown_timed_out = true;
+          }
+        }
+        if (bot_shutdown_timed_out) {
+          OBCX_ERROR("Bot shutdown timed out; terminating to avoid running "
+                     "threads outliving their bot instances");
+          std::quick_exit(EXIT_FAILURE);
+        }
+        for (auto &bot_thread : bot_threads) {
+          if (bot_thread.joinable()) {
+            bot_thread.join();
+          }
+        }
+
+        process_blocking_executor.reset();
+        OBCX_INFO("OBCX Framework shutdown complete");
+      } catch (...) {
+        OBCX_ERROR("Runtime cleanup failed; terminating before dependencies "
+                   "can be destroyed with work still running");
+        std::quick_exit(EXIT_FAILURE);
+      }
+    };
+    // Covers startup failure and exception unwinding after observer
+    // registration, before automatic pool destruction could strand a
+    // closed-gate waiter.
+    boost::scope::scope_exit runtime_cleanup{shutdown};
+
     if (reload_controller) {
       process_bot_operation_dispatcher->set_success_handler(
+          notification_pool->get_executor(),
           [weak_controller =
                std::weak_ptr<core::ActorRuntimeReloadController>{
                    reload_controller}](core::SuccessfulBotOperation operation)
@@ -543,67 +632,7 @@ public:
 
       // Shutdown callback runs while the TUI is still alive so the user can
       // see the shutdown log lines in the pane.
-      ctx.shutdown_cb = [&]() -> void {
-        OBCX_INFO("Shutting down OBCX Framework...");
-
-        if (process_blocking_executor) {
-          process_blocking_executor->close_admission();
-          const auto metrics = process_blocking_executor->metrics();
-          OBCX_INFO(
-              "BlockingExecutor lifecycle phase=admission_closed submitted={} "
-              "running={} pending={} completed={} failed={} rejected={}",
-              metrics.submitted, metrics.running, metrics.pending,
-              metrics.completed, metrics.failed, metrics.rejected);
-        }
-        if (reload_controller) {
-          reload_controller->begin_shutdown();
-        }
-        if (process_blocking_executor) {
-          process_blocking_executor->shutdown();
-          const auto metrics = process_blocking_executor->metrics();
-          OBCX_INFO(
-              "BlockingExecutor lifecycle phase=joined submitted={} running={} "
-              "pending={} completed={} failed={} rejected={}",
-              metrics.submitted, metrics.running, metrics.pending,
-              metrics.completed, metrics.failed, metrics.rejected);
-        }
-        if (reload_controller) {
-          reload_controller->shutdown();
-        }
-
-        process_bot_operation_dispatcher->clear_endpoints();
-        for (auto &bot : bots) {
-          bot->stop();
-        }
-
-        const auto bot_shutdown_deadline =
-            std::chrono::steady_clock::now() +
-            std::chrono::seconds(BOT_SHUTDOWN_TIMEOUT_SECONDS);
-        bool bot_shutdown_timed_out = false;
-        for (size_t i = 0; i < bot_thread_completions.size(); ++i) {
-          OBCX_INFO("Waiting for bot thread {} to finish...", i);
-          if (bot_thread_completions[i].wait_until(bot_shutdown_deadline) !=
-              std::future_status::ready) {
-            OBCX_ERROR("Bot thread {} did not finish within {} seconds", i,
-                       BOT_SHUTDOWN_TIMEOUT_SECONDS);
-            bot_shutdown_timed_out = true;
-          }
-        }
-        if (bot_shutdown_timed_out) {
-          OBCX_ERROR("Bot shutdown timed out; terminating to avoid running "
-                     "threads outliving their bot instances");
-          std::quick_exit(EXIT_FAILURE);
-        }
-        for (auto &bot_thread : bot_threads) {
-          if (bot_thread.joinable()) {
-            bot_thread.join();
-          }
-        }
-
-        process_blocking_executor.reset();
-
-        OBCX_INFO("OBCX Framework shutdown complete");
-      };
+      ctx.shutdown_cb = shutdown;
 
       if (use_tui) {
         auto tui_sink = common::Logger::get_tui_sink();

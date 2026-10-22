@@ -90,6 +90,7 @@ vcpkg.json
 # Local config and independent package repositories
 local_actor/
 local_library/
+local_config/
 .package-state/
 packages.toml
 actors.toml

@@ -8,7 +8,7 @@
   "configurePresets": [
     {
       "name": "actor-dev",
-      "displayName": "Actor development",
+      "displayName": "Workspace development (core + actors)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/actor-dev",
       "cacheVariables": {
@@ -22,7 +22,7 @@
     },
     {
       "name": "actor-release",
-      "displayName": "Actor-only release",
+      "displayName": "Workspace release (core + actors)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/actor-release",
       "cacheVariables": {

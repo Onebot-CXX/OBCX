@@ -2,6 +2,7 @@
 
 #include "core/bot/operation_registry.hpp"
 
+#include <boost/asio/any_io_executor.hpp>
 #include <functional>
 #include <memory>
 
@@ -24,7 +25,11 @@ public:
   ~BotOperationDispatcher() override;
 
   void register_endpoint(std::shared_ptr<OperationRegistry> endpoint);
-  void set_success_handler(SuccessHandler handler);
+  void set_success_handler(boost::asio::any_io_executor executor,
+                           SuccessHandler handler);
+  // Close notification admission before draining the process-owned executor.
+  // Already accepted notifications retain their callable until completion.
+  void close_success_notifications() noexcept;
   void seal_registrations();
   void clear_endpoints() noexcept;
   [[nodiscard]] auto endpoint_count() const noexcept -> std::size_t;

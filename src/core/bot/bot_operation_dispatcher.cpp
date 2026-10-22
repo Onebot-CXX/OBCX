@@ -2,7 +2,7 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
-#include <boost/asio/this_coro.hpp>
+#include <boost/asio/post.hpp>
 
 #include <mutex>
 #include <shared_mutex>
@@ -21,6 +21,23 @@ auto reject(const bot::BotOperationErrorCode code, const std::string &message)
        .submission_safety = bot::SubmissionSafety::DefinitelyNotSubmitted});
 }
 
+struct SuccessObserver {
+  boost::asio::any_io_executor executor;
+  BotOperationDispatcher::SuccessHandler handler;
+};
+
+auto observe_success(std::shared_ptr<const SuccessObserver> observer,
+                     SuccessfulBotOperation operation)
+    -> boost::asio::awaitable<void> {
+  // Keep the callable itself alive: a coroutine lambda can refer to its
+  // closure after its first suspension, even though invocation has returned.
+  try {
+    co_await observer->handler(std::move(operation));
+  } catch (...) {
+    // Observation cannot change an already completed provider operation.
+  }
+}
+
 } // namespace
 
 struct BotOperationDispatcher::State {
@@ -29,7 +46,8 @@ struct BotOperationDispatcher::State {
   const SurfaceValidator surface_registered;
   mutable std::shared_mutex mutex;
   std::unordered_map<std::string, std::shared_ptr<OperationRegistry>> endpoints;
-  SuccessHandler success_handler;
+  std::shared_ptr<const SuccessObserver> success_observer;
+  bool notifications_closed = false;
   bool sealed = false;
   bool closed = false;
 };
@@ -73,19 +91,33 @@ void BotOperationDispatcher::register_endpoint(
   }
 }
 
-void BotOperationDispatcher::set_success_handler(SuccessHandler handler) {
-  if (!handler) {
-    throw std::invalid_argument("operation success handler cannot be empty");
+void BotOperationDispatcher::set_success_handler(
+    boost::asio::any_io_executor executor, SuccessHandler handler) {
+  if (!executor || !handler) {
+    throw std::invalid_argument(
+        "operation success observation requires an executor and handler");
   }
+  auto observer = std::make_shared<const SuccessObserver>(std::move(executor),
+                                                          std::move(handler));
   std::unique_lock lock(state_->mutex);
-  if (state_->sealed || state_->closed) {
+  if (state_->sealed || state_->closed || state_->notifications_closed) {
     throw std::logic_error(
-        "operation success handler must be set before sealing");
+        "operation success handler must be set before sealing or shutdown");
   }
-  if (state_->success_handler) {
+  if (state_->success_observer) {
     throw std::logic_error("operation success handler is already set");
   }
-  state_->success_handler = std::move(handler);
+  state_->success_observer = std::move(observer);
+}
+
+void BotOperationDispatcher::close_success_notifications() noexcept {
+  std::shared_ptr<const SuccessObserver> retired;
+  {
+    std::unique_lock lock(state_->mutex);
+    state_->notifications_closed = true;
+    retired.swap(state_->success_observer);
+  }
+  // Release callback captures and any tracked executor outside the lock.
 }
 
 void BotOperationDispatcher::seal_registrations() {
@@ -97,6 +129,7 @@ void BotOperationDispatcher::seal_registrations() {
 }
 
 void BotOperationDispatcher::clear_endpoints() noexcept {
+  close_success_notifications();
   decltype(State::endpoints) retired;
   {
     std::unique_lock lock(state_->mutex);
@@ -162,7 +195,6 @@ auto BotOperationDispatcher::invoke_owned(std::shared_ptr<State> state,
       .action = envelope.action,
   };
   std::shared_ptr<OperationRegistry> endpoint;
-  SuccessHandler success_handler;
   {
     std::shared_lock lock(state->mutex);
     if (state->closed) {
@@ -176,14 +208,25 @@ auto BotOperationDispatcher::invoke_owned(std::shared_ptr<State> state,
                                   "operation installation was not found");
     }
     endpoint = found->second;
-    success_handler = state->success_handler;
   }
   auto reply = co_await endpoint->invoke(std::move(envelope));
-  if (reply.ok() && success_handler) {
-    auto executor = co_await boost::asio::this_coro::executor;
+  if (reply.ok()) {
     try {
-      boost::asio::co_spawn(executor, success_handler(completed),
-                            boost::asio::detached);
+      // Enqueue and admission closure share this lock. Do not snapshot the
+      // observer before provider I/O: it could enqueue after executor drain.
+      std::shared_lock lock(state->mutex);
+      if (const auto &observer = state->success_observer) {
+        boost::asio::post(observer->executor, [observer, completed] {
+          // post never calls this inline under the dispatcher admission lock.
+          try {
+            boost::asio::co_spawn(observer->executor,
+                                  observe_success(observer, completed),
+                                  boost::asio::detached);
+          } catch (...) {
+            // Launch failure is also best effort, like handler failure.
+          }
+        });
+      }
     } catch (...) {
       // Observation is best effort and cannot change a completed operation.
     }
