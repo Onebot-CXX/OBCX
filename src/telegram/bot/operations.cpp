@@ -169,6 +169,49 @@ public:
     return installation_;
   }
 
+  auto execute(
+      const obcx::telegram::bot::GetTelegramGroupMemberRequest &request)
+      -> boost::asio::awaitable<
+          bot::BotOperationResult<obcx::telegram::bot::TelegramGroupMember>> {
+    using Result = obcx::telegram::bot::TelegramGroupMember;
+    const auto echo = next_echo();
+    const auto response = co_await transport().send_action(
+        protocol().serialize_get_chat_member_request(
+            request.target.native_group_id, request.user_id, echo),
+        echo);
+    const auto parsed = parse_telegram_operation_response(response, false);
+    if (!parsed.ok()) {
+      co_return provider_failure<Result>(parsed);
+    }
+    try {
+      const auto &value = parsed_value(parsed);
+      const auto &user = value.at("user");
+      const auto user_id = provider_id(user, "id");
+      if (!user_id || *user_id != request.user_id) {
+        co_return malformed_read<Result>(
+            "Telegram member response has missing or mismatched user ID");
+      }
+      bot::Json profile{{"target", request.target},
+                        {"user_id", *user_id},
+                        {"first_name", user.at("first_name")},
+                        {"is_bot", user.at("is_bot")},
+                        {"status", value.at("status")}};
+      for (const auto key :
+           {"last_name", "username", "language_code", "is_premium"}) {
+        if (user.contains(key)) {
+          profile[key] = user.at(key);
+        }
+      }
+      if (value.contains("custom_title")) {
+        profile["custom_title"] = value.at("custom_title");
+      }
+      co_return bot::BotOperationResult<Result>::success(profile.get<Result>());
+    } catch (const std::exception &) {
+      co_return malformed_read<Result>(
+          "Telegram member response has invalid profile fields");
+    }
+  }
+
   auto execute(const bot::SendGroupMessageRequest &request)
       -> boost::asio::awaitable<
           bot::BotOperationResult<bot::SendMessageResult>> {

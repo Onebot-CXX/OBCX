@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cstdint>
+#include <optional>
 
 namespace obcx::onebot11::bot {
 
@@ -173,6 +174,11 @@ struct OneBotGroupMember {
   std::string nickname;
   std::string card;
   std::string title;
+  std::string role;
+  std::string sex;
+  std::optional<std::int64_t> age;
+  std::string area;
+  std::string level;
 
   void validate() const {
     target.validate();
@@ -187,6 +193,18 @@ struct OneBotGroupMember {
     if (!title.empty()) {
       detail::validate_identifier(title, "OneBot title", 1024);
     }
+    if ((!role.empty() && role != "owner" && role != "admin" &&
+         role != "member") ||
+        (!sex.empty() && sex != "male" && sex != "female" &&
+         sex != "unknown") ||
+        (age.has_value() && *age < 0)) {
+      throw std::invalid_argument("Invalid OneBot member profile");
+    }
+    for (const auto *text : {&area, &level}) {
+      if (!text->empty()) {
+        detail::validate_identifier(*text, "OneBot member profile", 1024);
+      }
+    }
   }
 
   auto operator==(const OneBotGroupMember &) const -> bool = default;
@@ -194,11 +212,14 @@ struct OneBotGroupMember {
 
 inline void to_json(Json &document, const OneBotGroupMember &member) {
   member.validate();
-  document = {{"target", member.target},
-              {"user_id", member.user_id},
-              {"nickname", member.nickname},
-              {"card", member.card},
-              {"title", member.title}};
+  document = {{"target", member.target},     {"user_id", member.user_id},
+              {"nickname", member.nickname}, {"card", member.card},
+              {"title", member.title},       {"role", member.role},
+              {"sex", member.sex},           {"area", member.area},
+              {"level", member.level}};
+  if (member.age.has_value()) {
+    document["age"] = *member.age;
+  }
 }
 
 inline void from_json(const Json &document, OneBotGroupMember &member) {
@@ -212,6 +233,19 @@ inline void from_json(const Json &document, OneBotGroupMember &member) {
   member.nickname = document.value("nickname", std::string{});
   member.card = document.value("card", std::string{});
   member.title = document.value("title", std::string{});
+  member.role = document.value("role", std::string{});
+  member.sex = document.value("sex", std::string{});
+  member.area = document.value("area", std::string{});
+  member.level = document.value("level", std::string{});
+  member.age.reset();
+  if (document.contains("age")) {
+    const auto &age = document.at("age");
+    if (!age.is_number_integer() ||
+        (age.is_number_unsigned() && age.get<std::uint64_t>() > INT64_MAX)) {
+      throw std::invalid_argument("OneBot age must be a signed-range integer");
+    }
+    member.age = age.get<std::int64_t>();
+  }
   member.validate();
 }
 

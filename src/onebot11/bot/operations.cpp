@@ -211,17 +211,31 @@ public:
       co_return provider_failure<obcx::onebot11::bot::OneBotGroupMember>(
           parsed);
     }
-    const auto user_id = provider_id(parsed_value(parsed), "user_id");
-    if (!user_id) {
-      co_return malformed_read<obcx::onebot11::bot::OneBotGroupMember>(
-          "OneBot member response is missing user_id");
+    using Result = obcx::onebot11::bot::OneBotGroupMember;
+    const auto &value = parsed_value(parsed);
+    const auto user_id = provider_id(value, "user_id");
+    if (!user_id || *user_id != request.user_id) {
+      co_return malformed_read<Result>(
+          "OneBot member response has missing or mismatched user ID");
     }
-    co_return bot::BotOperationResult<obcx::onebot11::bot::OneBotGroupMember>::
-        success({.target = request.target,
-                 .user_id = *user_id,
-                 .nickname = optional_string(parsed_value(parsed), "nickname"),
-                 .card = optional_string(parsed_value(parsed), "card"),
-                 .title = optional_string(parsed_value(parsed), "title")});
+    if (value.contains("group_id") &&
+        provider_id(value, "group_id") != request.target.native_group_id) {
+      co_return malformed_read<Result>(
+          "OneBot member response has mismatched group ID");
+    }
+    try {
+      bot::Json profile{{"target", request.target}, {"user_id", *user_id}};
+      for (const auto key : {"nickname", "card", "title", "role", "sex", "age",
+                             "area", "level"}) {
+        if (value.contains(key)) {
+          profile[key] = value.at(key);
+        }
+      }
+      co_return bot::BotOperationResult<Result>::success(profile.get<Result>());
+    } catch (const std::exception &) {
+      co_return malformed_read<Result>(
+          "OneBot member response has invalid profile fields");
+    }
   }
 
   auto execute(

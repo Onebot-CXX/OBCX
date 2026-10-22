@@ -7,6 +7,7 @@ namespace obcx::telegram::bot {
 inline const obcx::bot::SurfaceId surface{"telegram.bot_api"};
 
 namespace actions {
+inline const obcx::bot::ActionId get_group_member{"telegram.group_member.get"};
 inline const obcx::bot::ActionId send_topic{"telegram.message.send_topic"};
 inline const obcx::bot::ActionId edit_text{"telegram.message.edit_text"};
 inline const obcx::bot::ActionId send_photo{"telegram.media.send_photo"};

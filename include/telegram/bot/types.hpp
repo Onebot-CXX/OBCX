@@ -4,6 +4,7 @@
 #include "core/bot/messaging.hpp"
 #include "telegram/bot/actions.hpp"
 
+#include <charconv>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -36,6 +37,16 @@ inline void require_telegram(const BotInstallationRef &installation,
   if (installation.surface != surface) {
     throw std::invalid_argument(std::string{type} +
                                 " requires telegram.bot_api");
+  }
+}
+
+inline void validate_user_id(const std::string_view user_id) {
+  std::int64_t value = 0;
+  const auto [end, error] =
+      std::from_chars(user_id.data(), user_id.data() + user_id.size(), value);
+  if (user_id.empty() || user_id.front() == '0' || value <= 0 ||
+      error != std::errc{} || end != user_id.data() + user_id.size()) {
+    throw std::invalid_argument("Invalid Telegram user_id");
   }
 }
 
@@ -78,6 +89,86 @@ inline auto optional_reply_from_json(const Json &document)
 }
 
 } // namespace detail
+
+struct TelegramGroupMember {
+  using obcx_bot_json_factory = void;
+
+  GroupTarget target;
+  std::string user_id;
+  std::string first_name;
+  std::string last_name;
+  std::string username;
+  std::string language_code;
+  bool is_bot;
+  std::optional<bool> is_premium;
+  std::string status;
+  std::string custom_title;
+
+  void validate() const {
+    target.validate();
+    detail::require_telegram(target.installation, "TelegramGroupMember");
+    detail::validate_user_id(user_id);
+    detail::validate_identifier(first_name, "Telegram first_name", 1024);
+    for (const auto *text :
+         {&last_name, &username, &language_code, &custom_title}) {
+      if (!text->empty()) {
+        detail::validate_identifier(*text, "Telegram member profile", 1024);
+      }
+    }
+    if (status != "creator" && status != "administrator" &&
+        status != "member" && status != "restricted" && status != "left" &&
+        status != "kicked") {
+      throw std::invalid_argument("Invalid Telegram member status");
+    }
+  }
+
+  static auto from_json(const Json &document) -> TelegramGroupMember {
+    detail::require_object(document, "TelegramGroupMember");
+    if (!document.at("is_bot").is_boolean()) {
+      throw std::invalid_argument("Telegram is_bot must be boolean");
+    }
+    TelegramGroupMember result{
+        .target = document.at("target").get<GroupTarget>(),
+        .user_id =
+            detail::require_string(document, "user_id", "TelegramGroupMember"),
+        .first_name = detail::require_string(document, "first_name",
+                                             "TelegramGroupMember"),
+        .last_name = document.value("last_name", std::string{}),
+        .username = document.value("username", std::string{}),
+        .language_code = document.value("language_code", std::string{}),
+        .is_bot = document.at("is_bot").get<bool>(),
+        .is_premium = std::nullopt,
+        .status =
+            detail::require_string(document, "status", "TelegramGroupMember"),
+        .custom_title = document.value("custom_title", std::string{})};
+    if (document.contains("is_premium")) {
+      if (!document.at("is_premium").is_boolean()) {
+        throw std::invalid_argument("Telegram is_premium must be boolean");
+      }
+      result.is_premium = document.at("is_premium").get<bool>();
+    }
+    result.validate();
+    return result;
+  }
+
+  auto operator==(const TelegramGroupMember &) const -> bool = default;
+};
+
+inline void to_json(Json &document, const TelegramGroupMember &member) {
+  member.validate();
+  document = {{"target", member.target},
+              {"user_id", member.user_id},
+              {"first_name", member.first_name},
+              {"last_name", member.last_name},
+              {"username", member.username},
+              {"language_code", member.language_code},
+              {"is_bot", member.is_bot},
+              {"status", member.status},
+              {"custom_title", member.custom_title}};
+  if (member.is_premium.has_value()) {
+    document["is_premium"] = *member.is_premium;
+  }
+}
 
 struct TelegramTopicTarget {
   using obcx_bot_json_factory = void;

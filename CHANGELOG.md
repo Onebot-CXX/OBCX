@@ -38,6 +38,15 @@
 
 ### Added
 
+- Typed Telegram group-member lookup (`GetTelegramGroupMemberRequest`,
+  `telegram.group_member.get`) through the data-only bot gateway, with scoped
+  identity validation and public profile fields. OneBot member results now also
+  expose available role, sex, age, area and level fields.
+- `chat_llm` now offers optional `get_user_info(user_id)` lookups for visible
+  conversation participants on QQ and Telegram. Direct and proactive chats can
+  look up profiles before their final action, within `max_tool_steps`; results
+  are transient and lookup failures remain recoverable. Telegram support needs
+  the updated core/SDK, not just an actor hot reload.
 - Typed `handle` overload discovery, exact reflected dispatch, ADL JSON
   decoding, typed `ActorResult::emit`, and compile-time signature diagnostics.
 - Actor-aware validation and `obcx --validate-config`, both of which inspect

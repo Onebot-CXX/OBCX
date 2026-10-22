@@ -11,6 +11,7 @@ template <typename Visitor>
 void for_each_operation(bool include_upload, Visitor visit) {
   const std::vector<std::string> dependencies{"telegram.protocol",
                                               "telegram.transport"};
+  visit(core::OperationDefinition<GetTelegramGroupMemberRequest>{dependencies});
   visit(core::OperationDefinition<obcx::bot::SendGroupMessageRequest>{
       dependencies});
   visit(core::OperationDefinition<obcx::bot::SendPrivateMessageRequest>{

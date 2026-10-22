@@ -7,6 +7,7 @@ namespace obcx::telegram::bot {
 
 template <typename Request>
 concept OwnedRequest =
+    std::same_as<Request, GetTelegramGroupMemberRequest> ||
     std::same_as<Request, SendTelegramTopicMessageRequest> ||
     std::same_as<Request, EditTelegramMessageTextRequest> ||
     std::same_as<Request, SendTelegramPhotoRequest> ||

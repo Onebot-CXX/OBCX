@@ -7,6 +7,46 @@
 
 namespace obcx::telegram::bot {
 
+struct GetTelegramGroupMemberRequest {
+  using obcx_bot_json_factory = void;
+  inline static const auto &action = actions::get_group_member;
+
+  GroupTarget target;
+  std::string user_id;
+
+  void validate() const {
+    target.validate();
+    detail::require_telegram(target.installation,
+                             "GetTelegramGroupMemberRequest");
+    detail::validate_user_id(user_id);
+  }
+
+  static auto from_json(const Json &document) -> GetTelegramGroupMemberRequest {
+    obcx::bot::detail::require_only_keys(document,
+                                         "GetTelegramGroupMemberRequest",
+                                         {"action", "target", "user_id"});
+    if (document.contains("action") &&
+        document.at("action").get<obcx::bot::ActionId>() != action) {
+      throw std::invalid_argument(
+          "GetTelegramGroupMemberRequest action mismatch");
+    }
+    GetTelegramGroupMemberRequest result{
+        .target = document.at("target").get<GroupTarget>(),
+        .user_id = detail::require_string(document, "user_id",
+                                          "GetTelegramGroupMemberRequest")};
+    result.validate();
+    return result;
+  }
+};
+
+inline void to_json(Json &document,
+                    const GetTelegramGroupMemberRequest &request) {
+  request.validate();
+  document = {{"action", request.action},
+              {"target", request.target},
+              {"user_id", request.user_id}};
+}
+
 struct SendTelegramTopicMessageRequest {
   using obcx_bot_json_factory = void;
   static auto from_json(const Json &document)
@@ -592,6 +632,27 @@ inline auto FetchTelegramFileRequest::from_json(const Json &document)
 } // namespace obcx::telegram::bot
 
 namespace obcx::bot {
+
+template <>
+struct OperationTraits<telegram::bot::GetTelegramGroupMemberRequest>
+    : OperationContract<telegram::bot::GetTelegramGroupMemberRequest,
+                        telegram::bot::TelegramGroupMember, false> {
+  static auto supports_surface(const SurfaceId &surface) -> bool {
+    return surface == telegram::bot::surface;
+  }
+  static auto installation(const request_type &request)
+      -> const BotInstallationRef & {
+    return request.target.installation;
+  }
+  static void validate_result(const request_type &request,
+                              const result_type &result) {
+    result.validate();
+    if (result.target != request.target || result.user_id != request.user_id) {
+      throw std::invalid_argument(
+          "Telegram member result does not match its requested scope");
+    }
+  }
+};
 
 template <>
 struct OperationTraits<telegram::bot::SendTelegramTopicMessageRequest>
