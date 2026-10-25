@@ -88,7 +88,7 @@ void BaseEvent::from_json(const json &j) {
   time = std::chrono::system_clock::time_point(
       std::chrono::duration_cast<std::chrono::system_clock::duration>(
           std::chrono::duration<double>(time_double)));
-  DESERIALIZE_FIELD(j, *this, self_id);
+  self_id = JsonUtils::get_id_as_string(j, "self_id");
   DESERIALIZE_FIELD(j, *this, post_type);
 }
 

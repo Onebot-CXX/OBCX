@@ -557,6 +557,11 @@ public:
       std::string_view file, const std::optional<uint64_t> &echo = std::nullopt)
       -> std::string;
 
+  // Explicit LLOneBot extension; false requests metadata/URL without download.
+  auto serialize_get_image_request(std::string_view file, bool download,
+                                   const std::optional<uint64_t> &echo)
+      -> std::string;
+
   auto serialize_get_record_request(
       std::string_view file, std::string_view out_format,
       const std::optional<uint64_t> &echo = std::nullopt) -> std::string;

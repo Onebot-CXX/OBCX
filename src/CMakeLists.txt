@@ -9,6 +9,7 @@ set(OBCX_GENERIC_RUNTIME_SOURCES
     core/runtime/process_configuration.cpp
     network/curl_asio_multi.cpp
     network/http_client.cpp
+    network/image_fetch.cpp
     network/websocket_client.cpp
     network/websocket_write_queue.cpp
     network/proxy_http_client.cpp
@@ -247,6 +248,7 @@ install(FILES
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/actions.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/types.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/image.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/operations.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/client.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/group_forward.hpp
@@ -265,6 +267,7 @@ install(FILES
 
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/network/http_client.hpp
+    ${CMAKE_SOURCE_DIR}/include/network/image_fetch.hpp
     ${CMAKE_SOURCE_DIR}/include/network/proxy_http_client.hpp
     ${CMAKE_SOURCE_DIR}/include/network/connection_config.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obcx/network)

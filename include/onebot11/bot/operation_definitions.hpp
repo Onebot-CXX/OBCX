@@ -21,6 +21,7 @@ template <typename Visitor> void for_each_operation(Visitor visit) {
       core::OperationDefinition<obcx::bot::DeleteMessageRequest>{dependencies});
   visit(core::OperationDefinition<GetOneBotUserInfoRequest>{dependencies});
   visit(core::OperationDefinition<GetOneBotLoginInfoRequest>{dependencies});
+  visit(core::OperationDefinition<GetOneBotImageRequest>{dependencies});
   visit(core::OperationDefinition<GetOneBotGroupMemberRequest>{dependencies});
   visit(
       core::OperationDefinition<GetOneBotForwardMessageRequest>{dependencies});

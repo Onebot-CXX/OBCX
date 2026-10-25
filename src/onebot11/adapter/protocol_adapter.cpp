@@ -589,7 +589,19 @@ auto ProtocolAdapter::serialize_get_image_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request: {}", j.dump());
+  OBCX_DEBUG("Serialized get_image request");
+  return j.dump();
+}
+
+auto ProtocolAdapter::serialize_get_image_request(
+    std::string_view file, bool download, const std::optional<uint64_t> &echo)
+    -> std::string {
+  nlohmann::json j{{"action", "get_image"},
+                   {"params", {{"file", file}, {"download", download}}}};
+  if (echo) {
+    j["echo"] = *echo;
+  }
+  OBCX_DEBUG("Serialized get_image request with explicit download policy");
   return j.dump();
 }
 

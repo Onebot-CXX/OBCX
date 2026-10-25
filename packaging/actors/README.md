@@ -5,6 +5,12 @@ Pre-package-v2 offline bundles, adaptation patches and replay scripts are no
 longer distributed. Use repository Git history and OpenSpec for historical
 reference; do not restore old snapshots over maintained local repositories.
 
+## Platform image interfaces
+
+See [OneBot image access](onebot-image-access.md) for typed `get_image`, the
+LLOneBot URL-only extension, and shared bounded HTTP acquisition. Native image
+references, transient URLs, and OneBot server paths are distinct types of data.
+
 ## Hot-reloadable actor builds
 
 A root workspace build is **not actor-only**, even with

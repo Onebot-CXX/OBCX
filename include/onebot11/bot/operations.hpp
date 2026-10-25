@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/bot/operation_traits.hpp"
+#include "onebot11/bot/image.hpp"
 #include "onebot11/bot/types.hpp"
 
 namespace obcx::onebot11::bot {

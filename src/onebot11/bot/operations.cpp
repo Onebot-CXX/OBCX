@@ -271,6 +271,28 @@ public:
         obcx::onebot11::bot::OneBotForwardMessage>::success(std::move(result));
   }
 
+  auto execute(const obcx::onebot11::bot::GetOneBotImageRequest &request)
+      -> boost::asio::awaitable<
+          bot::BotOperationResult<obcx::onebot11::bot::OneBotImageInfo>> {
+    using Result = obcx::onebot11::bot::OneBotImageInfo;
+    const auto echo = next_echo();
+    const auto response = co_await transport().send_action(
+        protocol().serialize_get_image_request(request.image.file,
+                                               request.download, echo),
+        echo);
+    const auto parsed = parse_onebot11_operation_response(response, false);
+    if (!parsed.ok()) {
+      co_return provider_failure<Result>(parsed);
+    }
+    try {
+      co_return bot::BotOperationResult<Result>::success(
+          Result::from_provider(request.image, parsed_value(parsed)));
+    } catch (const std::exception &) {
+      co_return malformed_read<Result>(
+          "OneBot get_image returned invalid image metadata");
+    }
+  }
+
   auto execute(
       const obcx::onebot11::bot::ResolveOneBotGroupFileRequest &request)
       -> boost::asio::awaitable<bot::BotOperationResult<
