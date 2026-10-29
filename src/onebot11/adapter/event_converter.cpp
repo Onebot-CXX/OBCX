@@ -22,10 +22,17 @@ auto ProtocolAdapter::parse_event(std::string_view json_str)
   try {
     if (post_type == "message") {
       common::MessageEvent event;
-      event.from_json(j);
+      if (j.contains("message") && j.at("message").is_string()) {
+        auto normalized = j;
+        normalized["message"] = MessageConverter::from_v11_string(
+            j.at("message").get<std::string>());
+        event.from_json(normalized);
+      } else {
+        event.from_json(j);
+      }
 
-      // raw_message is the only field needing CQ-code unescape; structured
-      // segments are already parsed by from_json.
+      // Structured segments are already decoded. For string wire messages,
+      // the converter recognizes native CQ syntax before unescaping literals.
       auto raw_message_escaped =
           common::JsonUtils::get_value<std::string>(j, "raw_message");
       event.raw_message = MessageConverter::cq_unescape(raw_message_escaped);

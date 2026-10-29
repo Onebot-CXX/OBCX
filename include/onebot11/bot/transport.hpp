@@ -24,6 +24,7 @@ public:
   virtual ~OneBot11Transport() = default;
 
   virtual void set_event_callback(EventCallback callback) = 0;
+  virtual void set_connection_callback(std::function<void(bool)> callback) = 0;
   [[nodiscard]] virtual auto is_connected() const -> bool = 0;
   virtual auto send_action(std::string payload, std::uint64_t echo)
       -> boost::asio::awaitable<std::string> = 0;
@@ -50,6 +51,7 @@ public:
   void start();
   void stop() noexcept;
   void set_event_callback(EventCallback callback) override;
+  void set_connection_callback(std::function<void(bool)> callback) override;
   [[nodiscard]] auto is_connected() const -> bool override;
   auto send_action(std::string payload, std::uint64_t echo)
       -> boost::asio::awaitable<std::string> override;

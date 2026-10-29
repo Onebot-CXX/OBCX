@@ -521,9 +521,14 @@ public:
             co_return;
           };
           events->subscribe_messages(
-              [process_actor_event](const core::BotEventContext &context,
-                                    const common::MessageEvent &event)
+              [process_actor_event, process_bot_operation_dispatcher](
+                  const core::BotEventContext &context,
+                  const common::MessageEvent &event)
                   -> boost::asio::awaitable<void> {
+                process_bot_operation_dispatcher->observe_self_id(
+                    {.installation_id = context.installation_id,
+                     .surface = context.surface},
+                    event.self_id);
                 co_await process_actor_event(
                     "message",
                     core::raw_message_envelope_from_event(

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/bot/operation_registry.hpp"
+#include "core/bot/self_info.hpp"
 #include "telegram/bot/operations.hpp"
 
 #include <set>
@@ -11,6 +12,7 @@ template <typename Visitor>
 void for_each_operation(bool include_upload, Visitor visit) {
   const std::vector<std::string> dependencies{"telegram.protocol",
                                               "telegram.transport"};
+  visit(core::OperationDefinition<obcx::bot::GetSelfRequest>{dependencies});
   visit(core::OperationDefinition<GetTelegramGroupMemberRequest>{dependencies});
   visit(core::OperationDefinition<obcx::bot::SendGroupMessageRequest>{
       dependencies});

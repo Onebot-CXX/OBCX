@@ -32,6 +32,8 @@ public:
   void close_success_notifications() noexcept;
   void seal_registrations();
   void clear_endpoints() noexcept;
+  void refresh_self_identities();
+  void observe_self_id(const bot::BotInstallationRef &, std::string id);
   [[nodiscard]] auto endpoint_count() const noexcept -> std::size_t;
 
   [[nodiscard]] auto supported_actions(

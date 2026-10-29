@@ -30,7 +30,8 @@ public:
   }
 
   void configure(std::shared_ptr<adapter::onebot11::ProtocolAdapter> protocol,
-                 std::shared_ptr<OneBot11Transport> transport) {
+                 std::shared_ptr<OneBot11Transport> transport,
+                 std::shared_ptr<SelfIdentityCache> self_identity) {
     if (protocol == nullptr || transport == nullptr || protocol_ != nullptr ||
         transport_ != nullptr) {
       throw BotComponentRuntimeError(
@@ -38,10 +39,79 @@ public:
     }
     protocol_ = std::move(protocol);
     transport_ = std::move(transport);
+    self_identity_ = std::move(self_identity);
+    transport_->set_connection_callback(
+        [weak = std::weak_ptr(self_identity_)](bool connected) {
+          if (auto cache = weak.lock())
+            cache->connection_changed(connected);
+        });
   }
 
   [[nodiscard]] auto installation() const -> bot::BotInstallationRef {
     return installation_;
+  }
+
+  auto execute(const bot::GetSelfRequest &)
+      -> boost::asio::awaitable<bot::BotOperationResult<bot::SelfInfo>> {
+    co_return self_identity_->read();
+  }
+
+  auto fetch_self()
+      -> boost::asio::awaitable<bot::BotOperationResult<bot::SelfInfo>> {
+    const auto echo = next_echo();
+    const auto response = co_await transport().send_action(
+        protocol().serialize_get_self_info_request(echo), echo);
+    const auto parsed = parse_onebot11_operation_response(response, false);
+    if (!parsed.ok())
+      co_return provider_failure<bot::SelfInfo>(parsed);
+    try {
+      const auto &data = parsed_value(parsed);
+      const auto id = provider_id(data, "user_id");
+      if (!id)
+        co_return malformed_read<bot::SelfInfo>("OneBot self ID is missing");
+      bot::SelfInfo info{.installation = installation_,
+                         .user_id = *id,
+                         .display_name =
+                             data.contains("nickname")
+                                 ? data.at("nickname").get<std::string>()
+                                 : std::string{}};
+      info.validate();
+      co_return bot::BotOperationResult<bot::SelfInfo>::success(
+          std::move(info));
+    } catch (...) {
+      co_return malformed_read<bot::SelfInfo>("OneBot self profile is invalid");
+    }
+  }
+
+  auto execute(const obcx::onebot11::bot::GetOneBotMessageRequest &request)
+      -> boost::asio::awaitable<
+          bot::BotOperationResult<obcx::onebot11::bot::OneBotMessageAuthor>> {
+    using Result = obcx::onebot11::bot::OneBotMessageAuthor;
+    const auto echo = next_echo();
+    const auto response = co_await transport().send_action(
+        protocol().serialize_get_message_request(
+            request.message.native_message_id, echo),
+        echo);
+    const auto parsed = parse_onebot11_operation_response(response, false);
+    if (!parsed.ok())
+      co_return provider_failure<Result>(parsed);
+    try {
+      const auto &data = parsed_value(parsed);
+      const auto message = provider_id(data, "message_id");
+      const auto group = provider_id(data, "group_id");
+      const auto author = provider_id(data.at("sender"), "user_id");
+      if (!message || !group || !author ||
+          *message != request.message.native_message_id ||
+          *group != request.message.group.native_group_id ||
+          (data.contains("message_type") && data.at("message_type") != "group"))
+        co_return malformed_read<Result>(
+            "OneBot message author scope is missing or mismatched");
+      Result result{.message = request.message, .user_id = *author};
+      result.validate();
+      co_return bot::BotOperationResult<Result>::success(std::move(result));
+    } catch (...) {
+      co_return malformed_read<Result>("OneBot message author is invalid");
+    }
   }
 
   auto execute(const obcx::onebot11::bot::GetOneBotUserInfoRequest &request)
@@ -78,24 +148,12 @@ public:
       -> boost::asio::awaitable<
           bot::BotOperationResult<obcx::onebot11::bot::OneBotLoginInfo>> {
     using Result = obcx::onebot11::bot::OneBotLoginInfo;
-    const auto echo = next_echo();
-    const auto response = co_await transport().send_action(
-        protocol().serialize_get_self_info_request(echo), echo);
-    const auto parsed = parse_onebot11_operation_response(response, false);
-    if (!parsed.ok())
-      co_return provider_failure<Result>(parsed);
-    const auto user_id = provider_id(parsed_value(parsed), "user_id");
-    if (!user_id)
-      co_return malformed_read<Result>(
-          "OneBot login response is missing user_id");
-    Result result{.installation = installation_, .user_id = *user_id};
-    try {
-      result.validate();
-    } catch (...) {
-      co_return malformed_read<Result>(
-          "OneBot login response has invalid user_id");
-    }
-    co_return bot::BotOperationResult<Result>::success(std::move(result));
+    // Keep the legacy DTO, but do not let it bypass the common identity cache.
+    const auto cached = self_identity_->read();
+    if (!cached.ok())
+      co_return bot::BotOperationResult<Result>::failure(*cached.error);
+    co_return bot::BotOperationResult<Result>::success(
+        {.installation = installation_, .user_id = cached.value->user_id});
   }
 
   auto execute(const bot::SendGroupMessageRequest &request)
@@ -406,14 +464,19 @@ private:
   bot::BotInstallationRef installation_;
   std::shared_ptr<adapter::onebot11::ProtocolAdapter> protocol_;
   std::shared_ptr<OneBot11Transport> transport_;
+  std::shared_ptr<SelfIdentityCache> self_identity_;
   std::atomic_uint64_t echo_{};
 };
 
 OneBot11OperationsComponent::OneBot11OperationsComponent(
-    std::string installation_id)
+    std::string installation_id, boost::asio::any_io_executor executor,
+    std::chrono::milliseconds self_refresh_interval)
     : endpoint_(std::make_shared<Endpoint>(std::move(installation_id))),
       operations_(
-          std::make_shared<OperationRegistry>(endpoint_->installation())) {}
+          std::make_shared<OperationRegistry>(endpoint_->installation())),
+      self_identity_(std::make_shared<SelfIdentityCache>(
+          std::move(executor), endpoint_->installation(),
+          self_refresh_interval)) {}
 
 auto OneBot11OperationsComponent::descriptor() const -> ComponentDescriptor {
   std::vector<CapabilityId> dependencies;
@@ -437,7 +500,17 @@ void OneBot11OperationsComponent::prepare(const CapabilityRegistry &registry) {
       registry.get<adapter::onebot11::ProtocolAdapter>(CapabilityId{
           std::string{obcx::onebot11::bot::capability_ids::protocol}}),
       registry.get<OneBot11Transport>(CapabilityId{
-          std::string{obcx::onebot11::bot::capability_ids::transport}}));
+          std::string{obcx::onebot11::bot::capability_ids::transport}}),
+      self_identity_);
+  self_identity_->configure(
+      [weak = std::weak_ptr(
+           endpoint_)]() -> boost::asio::awaitable<SelfIdentityCache::Result> {
+        auto endpoint = weak.lock();
+        if (!endpoint)
+          throw std::runtime_error("self identity endpoint retired");
+        co_return co_await endpoint->fetch_self();
+      });
+  operations_->set_self_identity_cache(self_identity_);
   obcx::onebot11::bot::for_each_operation([&](const auto &definition) {
     using Request =
         typename std::remove_cvref_t<decltype(definition)>::request_type;

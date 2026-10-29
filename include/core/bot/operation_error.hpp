@@ -26,6 +26,7 @@ enum class BotOperationErrorCode : std::uint8_t {
   MediaTooLarge,
   Cancelled,
   OutcomeUnknown,
+  CacheUnavailable,
 };
 
 [[nodiscard]] inline auto redact_bot_diagnostic(const std::string_view value)
@@ -98,6 +99,8 @@ enum class BotOperationErrorCode : std::uint8_t {
     return "cancelled";
   case BotOperationErrorCode::OutcomeUnknown:
     return "outcome_unknown";
+  case BotOperationErrorCode::CacheUnavailable:
+    return "cache_unavailable";
   }
   return {};
 }
@@ -115,6 +118,7 @@ enum class BotOperationErrorCode : std::uint8_t {
       BotOperationErrorCode::MediaTooLarge,
       BotOperationErrorCode::Cancelled,
       BotOperationErrorCode::OutcomeUnknown,
+      BotOperationErrorCode::CacheUnavailable,
   };
   for (const auto code : codes) {
     if (error_code_id(code) == value) {

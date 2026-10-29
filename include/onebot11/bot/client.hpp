@@ -11,6 +11,7 @@ concept OwnedRequest =
     std::same_as<Request, SendOneBotGroupForwardMessageRequest> ||
     std::same_as<Request, GetOneBotUserInfoRequest> ||
     std::same_as<Request, GetOneBotLoginInfoRequest> ||
+    std::same_as<Request, GetOneBotMessageRequest> ||
     std::same_as<Request, GetOneBotImageRequest> ||
     std::same_as<Request, GetOneBotGroupMemberRequest> ||
     std::same_as<Request, GetOneBotForwardMessageRequest> ||

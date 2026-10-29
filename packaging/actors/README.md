@@ -11,6 +11,11 @@ See [OneBot image access](onebot-image-access.md) for typed `get_image`, the
 LLOneBot URL-only extension, and shared bounded HTTP acquisition. Native image
 references, transient URLs, and OneBot server paths are distinct types of data.
 
+## Shared self identity
+
+See [cached self identity](self-identity.md) for the common QQ/Telegram
+`GetSelfRequest` API, its refresh configuration, and installation lifecycle.
+
 ## Hot-reloadable actor builds
 
 A root workspace build is **not actor-only**, even with

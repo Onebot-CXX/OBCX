@@ -41,6 +41,9 @@ public:
   auto send_action_and_wait_async(std::string action_payload, uint64_t echo_id)
       -> asio::awaitable<std::string>;
   void set_event_callback(EventCallback callback);
+  void set_connection_callback(std::function<void(bool)> callback) {
+    connection_callback_ = std::move(callback);
+  }
   [[nodiscard]] auto get_connection_type() const -> std::string;
 
   /**
@@ -71,6 +74,7 @@ private:
   asio::io_context &ioc_;
   adapter::onebot11::ProtocolAdapter &adapter_;
   EventCallback event_callback_;
+  std::function<void(bool)> connection_callback_;
 
   std::shared_ptr<WebsocketClient> ws_client_;
   asio::steady_timer reconnect_timer_;

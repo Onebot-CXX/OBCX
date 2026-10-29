@@ -68,14 +68,13 @@ auto MessageConverter::from_v11_string(const std::string &raw_message)
     return message;
   }
 
-  // Unescape first so any escaped CQ markers like `&#91;CQ:image&#93;` become
-  // `[CQ:image]` and match the regex.
-  std::string unescaped_message = cq_unescape(raw_message);
+  // Recognize protocol syntax BEFORE decoding escapes. Escaped CQ-looking
+  // text is literal text, not a mention/reply/image segment.
 
   static const re2::RE2 cq_regex(R"(\[CQ:([a-zA-Z0-9\-\._]+)(?:,([^\]]*))?\])");
   static const re2::RE2 param_regex(R"(([a-zA-Z0-9\-_]+)=([^,\]]*))");
 
-  re2::StringPiece input(unescaped_message);
+  re2::StringPiece input(raw_message);
   re2::StringPiece remaining = input;
   std::string type_match;
   std::string params_match;
@@ -87,7 +86,7 @@ auto MessageConverter::from_v11_string(const std::string &raw_message)
     // RE2::FindAndConsume only exposes captures; recover match_start by
     // subtracting the rebuilt match length ("[CQ:" + type + optional ","+params
     // + "]") from match_end.
-    size_t match_end = unescaped_message.size() - remaining.size();
+    size_t match_end = raw_message.size() - remaining.size();
     size_t match_len = 4 + type_match.size() + 1;
     if (!params_match.empty()) {
       match_len += 1 + params_match.size();
@@ -96,7 +95,7 @@ auto MessageConverter::from_v11_string(const std::string &raw_message)
 
     if (current_pos > last_pos) {
       std::string text =
-          unescaped_message.substr(last_pos, current_pos - last_pos);
+          cq_unescape(raw_message.substr(last_pos, current_pos - last_pos));
       if (!text.empty()) {
         message.push_back({.type = "text", .data = {{"text", text}}});
       }
@@ -110,7 +109,7 @@ auto MessageConverter::from_v11_string(const std::string &raw_message)
       std::string value;
       while (RE2::FindAndConsume(&params_input, param_regex, &key, &value)) {
         if (!key.empty()) {
-          data[key] = value;
+          data[key] = cq_unescape(value);
         }
       }
     }
@@ -122,8 +121,8 @@ auto MessageConverter::from_v11_string(const std::string &raw_message)
     last_pos = match_end;
   }
 
-  if (last_pos < unescaped_message.length()) {
-    std::string remaining_text = unescaped_message.substr(last_pos);
+  if (last_pos < raw_message.length()) {
+    std::string remaining_text = cq_unescape(raw_message.substr(last_pos));
     if (!remaining_text.empty()) {
       message.push_back({.type = "text", .data = {{"text", remaining_text}}});
     }

@@ -33,6 +33,7 @@ struct HttpConnection {
   bool use_tls{};
   std::chrono::milliseconds connect_timeout{};
   std::chrono::milliseconds action_timeout{};
+  std::chrono::milliseconds self_identity_refresh_interval{};
   std::chrono::milliseconds poll_timeout{};
   std::chrono::milliseconds poll_force_close{};
   std::chrono::milliseconds poll_retry_interval{};

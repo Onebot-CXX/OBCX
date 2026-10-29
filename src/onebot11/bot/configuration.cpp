@@ -15,8 +15,12 @@ using core::configuration::validate_keys;
 auto parse_websocket(const toml::table &table, const std::string_view path)
     -> WebSocketConnection {
   static const std::unordered_set<std::string_view> keys = {
-      "host", "port", "access_token", "connect_timeout_ms",
-      "action_timeout_ms"};
+      "host",
+      "port",
+      "access_token",
+      "connect_timeout_ms",
+      "action_timeout_ms",
+      "self_identity_refresh_interval_ms"};
   validate_keys(table, keys, path);
   WebSocketConnection config;
   config.host = required_string(table, "host", path);
@@ -24,6 +28,8 @@ auto parse_websocket(const toml::table &table, const std::string_view path)
   config.access_token = required_string_value(table, "access_token", path);
   config.connect_timeout = required_duration(table, "connect_timeout_ms", path);
   config.action_timeout = required_duration(table, "action_timeout_ms", path);
+  config.self_identity_refresh_interval =
+      core::configuration::self_identity_refresh_interval(table, path);
   return config;
 }
 
@@ -36,7 +42,8 @@ auto parse_http(const toml::table &table, const std::string_view path)
       "use_tls",
       "connect_timeout_ms",
       "action_timeout_ms",
-      "poll_interval_ms"};
+      "poll_interval_ms",
+      "self_identity_refresh_interval_ms"};
   validate_keys(table, keys, path);
   HttpConnection config;
   config.host = required_string(table, "host", path);
@@ -46,6 +53,8 @@ auto parse_http(const toml::table &table, const std::string_view path)
   config.connect_timeout = required_duration(table, "connect_timeout_ms", path);
   config.action_timeout = required_duration(table, "action_timeout_ms", path);
   config.poll_interval = required_duration(table, "poll_interval_ms", path);
+  config.self_identity_refresh_interval =
+      core::configuration::self_identity_refresh_interval(table, path);
   return config;
 }
 

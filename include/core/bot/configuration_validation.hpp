@@ -119,4 +119,29 @@ inline auto required_duration(const toml::table &table,
   return std::chrono::milliseconds{*value};
 }
 
+// The five-minute self refresh default is explicitly approved by the operator.
+// It is not an action timeout: overrides may exceed the 300000ms action limit.
+inline auto self_identity_refresh_interval(const toml::table &table,
+                                           std::string_view path)
+    -> std::chrono::milliseconds {
+  constexpr auto key = "self_identity_refresh_interval_ms";
+  const auto *node = table.get(key);
+  if (!node)
+    return std::chrono::milliseconds{300000};
+  const auto value =
+      node->is_integer() ? node->value<std::int64_t>() : std::nullopt;
+  constexpr auto maximum =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::duration::max() / 2)
+          .count();
+  if (!value || *value <= 0 || *value > maximum) {
+    const auto field = std::string{path} + "." + key;
+    bot_configuration_error(
+        "invalid_bot_configuration_value", field,
+        field +
+            " must be a positive representable integer millisecond interval");
+  }
+  return std::chrono::milliseconds{*value};
+}
+
 } // namespace obcx::core::configuration

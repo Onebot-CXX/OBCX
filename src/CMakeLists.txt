@@ -24,6 +24,7 @@ set(OBCX_GENERIC_RUNTIME_SOURCES
     core/bot/bot_installation_directory.cpp
     core/bot/bot_operation_dispatcher.cpp
     core/bot/operation_registry.cpp
+    core/bot/self_identity_cache.cpp
     core/bot/platform_catalog.cpp
     core/bot/installation_plan.cpp
     core/command/command_coordinator.cpp
@@ -241,6 +242,7 @@ install(FILES
     ${CMAKE_SOURCE_DIR}/include/core/bot/messaging.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/gateway_codec.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/operation_gateway.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/self_info.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/typed_operation.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/messaging_client.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obcx/core/bot)
@@ -249,6 +251,7 @@ install(FILES
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/actions.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/types.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/image.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/message_lookup.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/operations.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/client.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/group_forward.hpp

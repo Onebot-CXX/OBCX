@@ -15,6 +15,7 @@ struct WebSocketConnection {
   std::string access_token;
   std::chrono::milliseconds connect_timeout{};
   std::chrono::milliseconds action_timeout{};
+  std::chrono::milliseconds self_identity_refresh_interval{};
 
   auto operator==(const WebSocketConnection &) const -> bool = default;
 };
@@ -27,6 +28,7 @@ struct HttpConnection {
   std::chrono::milliseconds connect_timeout{};
   std::chrono::milliseconds action_timeout{};
   std::chrono::milliseconds poll_interval{};
+  std::chrono::milliseconds self_identity_refresh_interval{};
 
   auto operator==(const HttpConnection &) const -> bool = default;
 };

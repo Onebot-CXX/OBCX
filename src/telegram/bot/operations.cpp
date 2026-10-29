@@ -154,7 +154,8 @@ public:
 
   void configure(std::shared_ptr<adapter::telegram::ProtocolAdapter> protocol,
                  std::shared_ptr<TelegramTransport> transport,
-                 std::shared_ptr<TelegramMediaUploader> uploader) {
+                 std::shared_ptr<TelegramMediaUploader> uploader,
+                 std::shared_ptr<SelfIdentityCache> self_identity) {
     if (protocol == nullptr || transport == nullptr || protocol_ != nullptr ||
         transport_ != nullptr) {
       throw BotComponentRuntimeError(
@@ -163,10 +164,53 @@ public:
     protocol_ = std::move(protocol);
     transport_ = std::move(transport);
     uploader_ = std::move(uploader);
+    self_identity_ = std::move(self_identity);
+    transport_->set_connection_callback(
+        [weak = std::weak_ptr(self_identity_)](bool connected) {
+          if (auto cache = weak.lock())
+            cache->connection_changed(connected);
+        });
   }
 
   [[nodiscard]] auto installation() const -> bot::BotInstallationRef {
     return installation_;
+  }
+
+  auto execute(const bot::GetSelfRequest &)
+      -> boost::asio::awaitable<bot::BotOperationResult<bot::SelfInfo>> {
+    co_return self_identity_->read();
+  }
+
+  auto fetch_self()
+      -> boost::asio::awaitable<bot::BotOperationResult<bot::SelfInfo>> {
+    const auto echo = next_echo();
+    const auto response = co_await transport().send_action(
+        protocol().serialize_get_self_info_request(echo), echo);
+    const auto parsed = parse_telegram_operation_response(response, false);
+    if (!parsed.ok())
+      co_return provider_failure<bot::SelfInfo>(parsed);
+    try {
+      const auto &data = parsed_value(parsed);
+      const auto id = provider_id(data, "id");
+      if (!id || !data.at("is_bot").get<bool>())
+        co_return malformed_read<bot::SelfInfo>(
+            "Telegram self ID or bot identity is invalid");
+      auto name = data.at("first_name").get<std::string>();
+      bot::detail::validate_identifier(name, "Telegram self first_name", 1024);
+      if (data.contains("last_name"))
+        name += " " + data.at("last_name").get<std::string>();
+      bot::SelfInfo info{.installation = installation_,
+                         .user_id = *id,
+                         .display_name = std::move(name)};
+      if (data.contains("username"))
+        info.username = data.at("username").get<std::string>();
+      info.validate();
+      co_return bot::BotOperationResult<bot::SelfInfo>::success(
+          std::move(info));
+    } catch (...) {
+      co_return malformed_read<bot::SelfInfo>(
+          "Telegram self profile is invalid");
+    }
   }
 
   auto execute(
@@ -468,6 +512,7 @@ private:
   std::shared_ptr<adapter::telegram::ProtocolAdapter> protocol_;
   std::shared_ptr<TelegramTransport> transport_;
   std::shared_ptr<TelegramMediaUploader> uploader_;
+  std::shared_ptr<SelfIdentityCache> self_identity_;
   std::atomic_uint64_t echo_{};
 };
 
@@ -502,10 +547,15 @@ void TelegramMediaUploadComponent::start() {}
 void TelegramMediaUploadComponent::stop() {}
 
 TelegramOperationsComponent::TelegramOperationsComponent(
-    std::string installation_id, bool include_upload)
+    std::string installation_id, bool include_upload,
+    boost::asio::any_io_executor executor,
+    std::chrono::milliseconds self_refresh_interval)
     : endpoint_(std::make_shared<Endpoint>(std::move(installation_id))),
       operations_(
           std::make_shared<OperationRegistry>(endpoint_->installation())),
+      self_identity_(std::make_shared<SelfIdentityCache>(
+          std::move(executor), endpoint_->installation(),
+          self_refresh_interval)),
       include_upload_(include_upload) {}
 
 auto TelegramOperationsComponent::descriptor() const -> ComponentDescriptor {
@@ -537,7 +587,16 @@ void TelegramOperationsComponent::prepare(const CapabilityRegistry &registry) {
           std::string{obcx::telegram::bot::capability_ids::protocol}}),
       registry.get<TelegramTransport>(CapabilityId{
           std::string{obcx::telegram::bot::capability_ids::transport}}),
-      std::move(uploader));
+      std::move(uploader), self_identity_);
+  self_identity_->configure(
+      [weak = std::weak_ptr(
+           endpoint_)]() -> boost::asio::awaitable<SelfIdentityCache::Result> {
+        auto endpoint = weak.lock();
+        if (!endpoint)
+          throw std::runtime_error("self identity endpoint retired");
+        co_return co_await endpoint->fetch_self();
+      });
+  operations_->set_self_identity_cache(self_identity_);
   obcx::telegram::bot::for_each_operation(
       include_upload_, [&](const auto &definition) {
         using Request =

@@ -21,6 +21,7 @@ struct OperationDescription {
 
 template <bot::TypedOperation Request> class OperationDefinition;
 class OperationRegistry;
+class SelfIdentityCache;
 
 class OperationBinding {
 public:
@@ -152,6 +153,9 @@ public:
   void seal(const bot::BotInstallationRef &capability_owner,
             std::span<const std::string> available_capabilities);
   void close() noexcept;
+  void set_self_identity_cache(std::shared_ptr<SelfIdentityCache>);
+  void refresh_self_identity();
+  void observe_self_id(std::string id);
 
   [[nodiscard]] auto installation() const -> bot::BotInstallationRef;
   [[nodiscard]] auto declared_actions() const -> std::vector<bot::ActionId>;

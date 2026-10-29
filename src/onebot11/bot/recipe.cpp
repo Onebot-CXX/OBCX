@@ -74,7 +74,9 @@ auto make_plan(const core::BotInstallationInput &input, Connection connection,
             std::make_unique<core::OneBot11EventIngressComponent>(
                 executor.get_executor(), id));
         components.push_back(
-            std::make_unique<core::OneBot11OperationsComponent>(id));
+            std::make_unique<core::OneBot11OperationsComponent>(
+                id, executor.get_executor(),
+                connection.self_identity_refresh_interval));
         return components;
       },
       make_command_adapter());

@@ -1,4 +1,5 @@
 #include "core/runtime/actor_runtime_reload_controller.hpp"
+#include "core/bot/bot_operation_dispatcher.hpp"
 #include "core/runtime/process_configuration.hpp"
 
 #include "common/logger.hpp"
@@ -569,6 +570,9 @@ auto ActorRuntimeReloadController::cutover(
     gate_state_->waiters.clear();
   }
   cancel_waiters(waiters);
+  if (const auto dispatcher = std::dynamic_pointer_cast<BotOperationDispatcher>(
+          candidate->bot_operation_client()))
+    dispatcher->refresh_self_identities();
 
   co_return RuntimeReloadResult{
       .status = RuntimeReloadStatus::Succeeded,

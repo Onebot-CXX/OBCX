@@ -3,6 +3,7 @@
 // Process-only definitions shared by recipe manifests and handler installation.
 #include "core/bot/messaging.hpp"
 #include "core/bot/operation_registry.hpp"
+#include "core/bot/self_info.hpp"
 #include "onebot11/bot/group_forward.hpp"
 #include "onebot11/bot/operations.hpp"
 
@@ -19,8 +20,10 @@ template <typename Visitor> void for_each_operation(Visitor visit) {
       dependencies});
   visit(
       core::OperationDefinition<obcx::bot::DeleteMessageRequest>{dependencies});
+  visit(core::OperationDefinition<obcx::bot::GetSelfRequest>{dependencies});
   visit(core::OperationDefinition<GetOneBotUserInfoRequest>{dependencies});
   visit(core::OperationDefinition<GetOneBotLoginInfoRequest>{dependencies});
+  visit(core::OperationDefinition<GetOneBotMessageRequest>{dependencies});
   visit(core::OperationDefinition<GetOneBotImageRequest>{dependencies});
   visit(core::OperationDefinition<GetOneBotGroupMemberRequest>{dependencies});
   visit(

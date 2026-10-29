@@ -61,6 +61,7 @@ public:
   std::shared_ptr<adapter::onebot11::ProtocolAdapter> protocol;
   Manager manager;
   EventCallback event_callback;
+  std::function<void(bool)> connection_callback;
   bool running{};
 };
 
@@ -95,6 +96,8 @@ void OneBot11TransportCapability::configure(
   if (impl_->event_callback) {
     set_event_callback(impl_->event_callback);
   }
+  if (impl_->connection_callback)
+    set_connection_callback(impl_->connection_callback);
 }
 
 void OneBot11TransportCapability::start() {
@@ -117,6 +120,10 @@ void OneBot11TransportCapability::start() {
     throw BotComponentRuntimeError("OneBot transport is not configured");
   }
   impl_->running = true;
+  if (std::holds_alternative<obcx::onebot11::configuration::HttpConnection>(
+          impl_->config) &&
+      impl_->connection_callback)
+    impl_->connection_callback(true);
 }
 
 void OneBot11TransportCapability::stop() noexcept {
@@ -133,6 +140,20 @@ void OneBot11TransportCapability::stop() noexcept {
   } catch (...) { // NOLINT(bugprone-empty-catch)
   }
   impl_->running = false;
+  try {
+    if (impl_->connection_callback)
+      impl_->connection_callback(false);
+  } catch (...) { // Teardown cannot propagate observer scheduling errors.
+  }
+}
+
+void OneBot11TransportCapability::set_connection_callback(
+    std::function<void(bool)> callback) {
+  impl_->connection_callback = std::move(callback);
+  if (auto *manager =
+          std::get_if<std::unique_ptr<network::WebSocketConnectionManager>>(
+              &impl_->manager))
+    (*manager)->set_connection_callback(impl_->connection_callback);
 }
 
 void OneBot11TransportCapability::set_event_callback(EventCallback callback) {

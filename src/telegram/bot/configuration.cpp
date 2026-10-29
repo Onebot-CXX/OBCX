@@ -38,6 +38,7 @@ auto parse_http(const toml::table &table, const std::string_view path)
       "use_tls",
       "connect_timeout_ms",
       "action_timeout_ms",
+      "self_identity_refresh_interval_ms",
       "poll_timeout_ms",
       "poll_force_close_ms",
       "poll_retry_interval_ms",
@@ -60,6 +61,8 @@ auto parse_http(const toml::table &table, const std::string_view path)
   }
   config.connect_timeout = required_duration(table, "connect_timeout_ms", path);
   config.action_timeout = required_duration(table, "action_timeout_ms", path);
+  config.self_identity_refresh_interval =
+      core::configuration::self_identity_refresh_interval(table, path);
   config.poll_timeout = required_duration(table, "poll_timeout_ms", path);
   config.poll_force_close =
       required_duration(table, "poll_force_close_ms", path);

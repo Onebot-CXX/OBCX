@@ -109,6 +109,8 @@ void WebSocketConnectionManager::on_ws_message(const beast::error_code &ec,
   if (ec) {
     OBCX_ERROR("Connection disconnected, error: {}", ec.message());
     is_connected_.store(false, std::memory_order_release);
+    if (connection_callback_)
+      connection_callback_(false);
     action_requests_->fail_all(
         std::make_exception_ptr(boost::system::system_error{ec}));
     schedule_reconnect();
@@ -121,6 +123,8 @@ void WebSocketConnectionManager::on_ws_message(const beast::error_code &ec,
       is_connected_.store(true, std::memory_order_release);
     }
     reconnect_timer_.cancel();
+    if (connection_callback_)
+      connection_callback_(true);
     return;
   }
 

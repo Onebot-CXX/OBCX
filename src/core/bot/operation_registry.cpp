@@ -1,4 +1,5 @@
 #include "core/bot/operation_registry.hpp"
+#include "core/bot/self_identity_cache.hpp"
 
 #include <map>
 #include <mutex>
@@ -27,6 +28,7 @@ struct OperationRegistry::State {
   bot::BotInstallationRef installation;
   mutable std::shared_mutex mutex;
   std::map<bot::ActionId, std::shared_ptr<const OperationBinding>> bindings;
+  std::shared_ptr<SelfIdentityCache> self_identity;
   bool sealed = false;
   bool closed = false;
 };
@@ -91,6 +93,27 @@ void OperationRegistry::close() noexcept {
   state_->closed = true;
   // Invocations already admitted retain their own binding/handler lease.
   state_->bindings.clear();
+  if (state_->self_identity)
+    state_->self_identity->close();
+}
+
+void OperationRegistry::set_self_identity_cache(
+    std::shared_ptr<SelfIdentityCache> cache) {
+  std::unique_lock lock(state_->mutex);
+  if (!cache || state_->sealed || state_->closed || state_->self_identity)
+    throw std::logic_error(
+        "self identity cache must be installed once before sealing");
+  state_->self_identity = std::move(cache);
+}
+void OperationRegistry::refresh_self_identity() {
+  std::shared_lock lock(state_->mutex);
+  if (!state_->closed && state_->self_identity)
+    state_->self_identity->refresh();
+}
+void OperationRegistry::observe_self_id(std::string id) {
+  std::shared_lock lock(state_->mutex);
+  if (!state_->closed && state_->self_identity)
+    state_->self_identity->observe_self_id(std::move(id));
 }
 
 auto OperationRegistry::installation() const -> bot::BotInstallationRef {

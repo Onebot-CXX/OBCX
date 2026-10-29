@@ -56,6 +56,7 @@ public:
   std::shared_ptr<adapter::telegram::ProtocolAdapter> protocol;
   std::unique_ptr<network::TelegramConnectionManager> manager;
   EventCallback event_callback;
+  std::function<void(bool)> connection_callback;
   bool running{};
 };
 
@@ -89,6 +90,8 @@ void TelegramTransportCapability::start() {
   }
   impl_->manager->connect(network_config(impl_->config));
   impl_->running = true;
+  if (impl_->connection_callback)
+    impl_->connection_callback(true);
 }
 
 void TelegramTransportCapability::stop() noexcept {
@@ -99,6 +102,16 @@ void TelegramTransportCapability::stop() noexcept {
   } catch (...) { // NOLINT(bugprone-empty-catch)
   }
   impl_->running = false;
+  try {
+    if (impl_->connection_callback)
+      impl_->connection_callback(false);
+  } catch (...) { // Teardown cannot propagate observer scheduling errors.
+  }
+}
+
+void TelegramTransportCapability::set_connection_callback(
+    std::function<void(bool)> callback) {
+  impl_->connection_callback = std::move(callback);
 }
 
 void TelegramTransportCapability::set_event_callback(EventCallback callback) {

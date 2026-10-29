@@ -142,6 +142,26 @@ void BotOperationDispatcher::clear_endpoints() noexcept {
   }
 }
 
+void BotOperationDispatcher::refresh_self_identities() {
+  std::shared_lock lock(state_->mutex);
+  if (state_->closed)
+    return;
+  for (const auto &[id, endpoint] : state_->endpoints) {
+    (void)id;
+    endpoint->refresh_self_identity();
+  }
+}
+void BotOperationDispatcher::observe_self_id(
+    const bot::BotInstallationRef &installation, std::string id) {
+  std::shared_lock lock(state_->mutex);
+  if (state_->closed)
+    return;
+  const auto it = state_->endpoints.find(installation.installation_id);
+  if (it != state_->endpoints.end() &&
+      it->second->installation() == installation)
+    it->second->observe_self_id(std::move(id));
+}
+
 auto BotOperationDispatcher::endpoint_count() const noexcept -> std::size_t {
   std::shared_lock lock(state_->mutex);
   return state_->endpoints.size();

@@ -81,8 +81,9 @@ void register_recipes(core::BotPlatformCatalog &catalog) {
                components.push_back(
                    std::make_unique<core::TelegramMediaUploadComponent>());
                components.push_back(
-                   std::make_unique<core::TelegramOperationsComponent>(id,
-                                                                       true));
+                   std::make_unique<core::TelegramOperationsComponent>(
+                       id, true, executor.get_executor(),
+                       typed.self_identity_refresh_interval));
                components.push_back(
                    std::make_unique<core::TelegramCommandCatalogComponent>());
                return components;
