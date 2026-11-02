@@ -3,18 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    clang-p2996 = {
-      url = "github:Bloomberg/clang-p2996/p2996";
-      flake = false;
-    };
   };
 
   outputs =
-    {
-      nixpkgs,
-      clang-p2996,
-      ...
-    }:
+    { nixpkgs, ... }:
     let
       linuxSystems = [
         "x86_64-linux"
@@ -48,41 +40,70 @@
         system:
         let
           pkgs = pkgsFor system;
-          clangP2996Source = clang-p2996 // {
-            passthru = {
-              owner = "Bloomberg";
-              repo = "clang-p2996";
-              rev = clang-p2996.rev or "p2996";
-            };
-          };
-          # Rebuild clangd from Bloomberg's LLVM 21 fork so it understands
-          # the C++26 reflection syntax used by the GCC 16 build.
-          clangP2996BasePackages = pkgs.llvmPackages_21.override {
-            monorepoSrc = clangP2996Source;
-            version = "21.0.0";
-          };
-          clangP2996Packages = clangP2996BasePackages.overrideScope (
-            final: prev: {
-              libllvm =
-                (prev.libllvm.override {
-                  buildLlvmPackages = final;
-                }).overrideAttrs
-                  {
-                    # The fork's llvm-exegesis CPU-pinning tests are host-sensitive
-                    # and are not required for the clangd development tool.
-                    doCheck = false;
-                  };
-              libclang = prev.libclang.override {
-                buildLlvmPackages = final;
-                libllvm = final.libllvm;
-              };
-            }
-          );
-          clangTools = clangP2996Packages.clang-tools;
-          mkDevShell =
+          clangTools = pkgs.clang-tools;
+          # The launcher resolves packages.toml before evaluation. An explicit
+          # impure input is needed because local packages are not tracked here.
+          workspaceInputs =
+            let
+              raw = builtins.getEnv "OBCX_NIX_SHELL_INPUTS";
+              selection = builtins.fromJSON raw;
+            in
+            if raw == "" then
+              throw "Use scripts/nix_develop.py to enter an OBCX workspace shell (requires --impure)."
+            else if selection.system != system then
+              throw "OBCX workspace platform does not match the Nix shell system."
+            else
+              map (
+                entry:
+                let
+                  path = builtins.toPath entry.path;
+                  shell = import path { inherit pkgs; };
+                in
+                if !pkgs.lib.isDerivation shell then
+                  throw "${entry.id}: shell.nix must return a mkShell derivation."
+                else
+                  # Only dependencies are inherited, not actor hooks or variables.
+                  builtins.removeAttrs shell [ "shellHook" ]
+              ) selection.shells;
+          # Pure flake evaluation cannot see ignored workspace files. Resolve
+          # them at shell entry, including nix develop --command and direnv.
+          autoWorkspaceHook =
             { includeClangTools }:
-            if pkgs.stdenv.isDarwin then
+            ''
+              obcx_resolve_workspace() {
+                local root="$PWD"
+                while [[ "$root" != / ]]; do
+                  if [[ -f "$root/flake.nix" && -f "$root/cmake/package_tool.py" ]]; then
+                    break
+                  fi
+                  root="$(dirname "$root")"
+                done
+                if [[ -e "$root/packages.toml" || -L "$root/packages.toml" ]]; then
+                  if ! ${pkgs.python3}/bin/python3 ${./.}/scripts/nix_develop.py \
+                    --workspace "$root/packages.toml" \
+                    --cache "$root/build/actor-dev/package-state/sources" \
+                    --mode development --network deny \
+                    --shell ${if includeClangTools then "workspace" else "workspace-ci"} \
+                    --print-env; then
+                    echo "OBCX: failed to load workspace Nix dependencies." >&2
+                    return 1
+                  fi
+                fi
+              }
+              obcx_workspace_environment="$(obcx_resolve_workspace)" || exit 1
+              eval "$obcx_workspace_environment"
+              unset obcx_workspace_environment
+              unset -f obcx_resolve_workspace
+            '';
+          mkDevShell =
+            {
+              includeClangTools,
+              packageShells,
+              autoWorkspace,
+            }:
+            if pkgs.stdenv.hostPlatform.isDarwin then
               pkgs.mkShell {
+                inputsFrom = packageShells;
                 packages =
                   with pkgs;
                   [
@@ -111,7 +132,7 @@
                 # compile_commands.json; otherwise it falls back to an older
                 # libstdc++ search path where the C++26 <meta> header is absent.
                 clangToolsWithGccQuery = pkgs.symlinkJoin {
-                  name = "obcx-clang-tools-${clangP2996Packages.clang.version}";
+                  name = "obcx-clang-tools-${clangTools.version}";
                   paths = [ clangTools ];
                   nativeBuildInputs = [ pkgs.makeWrapper ];
                   postBuild = ''
@@ -141,6 +162,7 @@
                 ];
               in
               pkgs.mkShell.override { inherit stdenv; } {
+                inputsFrom = packageShells;
                 nativeBuildInputs =
                   with pkgs;
                   [
@@ -161,16 +183,42 @@
                 buildInputs = obcxDependencies;
 
                 shellHook = ''
+                  ${pkgs.lib.optionalString autoWorkspace (autoWorkspaceHook {
+                    inherit includeClangTools;
+                  })}
                   export CC=gcc
                   export CXX=g++
                 '';
               };
         in
         {
-          default = mkDevShell { includeClangTools = true; };
-          # CI needs GCC reflection support, not the source-built LLVM/clangd.
-          ci = mkDevShell { includeClangTools = false; };
+          default = mkDevShell {
+            includeClangTools = true;
+            packageShells = [ ];
+            autoWorkspace = true;
+          };
+          # CI needs GCC reflection support, not clang tooling.
+          ci = mkDevShell {
+            includeClangTools = false;
+            packageShells = [ ];
+            autoWorkspace = true;
+          };
         }
+        //
+          pkgs.lib.optionalAttrs
+            (pkgs.stdenv.hostPlatform.isLinux && builtins.getEnv "OBCX_NIX_SHELL_INPUTS" != "")
+            {
+              workspace = mkDevShell {
+                includeClangTools = true;
+                packageShells = workspaceInputs;
+                autoWorkspace = false;
+              };
+              workspace-ci = mkDevShell {
+                includeClangTools = false;
+                packageShells = workspaceInputs;
+                autoWorkspace = false;
+              };
+            }
       );
     };
 }

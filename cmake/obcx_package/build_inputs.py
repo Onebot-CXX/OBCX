@@ -13,7 +13,3 @@ def validate_outputs(workspace: Path, graph: dict, outputs: list[Path]) -> None:
     if any(path.is_relative_to(Path(node["source_dir"]).resolve())
            for path in resolved for node in graph["packages"]):
         raise PackageError("generated state must be outside package source roots")
-    inputs = {(workspace.resolve().parent / provider["provenance"]["path"]).resolve()
-              for provider in graph["providers"]}
-    if inputs.intersection(resolved):
-        raise PackageError("generated state must not overwrite provider evidence")

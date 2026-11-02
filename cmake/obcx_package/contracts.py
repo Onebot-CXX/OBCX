@@ -12,7 +12,7 @@ from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 
 from . import PackageError, SCHEMA_VERSION, TOOL_VERSION
-from .versions import Version, constraints, parse_version
+from .versions import Version, constraints
 
 
 def obj(fields: dict) -> dict:
@@ -93,29 +93,20 @@ VERSION_PROBE = {"oneOf": [
     obj({"kind": choice("cmake-variable"), "name": text(pattern=r"^[A-Za-z_][A-Za-z0-9_-]*$")}),
     obj({"kind": choice("target-property"), "target": EXPORT, "property": text(pattern=r"^[A-Z_][A-Z0-9_]*$")}),
     obj({"kind": choice("pkg-config")}),
-    obj({"kind": choice("receipt"), "path": PATH, "sha256": SHA}),
 ]}
 PACKAGE_MANAGER = {"oneOf": [
     obj({"kind": choice("none")}),
     obj({"kind": choice("vcpkg"), "port": text(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"),
          "features": array(text(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"), 0),
-         "default_features": {"type": "boolean"}, "baseline": COMMIT}),
+         "default_features": {"type": "boolean"}}),
 ]}
 PROVIDER = obj({"id": ID,
                 "kind": choice("cmake-config", "cmake-module", "pkg-config", "workspace-sdk", "installed-sdk"),
                 "package": text(pattern=r"^[A-Za-z0-9_.+-]+$"),
                 "components": array(text(pattern=r"^[A-Za-z0-9_.+-]+$"), 0),
-                "targets": array(EXPORT, 1), "version": text(),
+                "targets": array(EXPORT, 1),
                 "version_scheme": choice("semver", "numeric"),
-                "version_probe": VERSION_PROBE, "package_manager": PACKAGE_MANAGER,
-                "provenance": obj({"kind": choice("nix", "vcpkg", "environment", "workspace-sdk", "installed-sdk"),
-                                   "path": PATH})})
-PROVIDER_ENVIRONMENT = obj({"schema_version": integer(SCHEMA_VERSION),
-                            "kind": choice("nix", "vcpkg", "environment", "workspace-sdk", "installed-sdk"),
-                            "prefixes": array(obj({"base": choice("workspace", "build", "absolute"), "path": text()}), 1)})
-PROVIDER_RECEIPT = obj({"schema_version": integer(SCHEMA_VERSION), "id": ID,
-                        "version": text(), "version_scheme": choice("semver", "numeric"),
-                        "targets": array(obj({"name": EXPORT, "files": array(obj({"path": text(), "sha256": SHA}), 1)}), 1)})
+                "version_probe": VERSION_PROBE, "package_manager": PACKAGE_MANAGER})
 EDGE = obj({"from": ID, "to": ID, "kind": choice("libraries", "actors", "system"),
             "scope": choice("production", "test"), "requirement": text(),
             "targets": array(EXPORT, 0), "visibility": choice("private", "public", "interface", "logical")})
@@ -154,8 +145,6 @@ def schema(name: str) -> dict:
                                    "packages": array(RESOLVED_NODE, 0), "edges": array(EDGE, 0),
                                    "providers": array(PROVIDER, 0), "order": array(ID, 0), "unused_sources": array(ID, 0)}),
         "package-build-receipt": BUILD_RECEIPT,
-        "provider-receipt": PROVIDER_RECEIPT,
-        "provider-environment": PROVIDER_ENVIRONMENT,
     }
     if name not in bodies:
         raise PackageError("unknown schema name")
@@ -246,10 +235,8 @@ def validate_provider_binding(entry: dict, path: str) -> None:
     sdk = entry["kind"] in {"workspace-sdk", "installed-sdk"}
     if sdk != (entry["id"] == "obcx-sdk"):
         raise PackageError(f"{path}.kind: SDK kinds must bind exactly obcx-sdk")
-    if sdk and (entry["version_scheme"] != "semver" or entry["provenance"]["kind"] != entry["kind"]):
-        raise PackageError(f"{path}: SDK requires SemVer and matching provenance kind")
-    if not sdk and entry["provenance"]["kind"] in {"workspace-sdk", "installed-sdk"}:
-        raise PackageError(f"{path}.provenance: SDK provenance is reserved for obcx-sdk")
+    if sdk and entry["version_scheme"] != "semver":
+        raise PackageError(f"{path}: SDK requires SemVer")
     probe = entry["version_probe"]
     if probe["kind"] == "pkg-config" and entry["kind"] != "pkg-config":
         raise PackageError(f"{path}.version_probe: pkg-config probe requires pkg-config provider")
@@ -258,10 +245,6 @@ def validate_provider_binding(entry: dict, path: str) -> None:
         raise PackageError(f"{path}: pkg-config needs one explicit PkgConfig::<prefix> target and no components")
     if probe["kind"] == "target-property" and probe["target"] not in entry["targets"]:
         raise PackageError(f"{path}.version_probe: property target must be explicitly authorized")
-    manager = entry["package_manager"]
-    if manager["kind"] == "vcpkg" and entry["provenance"]["kind"] != "vcpkg":
-        raise PackageError(f"{path}.package_manager: vcpkg requires vcpkg provenance")
-    parse_version(entry["version"], entry["version_scheme"])
 
 
 def validate(document: dict, name: str) -> None:

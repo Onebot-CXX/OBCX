@@ -98,7 +98,7 @@ Use `scripts/actor_build.py` for an isolated build against a **fixed installed
 SDK**. The separate `cmake/actors/` entry point imports the core library; it
 never adds core implementation sources or a buildable core target. Actor and
 library working trees remain editable and incremental builds use their current
-contents. The original `packages.toml` and provider evidence are not modified.
+contents. The original `packages.toml` is not modified.
 
 ### 1. Freeze the runtime's SDK once
 
@@ -153,11 +153,12 @@ python3 "$REPO/scripts/actor_build.py" configure \
 The existing resolver selects the transitive actor/library closure offline.
 For example, selecting `vollate.bridge` also includes Message Store. Missing
 cached Git sources are errors, not an implicit download. Use a production-profile
-workspace. External provider evidence may use absolute or workspace-relative
-prefixes; build-relative external prefixes must be made explicit first.
+workspace. Nix/vcpkg own system dependency locking; no provider receipts or
+installation-prefix allowlists are required.
 
-The generated workspace binds `obcx-sdk` as `installed-sdk`, retaining provider
-version/path verification. Use a new actor build directory when changing the
+The generated workspace binds `obcx-sdk` as `installed-sdk`, checking discovered
+versions against consumer requirements. The helper still verifies that the core
+is imported from the explicitly selected frozen SDK. Use a new actor build directory when changing the
 SDK, actor selection, provider declarations or configuration. Changes to existing
 actor source files only require the next step.
 

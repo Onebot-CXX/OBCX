@@ -25,19 +25,59 @@ struct LogSnapshot {
   std::vector<LogLine> lines;
 };
 
-/// 高性能 ANSI 转义序列去除（手写状态机，无正则）
+/// Plain display/source text: remove ANSI CSI, OSC and control strings, not
+/// only SGR colors. Unterminated sequences fail closed; UTF-8 bytes, spaces,
+/// tabs and explicit newlines outside sequences are preserved.
 inline auto strip_ansi(const std::string &input) -> std::string {
+  enum class State { Text, Escape, Intermediate, Csi, String, StringEscape };
+  auto state = State::Text;
+  bool string_accepts_bel = false;
   std::string result;
   result.reserve(input.size());
-  for (size_t i = 0; i < input.size(); ++i) {
-    if (input[i] == '\033' && i + 1 < input.size() && input[i + 1] == '[') {
-      i += 2; // 跳过 ESC[
-      while (i < input.size() && input[i] != 'm') {
-        ++i;
+  for (const unsigned char ch : input) {
+    switch (state) {
+    case State::Text:
+      if (ch == 0x1b) {
+        state = State::Escape;
+      } else if (ch == '\n' || ch == '\t' || (ch >= 0x20 && ch != 0x7f)) {
+        result.push_back(static_cast<char>(ch));
       }
-      // 'm' 会被 loop increment 跳过
-    } else {
-      result.push_back(input[i]);
+      break;
+    case State::Escape:
+      if (ch == '[') {
+        state = State::Csi;
+      } else if (ch == ']' || ch == 'P' || ch == 'X' || ch == '^' ||
+                 ch == '_') {
+        string_accepts_bel = ch == ']';
+        state = State::String;
+      } else if (ch >= 0x20 && ch <= 0x2f) {
+        state = State::Intermediate;
+      } else if (ch >= 0x30 && ch <= 0x7e) {
+        state = State::Text;
+      }
+      break;
+    case State::Intermediate:
+      if (ch >= 0x30 && ch <= 0x7e) {
+        state = State::Text;
+      }
+      break;
+    case State::Csi:
+      if (ch >= 0x40 && ch <= 0x7e) {
+        state = State::Text;
+      }
+      break;
+    case State::String:
+      if (ch == 0x07 && string_accepts_bel) {
+        state = State::Text;
+      } else if (ch == 0x1b) {
+        state = State::StringEscape;
+      }
+      break;
+    case State::StringEscape:
+      state = ch == '\\' || (ch == 0x07 && string_accepts_bel) ? State::Text
+              : ch == 0x1b ? State::StringEscape
+                           : State::String;
+      break;
     }
   }
   return result;

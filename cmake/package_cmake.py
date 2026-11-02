@@ -9,8 +9,8 @@ import sys
 
 from obcx_package import PackageError
 from obcx_package.contracts import validate_provider_binding
-from obcx_package.io import atomic_write, encoded
-from obcx_package.providers import verify_environment, verify_provider
+from obcx_package.io import atomic_write, encoded, read_json
+from obcx_package.providers import verify_provider
 from obcx_package.versions import satisfies
 
 
@@ -21,14 +21,11 @@ def main(argv=None) -> int:
     command.add_argument("--version", required=True)
     command.add_argument("--requirement", required=True)
     command.add_argument("--scheme", required=True, choices=("semver", "numeric"))
-    for name in ("check-environment", "verify-provider"):
-        command = commands.add_parser(name)
-        command.add_argument("--binding", required=True, type=Path)
-        command.add_argument("--workspace", required=True, type=Path)
-        command.add_argument("--build-dir", required=True, type=Path)
-        if name == "verify-provider":
-            command.add_argument("--observed", required=True, type=Path)
-            command.add_argument("--output", required=True, type=Path)
+    command = commands.add_parser("verify-provider")
+    command.add_argument("--binding", required=True, type=Path)
+    command.add_argument("--graph", required=True, type=Path)
+    command.add_argument("--observed", required=True, type=Path)
+    command.add_argument("--output", required=True, type=Path)
     command = commands.add_parser("plan")
     for name in ("workspace", "cache", "build-dir", "output", "current-graph"):
         command.add_argument("--" + name, required=True, type=Path)
@@ -57,12 +54,10 @@ def main(argv=None) -> int:
         else:
             binding = json.loads(args.binding.read_bytes())
             validate_provider_binding(binding, "provider")
-            if args.command == "check-environment":
-                verify_environment(binding, [], args.workspace, args.build_dir)
-            else:
-                observation = json.loads(args.observed.read_bytes())
-                result = verify_provider(binding, observation, args.workspace, args.build_dir)
-                atomic_write(args.output, encoded(result))
+            observation = json.loads(args.observed.read_bytes())
+            graph = read_json(args.graph, "resolved-packages")
+            result = verify_provider(binding, observation, graph)
+            atomic_write(args.output, encoded(result))
         return 0
     except PackageError as error:
         print(f"package-cmake: {error}", file=sys.stderr)

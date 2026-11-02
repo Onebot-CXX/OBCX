@@ -3,6 +3,7 @@ set(OBCX_GENERIC_RUNTIME_SOURCES
     common/cli_handler.cpp
     tui/tui_app.cpp
     tui/tui_layout.cpp
+    tui/tui_selection.cpp
     common/json_utils.cpp
     common/message_type.cpp
     common/config_snapshot.cpp
@@ -397,8 +398,6 @@ install(FILES
     ${CMAKE_SOURCE_DIR}/schemas/workspace.schema.json
     ${CMAKE_SOURCE_DIR}/schemas/resolved-packages.schema.json
     ${CMAKE_SOURCE_DIR}/schemas/package-build-receipt.schema.json
-    ${CMAKE_SOURCE_DIR}/schemas/provider-environment.schema.json
-    ${CMAKE_SOURCE_DIR}/schemas/provider-receipt.schema.json
     DESTINATION ${CMAKE_INSTALL_DATADIR}/obcx/schemas)
 
 add_subdirectory(app)

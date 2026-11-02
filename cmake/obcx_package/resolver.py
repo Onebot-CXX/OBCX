@@ -7,7 +7,7 @@ from . import PackageError, SCHEMA_VERSION, TOOL_VERSION
 from .contracts import validate
 from .io import digest, encoded, metadata
 from .sources import Sources
-from .versions import satisfies
+from .versions import constraints, satisfies
 
 
 class Resolver:
@@ -103,11 +103,6 @@ class Resolver:
         if provider_id not in self.bindings:
             raise PackageError(f"providers: missing binding; chain {chain}")
         binding = self.bindings[provider_id]
-        provenance = binding["provenance"]
-        try:
-            (self.manifest.parent / provenance["path"]).read_bytes()
-        except OSError:
-            raise PackageError(f"providers.{provider_id}.provenance: missing receipt/lock; chain {chain}") from None
         for target in binding["targets"]:
             self.claim_target(target, f"system:{provider_id}")
         self.providers[provider_id] = binding
@@ -119,22 +114,20 @@ class Resolver:
         for target in sorted({edge["to"] for edge in self.edges}):
             incoming = [edge for edge in self.edges if edge["to"] == target]
             binding = self.providers.get(target)
-            version = binding["version"] if binding else self.nodes[target]["version"]
+            # System versions belong to the package manager, not the workspace.
+            # Validate requirement syntax now; CMake checks the discovered version.
             scheme = binding["version_scheme"] if binding else "semver"
+            version = None if binding else self.nodes[target]["version"]
             failures = []
             for edge in incoming:
                 try:
-                    valid = satisfies(version, edge["requirement"], scheme)
+                    constraints(edge["requirement"], scheme)
+                    if binding is None and not satisfies(version, edge["requirement"], scheme):
+                        failures.append(edge)
                 except PackageError as error:
                     raise PackageError(f"{edge['from']} -> {target}: invalid version requirement: {error}") from None
-                if not valid:
-                    failures.append(edge)
                 if binding and not set(edge["targets"]) <= set(binding["targets"]):
                     raise PackageError(f"{edge['from']} -> {target}: unauthorized system targets")
-                if target == "obcx-sdk":
-                    owner = self.nodes[edge["from"]]["metadata"]
-                    if owner["package"]["kind"] == "actor" and not satisfies(version, owner["compatibility"]["obcx"], "semver"):
-                        raise PackageError(f"{edge['from']}: compatibility.obcx does not include SDK {version}")
             if failures:
                 details = [f"version conflict: {target} selected {version}"]
                 for edge in incoming:

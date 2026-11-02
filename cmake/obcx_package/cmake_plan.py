@@ -2,7 +2,6 @@
 from . import PackageError
 from .build_inputs import validate_outputs
 from .io import atomic_write, encoded, exclusive
-from .providers import verify_environment
 from .resolver import Resolver
 from .versions import satisfies
 
@@ -24,8 +23,6 @@ def plan(args) -> None:
         if args.compiler_id != compatibility["compiler"]["id"] or not satisfies(
                 args.compiler_version, compatibility["compiler"]["version"], "semver"):
             raise PackageError(f"{node['id']}: actual compiler does not satisfy compatibility.compiler")
-    for provider in graph["providers"]:
-        verify_environment(provider, [], args.workspace.resolve().parent, args.build_dir.resolve())
     nodes = {node["id"]: node for node in graph["packages"]}
     lines = [f"set_property(GLOBAL PROPERTY OBCX_PACKAGE_GRAPH {quote(encoded(graph).decode())})"]
     for node in graph["packages"]:

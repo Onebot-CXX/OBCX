@@ -13,7 +13,7 @@ import shlex
 
 from . import PackageError
 from .io import read_json
-from .providers import verify_environment, verify_provider
+from .providers import verify_provider
 from .versions import satisfies
 
 KINDS = {"static-library": "STATIC_LIBRARY", "shared-library": "SHARED_LIBRARY", "header-only": "INTERFACE_LIBRARY"}
@@ -192,18 +192,7 @@ class Audit:
     def check_providers(self) -> None:
         for provider in self.snapshot["providers"].values():
             binding = provider["binding"]
-            workspace = Path(self.snapshot["workspace"])
-            verify_provider(binding, json.loads(Path(provider["observed"]).read_bytes()), workspace, Path(self.snapshot["build"]))
-            observed = []
-            for name in provider["members"]:
-                record = self.targets[name]
-                locations = list(record["locations"])
-                for field in ("LINK_LIBRARIES", "INTERFACE_LINK_LIBRARIES"):
-                    locations.extend(value for value in self.values(name, field) if Path(value).is_absolute())
-                included = [value for field in ("INCLUDE_DIRECTORIES", "INTERFACE_INCLUDE_DIRECTORIES")
-                            for value in self.values(name, field)]
-                observed.append({"name": name, "locations": locations, "include_directories": included})
-            verify_environment(binding, observed, workspace, Path(self.snapshot["build"]))
+            verify_provider(binding, json.loads(Path(provider["observed"]).read_bytes()), self.graph)
 
     def check(self) -> None:
         self.identities()

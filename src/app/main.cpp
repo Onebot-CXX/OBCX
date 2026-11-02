@@ -38,6 +38,7 @@
 #include <spdlog/common.h>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -708,7 +709,18 @@ public:
 
       if (use_tui) {
         auto tui_sink = common::Logger::get_tui_sink();
-        common::TuiApp tui_app(tui_sink, std::move(ctx));
+        common::TuiApp tui_app(tui_sink, std::move(ctx),
+                               []() -> std::error_code {
+                                 // SignalMonitor owns SIGINT and all workers
+                                 // inherit its blocked mask. Deliver to the
+                                 // process so its sigtimedwait thread receives
+                                 // the same graceful-shutdown request as an
+                                 // external SIGINT.
+                                 if (::kill(::getpid(), SIGINT) == 0) {
+                                   return {};
+                                 }
+                                 return {errno, std::generic_category()};
+                               });
         tui_app.run();
       } else {
         common::CliHandler cli_handler(ctx);

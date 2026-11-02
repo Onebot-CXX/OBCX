@@ -11,9 +11,30 @@
 
 namespace obcx::common::tui_layout {
 
+struct SourceGlyph {
+  std::size_t begin;
+  std::size_t end;
+  int width;
+};
+
+/// Map FTXUI glyphs back to exact source bytes. Ignore wide-cell placeholders
+/// and attach zero-width continuations to their preceding visible glyph.
+[[nodiscard]] auto source_glyphs(const std::string &text)
+    -> std::vector<SourceGlyph>;
+
 /// Wrap UTF-8 text to terminal-cell width without splitting glyphs.
 [[nodiscard]] auto wrap_text(const std::string &text, int width)
     -> std::vector<std::string>;
+
+struct WrappedSourceRow {
+  std::string text;
+  std::size_t source_begin{0};
+};
+
+/// Rows retain byte positions in the unwrapped plain source, including the
+/// distinction between explicit newlines and visual wrapping.
+[[nodiscard]] auto wrap_source(const std::string &source, int width)
+    -> std::vector<WrappedSourceRow>;
 
 struct LayoutSnapshot {
   int terminal_width{0};
@@ -62,13 +83,14 @@ private:
 struct WrappedLogRow {
   uint64_t sequence{0};
   std::size_t segment_index{0};
+  std::size_t source_begin{0};
   std::string text;
   spdlog::level::level_enum level{spdlog::level::info};
 };
 
 struct WrappedLogAnchor {
   uint64_t sequence{0};
-  std::size_t segment_index{0};
+  std::size_t source_offset{0};
 
   auto operator==(const WrappedLogAnchor &) const -> bool = default;
 };
@@ -86,6 +108,7 @@ public:
   [[nodiscard]] auto next_sequence() const -> uint64_t;
   [[nodiscard]] auto total_rows() const -> std::size_t;
   [[nodiscard]] auto width() const -> int;
+  [[nodiscard]] auto source(uint64_t sequence) const -> const std::string *;
 
   auto sync(const LogSnapshot &snapshot, int width) -> WrappedLogSyncResult;
   [[nodiscard]] auto rows_range(std::size_t offset, std::size_t count) const
@@ -98,7 +121,8 @@ public:
 private:
   struct Entry {
     uint64_t sequence{0};
-    std::vector<std::string> rows;
+    std::string source;
+    std::vector<WrappedSourceRow> rows;
     spdlog::level::level_enum level{spdlog::level::info};
   };
 
@@ -127,6 +151,7 @@ public:
   [[nodiscard]] auto offset() const -> int;
   [[nodiscard]] auto following_tail() const -> bool;
 
+  void pause_following();
   void scroll_to(int offset, std::size_t total_rows, int visible_rows);
   void scroll_by(int delta, std::size_t total_rows, int visible_rows);
   [[nodiscard]] auto capture_anchor(const WrappedLogCache &cache,

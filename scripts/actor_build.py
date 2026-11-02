@@ -181,29 +181,10 @@ def configure(args) -> None:
         document["sources"].append(source)
     document["providers"] = copy.deepcopy(graph["providers"])
     for provider in document["providers"]:
-        relative = f"providers/{provider['id']}.json"
         if provider["id"] == "obcx-sdk":
             provider["kind"] = "installed-sdk"
-            provider["provenance"] = {"kind": "installed-sdk", "path": relative}
             provider["version_probe"] = {"kind": "target-property", "target": "obcx::obcx_core",
                                          "property": "OBCX_SDK_VERSION"}
-            environment = {"schema_version": 2, "kind": "installed-sdk",
-                           "prefixes": [{"base": "absolute", "path": path}
-                                        for path in [str(sdk), *manifest["external_prefixes"]]]}
-        else:
-            environment = json.loads((workspace.parent / provider["provenance"]["path"]).read_text())
-            for prefix in environment["prefixes"]:
-                require(prefix["base"] != "build",
-                        "External provider prefixes must be workspace-relative or absolute, not build-relative")
-                if prefix["base"] == "workspace":
-                    prefix["path"] = str((workspace.parent / prefix["path"]).resolve())
-                    prefix["base"] = "absolute"
-            provider["provenance"]["path"] = relative
-            if provider["version_probe"]["kind"] == "receipt":
-                receipt = workspace.parent / provider["version_probe"]["path"]
-                provider["version_probe"]["path"] = f"providers/{provider['id']}.receipt.json"
-                atomic_write(generated / provider["version_probe"]["path"], receipt.read_bytes())
-        atomic_write(generated / relative, encoded(environment))
     require(any(p["id"] == "obcx-sdk" for p in document["providers"]), "Actor graph has no SDK provider")
     atomic_write(generated / "packages.toml",
                  "".join(k + " = " + inline(v) + "\n" for k, v in document.items()).encode())

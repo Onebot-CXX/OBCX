@@ -20,11 +20,9 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("validate", "inspect"):
         command = commands.add_parser(name)
         command.add_argument("path", type=Path)
-        command.add_argument("--kind", required=True, choices=("package", "workspace", "resolved-packages", "package-build-receipt",
-                                                              "provider-receipt", "provider-environment"))
+        command.add_argument("--kind", required=True, choices=("package", "workspace", "resolved-packages", "package-build-receipt"))
     command = commands.add_parser("schema")
-    command.add_argument("--kind", required=True, choices=("package", "workspace", "resolved-packages", "package-build-receipt",
-                                                          "provider-receipt", "provider-environment"))
+    command.add_argument("--kind", required=True, choices=("package", "workspace", "resolved-packages", "package-build-receipt"))
     command.add_argument("--output", required=True, type=Path)
     for name in ("registry-validate", "registry-index"):
         command = commands.add_parser(name)

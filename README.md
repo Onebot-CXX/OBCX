@@ -47,8 +47,16 @@ cmake --install build/actor-dev --prefix "$HOME/.local/obcx"
 依赖图是构建目录内自动生成的中间产物，不需要锁文件或手动 Python 准备步骤；
 删除构建目录后重新执行同一 configure 命令即可。示例
 [packages-example.toml](packages-example.toml) 显式选择空 roots，只构建 core/SDK。
-选择 actor/library 时必须同时提供 roots、来源以及有环境证据的 provider bindings。
-本地选择、锁和 `.package-state/` 环境记录不纳入版本控制。
+选择 actor/library 时必须同时提供 roots、来源以及 provider 的发现方式和 targets。
+系统依赖仅由 Nix/vcpkg 的 lock/baseline 锁定；不再要求 `.package-state/providers/`、
+安装路径白名单或额外版本 receipt。CMake 读取实际版本，检查每个消费者声明的版本范围、
+SDK 兼容范围及所需 targets。本地 `packages.toml` 不纳入版本控制。
+
+迁移旧 workspace 时，删除 `providers[].version`、`providers[].provenance` 和
+`providers[].package_manager.baseline`；不要删除 actor 依赖中的版本范围。
+`version_probe` 使用 CMake 版本变量、target property 或 pkg-config，不再接受 receipt。
+Nix store 路径变化不需要更新 workspace；构建目录内的观测记录仅用于当次检查，
+不是需要保留或手工恢复的锁文件。
 
 路径映射库 `obcx.path-mapping` 在独立 Git 仓库
 `local_library/obcx-path-mapping/` 中维护，不属于 core 源码，也不是 submodule。
@@ -65,11 +73,73 @@ CMake presets 明确选择 development 来源模式；`actor-release` 仅选择�
 编译配置，不代表已完成正式发行验证。非 preset 构建必须显式传入
 `OBCX_PACKAGES_WORKSPACE/CACHE/MODE/STATE_DIR` 和构建配置。
 详见 [CMake 接入](docs/architecture/package-cmake.md) 与
-[provider 证据](docs/architecture/package-providers.md)。
+[provider 发现声明](schemas/workspace.schema.json)。
 
 > 旧格式 reader 已删除，registry 本地检查统一使用 core 工具；当前索引只登记源码
 > 元数据，不宣称已有可下载的 v2 发行物。发布脚本/旧源码快照的完整迁移仍待完成，
 > 不要将旧归档恢复流程当作 v2 workspace 的准备入口。没有 v1 fallback。
+
+### Actor 的 Nix 开发依赖
+
+在 Linux 的 OBCX checkout 根目录或其子目录运行普通 `nix develop` 即可：
+
+- 没有 `packages.toml`，或 `workspace.roots` 为空：只提供 core 开发环境。
+- 配置了 roots：自动合并所选 actor/library 及传递依赖的 `shell.nix`（如果有）。
+- workspace 无效、依赖解析失败或 `shell.nix` 求值失败：明确报错并停止进入 shell，
+  不会静默退回 core-only。
+
+`nix develop --command ...`、`nix develop .#ci` 和 `.envrc` 使用同样的自动加载逻辑。
+由于本地 workspace/actor 被 Git 忽略，加载在 shellHook 阶段执行，而不是纯 flake
+求值阶段；无需手动传 `--impure`。自动入口显式采用 development 模式、离线源码
+策略，并复用 `actor-dev` 的 `build/actor-dev/package-state/sources` 缓存路径。
+
+需要自定义 workspace、缓存或源码联网策略时，仍可使用 Python 3.11+ 运行显式
+入口（以下选项都必须传入）：
+
+```bash
+python3 scripts/nix_develop.py \
+  --workspace packages.toml \
+  --cache .cache/obcx/packages \
+  --mode development \
+  --network deny \
+  --shell workspace
+```
+
+非交互执行可在末尾添加 `-- <命令> <参数>`；CI 使用 `--shell workspace-ci`
+省略根环境的 clang tooling。入口每次复用 CMake 的包解析器，从当前
+`workspace.roots` 沿 actor/library 依赖解析；`profile = "tests"` 时也包含测试依赖。
+仅加载选中包根目录的 `shell.nix`，不扫描未选中包，不加载 `flake.nix`。
+包没有 `shell.nix` 时不增加 Nix 依赖。远程源码必须已在缓存中；如需准备源码，
+显式选择 `--network allow`（该选项只控制包源码获取，不限制 Nix 下载）。
+
+Actor 或 library 可提供以下 `shell.nix`：
+
+```nix
+{ pkgs }:
+pkgs.mkShell {
+  buildInputs = [ pkgs.openssl ];
+  nativeBuildInputs = [ pkgs.pkg-config ];
+}
+```
+
+文件必须是接收 `pkgs` 并返回 `mkShell` derivation 的函数。根 flake 统一传入其
+锁定的 nixpkgs 包集，通过 `inputsFrom` 合并 `packages`、`buildInputs`、
+`nativeBuildInputs` 及 propagated inputs；不继承包的 `shellHook`、环境变量或
+stdenv，Linux 根环境仍使用 GCC 16。不要在包的输入列表中另加冲突的编译器。
+
+内部启动器显式提供 `OBCX_NIX_SHELL_INPUTS` 并使用 `--impure` 求值
+`.#workspace` / `.#workspace-ci`，自动入口通过 `nix print-dev-env` 将结果加载到
+当前 shell，不重新启动交互 shell 或丢失 `--command` 参数。不要手动复用该内部
+环境变量。变更 roots、依赖或 `shell.nix` 后重新进入 shell；direnv 用户可执行
+`direnv reload`（`.envrc` 也会监视根 `packages.toml` 的变化）。只应加载可信包，
+`shell.nix` 是可执行的 Nix 表达式，依赖自身的 setup hooks 仍可执行。
+workspace shell 仅支持 Linux，且 Nix system 必须匹配 workspace 声明的平台；
+macOS 仍为 tooling-only。
+
+Nix 负责提供并锁定开发依赖，不会自动放宽 actor 的版本要求。例如 `chat_llm`
+要求 ICU 76.x，其 `shell.nix` 显式使用 `pkgs.icu76`，不能直接以 `pkgs.icu`（78.x）
+替代；CMake 会拒绝实际版本与声明范围不兼容的依赖。无需另外维护 provider 路径证据。
+热重载继续使用固定 SDK 的隔离构建流程，不在 live core workspace 构建 actor。
 
 ## 运行配置
 
@@ -205,6 +275,41 @@ drain_timeout_ms = 5000 # 100..300000
 成功但业务行为错误，恢复上一组不可变 actor 产物及其匹配配置后再次执行
 `reload`。完整错误码与回滚流程见
 [Actor operations](docs/architecture/actor-runtime-v2-operations.md)。
+
+### 交互 TUI：选区复制与退出
+
+- **Ctrl+C**：有输出选区时复制，保留正在编辑的命令；无选区时只清空命令和
+  光标位置，**不会退出**。在任一面板聚焦时行为相同。
+- **Ctrl+D**：仅命令框完全为空时，向本进程提交 SIGINT，由原有关闭流程排空
+  工作并显示最终日志。非空（包括纯空白）时不删除、不执行、不退出。显式
+  `exit` 命令和外部 SIGINT/SIGTERM 的关闭行为保持不变。
+- 鼠标在日志或 CLI 输出中拖动可选择连续文本；跨面板拖动会限制在起始面板。
+  高亮按源条目及完整 UTF-8 字形定位，复制保留空格和显式换行，不附加软折行、
+  边框或滚动条。拖动及松开鼠标**不会自动复制**。
+- 选区存在时暂停该面板的自动跟随，但继续收集输出；窗口重排保持源锚点。
+  日志被原有保留策略淘汰后，选区失效并提示重新选择，不会复制过期缓存。
+  **Esc** 取消选区且不自动跳至末尾；滚轮、PageUp/PageDown、Home/End、
+  分隔条调整和滚动条拖动先清除选区，再执行原导航。**End** 恢复日志尾随。
+
+复制使用写入型 **OSC 52**（剪贴板 `c`，Base64 编码的纯 UTF-8 文本），目标是
+运行终端客户端机器的剪贴板。通过 SSH 使用时不需要服务器上的图形剪贴板，
+也不会运行 `xclip`、`wl-copy`、SSH 或 tmux 子进程。每次复制最多 **64 KiB
+原始 UTF-8 字节**；这是实现的资源上限，不是配置默认值，也不保证终端接受
+同样大小。超限整次拒绝，保留选区，不截断或分块覆盖剪贴板。
+
+终端客户端必须允许 OSC 52 剪贴板写入。非空 `TMUX` 环境变量使应用增加一层
+正确转义的 tmux DCS passthrough；否则发送普通 OSC 52。tmux 的
+`allow-passthrough`、适用的 `set-clipboard`/终端剪贴板能力，以及每个外层
+复用器的转发策略均由操作者管理，应用不更改它们。嵌套 SSH/tmux 不会被自动
+完整探测或自动多层封装，所有相关层都须允许该转发路径；某层过滤或拒绝时，
+请求可能无法到达客户端。
+
+TUI 反馈只确认“**已发出复制请求**”，不证明远端剪贴板已经改变；它不读取
+剪贴板，也不记录选中文本/Base64。非交互/重定向输出禁止剪贴板转义序列。
+请用非敏感文本分别在实际直连、SSH、tmux 和嵌套环境中手动粘贴验收；构建
+成功或出现“请求已发出”不能替代客户端验收。
+
+### 配置校验
 
 执行配置和 actor contract 校验：
 

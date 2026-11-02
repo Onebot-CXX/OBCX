@@ -1,5 +1,6 @@
 #include "tui/tui_app.hpp"
 #include "common/cli_handler.hpp"
+#include "tui/tui_selection.hpp"
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
@@ -9,12 +10,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
 
 namespace obcx::common {
+namespace ts = tui_selection;
 
 namespace {
 
@@ -46,35 +50,99 @@ auto level_decorator(spdlog::level::level_enum level) -> ftxui::Decorator {
 } // namespace
 
 TuiApp::TuiApp(std::shared_ptr<tui_sink_mt> tui_sink,
-               CliHandler::Context cli_ctx)
-    : tui_sink_(std::move(tui_sink)), cli_ctx_(std::move(cli_ctx)) {}
+               CliHandler::Context cli_ctx, InterruptRequest request_interrupt)
+    : tui_sink_(std::move(tui_sink)), cli_ctx_(std::move(cli_ctx)),
+      request_interrupt_(std::move(request_interrupt)) {}
 
 void TuiApp::run() {
   auto screen = ftxui::ScreenInteractive::Fullscreen();
   screen.ForceHandleCtrlC(false);
 
   std::string input_text;
+  int input_cursor = 0;
   std::mutex console_mutex;
+  ts::Selection selection;
+  ftxui::CapturedMouse selection_capture;
+  ftxui::CapturedMouse scrollbar_capture;
+  std::optional<ts::Position> console_pin;
+  bool divider_dragging = false;
+  bool interrupt_requested = false;
+  std::string status;
+  const char *tmux_environment = std::getenv("TMUX");
+  const bool tmux = tmux_environment && *tmux_environment;
+
+  auto clear_selection = [&]() -> void {
+    selection.clear();
+    selection_capture.reset();
+    console_pin.reset();
+    status.clear();
+  };
+  // Call with console_mutex held when using console sources.
+  auto source = [&](uint64_t entry) -> const std::string * {
+    if (selection.in(ts::Pane::Log)) {
+      return log_cache_.source(entry);
+    }
+    return entry < console_lines_.size() ? &console_lines_[entry] : nullptr;
+  };
+  auto validate_selection = [&]() -> bool {
+    if (!selection.active()) {
+      return true;
+    }
+    bool retained = true;
+    if (selection.in(ts::Pane::Log)) {
+      // Metadata-only snapshot: cached text must not outlive its source's
+      // retention authority between a render frame and the copy key event.
+      const auto metadata =
+          tui_sink_->snapshot_from(std::numeric_limits<uint64_t>::max());
+      const auto [begin, end] = selection.range();
+      retained = begin.entry >= metadata.first_sequence &&
+                 end.entry < metadata.next_sequence;
+    }
+    std::scoped_lock lock(console_mutex);
+    if (!retained || !selection.valid(source)) {
+      clear_selection();
+      status = ts::feedback(ts::CopyResult::Unavailable);
+      return false;
+    }
+    return true;
+  };
+
+  auto hit = [&](ts::Pane pane, int x, int y, int top, int bottom,
+                 bool clamp) -> std::optional<ts::GlyphSpan> {
+    std::scoped_lock lock(console_mutex);
+    return selection.hit(pane, x, y, top, bottom, clamp,
+                         [&](uint64_t entry) -> const std::string * {
+                           if (pane == ts::Pane::Log) {
+                             return log_cache_.source(entry);
+                           }
+                           return entry < console_lines_.size()
+                                      ? &console_lines_[entry]
+                                      : nullptr;
+                         });
+  };
 
   cli_ctx_.output_cb = [this, &console_mutex](const std::string &msg) -> void {
     std::scoped_lock lock(console_mutex);
-    console_lines_.push_back(msg);
+    console_lines_.push_back(strip_ansi(msg));
   };
 
   CliHandler cli_handler(cli_ctx_);
 
-  auto input_component = ftxui::Input(&input_text, "> ");
+  auto input_options = ftxui::InputOption::Default();
+  input_options.cursor_position = &input_cursor;
+  auto input_component = ftxui::Input(&input_text, "> ", input_options);
 
   auto input_with_enter = ftxui::CatchEvent(
       input_component, [&](const ftxui::Event &event) -> bool {
         if (event == ftxui::Event::Return) {
           std::string cmd = input_text;
           input_text.clear();
+          input_cursor = 0;
 
           if (!cmd.empty()) {
             {
               std::scoped_lock lock(console_mutex);
-              console_lines_.push_back("> " + cmd);
+              console_lines_.push_back(strip_ansi("> " + cmd));
             }
             if (!cli_handler.process_command(cmd)) {
               // Don't exit immediately — signal shutdown and let it complete
@@ -82,16 +150,6 @@ void TuiApp::run() {
               cli_ctx_.stop_cv.notify_one();
             }
           }
-          return true;
-        }
-        if (event == ftxui::Event::CtrlC) {
-          {
-            std::scoped_lock lock(console_mutex);
-            console_lines_.emplace_back("Exiting...");
-          }
-          cli_handler.process_command("exit");
-          cli_ctx_.should_stop.store(true, std::memory_order_release);
-          cli_ctx_.stop_cv.notify_one();
           return true;
         }
         return false;
@@ -137,19 +195,23 @@ void TuiApp::run() {
 
   // Virtualized log pane: wrap retained entries, but only materialize rows in
   // the current viewport.
-  auto log_pane = ftxui::Renderer([this]() -> ftxui::Element {
+  auto log_pane = ftxui::Renderer([&]() -> ftxui::Element {
     const int content_width = std::max(1, layout_.log_content_width);
-    log_visible_rows_ = std::max(1, layout_.log_content_height);
-
+    const int visible_rows = std::max(1, layout_.log_content_height);
     const bool reflowing = log_cache_.needs_rebuild(content_width);
+    const bool selection_resized =
+        selection.in(ts::Pane::Log) && visible_rows != log_visible_rows_;
     const auto anchor =
-        reflowing && !log_viewport_.following_tail()
+        (reflowing || selection_resized) && !log_viewport_.following_tail()
             ? log_viewport_.capture_anchor(log_cache_, log_visible_rows_)
             : std::nullopt;
+    log_visible_rows_ = visible_rows;
     const auto snapshot =
         tui_sink_->snapshot_from(reflowing ? 0 : log_cache_.next_sequence());
     const auto sync = log_cache_.sync(snapshot, content_width);
     log_viewport_.apply_sync(log_cache_, sync, log_visible_rows_, anchor);
+    validate_selection();
+    selection.begin_frame(ts::Pane::Log);
 
     const auto total = log_cache_.total_rows();
     const auto end = total - static_cast<std::size_t>(log_viewport_.offset());
@@ -164,7 +226,9 @@ void TuiApp::run() {
       log_elements.push_back(ftxui::text("(no log output yet)") | ftxui::dim);
     } else {
       for (const auto &row : rows) {
-        log_elements.push_back(ftxui::text(row.text) |
+        log_elements.push_back(selection.render_row(ts::Pane::Log, row.sequence,
+                                                    row.source_begin,
+                                                    row.text) |
                                level_decorator(row.level));
       }
     }
@@ -195,13 +259,16 @@ void TuiApp::run() {
   // Console pane: pure renderer, delegates to input_with_enter
   auto console_pane =
       ftxui::Renderer(input_with_enter, [&]() -> ftxui::Element {
+        selection.begin_frame(ts::Pane::Console);
         ftxui::Elements console_elements;
         {
           std::scoped_lock lock(console_mutex);
-          for (const auto &line : console_lines_) {
-            for (const auto &row : tui_layout::wrap_text(
-                     line, std::max(1, layout_.console_content_width))) {
-              console_elements.push_back(ftxui::text(row));
+          for (std::size_t entry = 0; entry < console_lines_.size(); ++entry) {
+            for (const auto &row : tui_layout::wrap_source(
+                     console_lines_[entry],
+                     std::max(1, layout_.console_content_width))) {
+              console_elements.push_back(selection.render_row(
+                  ts::Pane::Console, entry, row.source_begin, row.text));
             }
           }
         }
@@ -211,14 +278,19 @@ void TuiApp::run() {
         console_scroll_offset_ =
             std::clamp(console_scroll_offset_, 0, std::max(0, total - 1));
 
-        float position =
-            total > 1 ? 1.f - static_cast<float>(console_scroll_offset_) /
-                                  static_cast<float>(total - 1)
-                      : 1.f;
-        position = std::clamp(position, 0.f, 1.f);
+        if (selection.in(ts::Pane::Console) && console_pin) {
+          if (const auto row =
+                  selection.row_index(ts::Pane::Console, *console_pin)) {
+            const int focus =
+                *row + std::max(0, layout_.console_content_height - 1) / 2;
+            console_scroll_offset_ =
+                std::clamp(total - 1 - focus, 0, std::max(0, total - 1));
+          }
+        }
 
         return ftxui::vbox(std::move(console_elements)) |
-               ftxui::focusPositionRelative(0.f, position) |
+               ftxui::focusPosition(
+                   0, std::max(0, total - 1 - console_scroll_offset_)) |
                ftxui::vscroll_indicator | ftxui::yframe | ftxui::yflex_grow;
       });
 
@@ -229,9 +301,16 @@ void TuiApp::run() {
       });
 
   auto console_bordered =
-      ftxui::Renderer(console_pane, [&console_pane]() -> ftxui::Element {
-        return console_pane->Render() |
-               ftxui::borderStyled(ftxui::Color::Green);
+      ftxui::Renderer(console_pane, [&]() -> ftxui::Element {
+        const auto title =
+            status.empty()
+                ? "Ctrl+C: copy/clear | Ctrl+D: exit if empty | Esc: cancel"
+                : status;
+        return ftxui::window(
+            ftxui::text(title) | ftxui::color(ftxui::Color::Green) |
+                ftxui::size(ftxui::WIDTH, ftxui::LESS_THAN,
+                            std::max(0, layout_.terminal_width - 4)),
+            console_pane->Render());
       });
 
   auto container = ftxui::ResizableSplit({
@@ -254,12 +333,14 @@ void TuiApp::run() {
 
   // Root input handling consumes the same layout snapshot as rendering.
   auto root = ftxui::CatchEvent(inner, [&](ftxui::Event event) -> bool {
-    auto scroll_log_to = [this](int offset) -> void {
+    auto scroll_log_to = [&](int offset) -> void {
+      clear_selection();
       log_viewport_.scroll_to(offset, log_cache_.total_rows(),
                               log_visible_rows_);
     };
 
-    auto scroll_log_by = [this](int delta) -> void {
+    auto scroll_log_by = [&](int delta) -> void {
+      clear_selection();
       log_viewport_.scroll_by(delta, log_cache_.total_rows(),
                               log_visible_rows_);
     };
@@ -279,11 +360,57 @@ void TuiApp::run() {
     };
 
     if (!event.is_mouse()) {
+      // These keys are consumed before the editor, selection fallback or any
+      // FTXUI default handler can turn them into deletion or an interrupt.
+      if (event == ftxui::Event::CtrlC) {
+        if (selection.active()) {
+          if (validate_selection()) {
+            ts::CopyText copy;
+            {
+              std::scoped_lock lock(console_mutex);
+              copy = selection.extract(source);
+            }
+            auto result = copy.result;
+            if (result == ts::CopyResult::Ready) {
+              result = ts::emit_clipboard_request(screen, copy.text, tmux);
+            }
+            status = ts::feedback(result);
+            selection.release();
+            selection_capture.reset();
+          }
+        } else {
+          input_text.clear();
+          input_cursor = 0;
+          status = "Input cleared; Ctrl+D on empty input requests shutdown.";
+        }
+        return true;
+      }
+      if (event == ftxui::Event::CtrlD) {
+        if (input_text.empty() && !interrupt_requested) {
+          if (!request_interrupt_) {
+            status = "SIGINT request unavailable; shutdown not requested.";
+          } else if (const auto error = request_interrupt_()) {
+            status = "SIGINT request failed (error " +
+                     std::to_string(error.value()) +
+                     "); shutdown not requested.";
+          } else {
+            interrupt_requested = true;
+            status = "SIGINT submitted; waiting for graceful shutdown.";
+          }
+        }
+        return true;
+      }
+      if (event == ftxui::Event::Escape && selection.active()) {
+        clear_selection();
+        return true;
+      }
       if (event == ftxui::Event::ArrowUpCtrl) {
+        clear_selection();
         split_state_.resize_by(-1, layout_.terminal_height);
         return true;
       }
       if (event == ftxui::Event::ArrowDownCtrl) {
+        clear_selection();
         split_state_.resize_by(1, layout_.terminal_height);
         return true;
       }
@@ -316,6 +443,13 @@ void TuiApp::run() {
         mouse.y >= layout_.log_content_top &&
         mouse.y < layout_.log_content_top + log_scrollbar_.track_height;
 
+    if (divider_dragging) {
+      if (mouse.motion == ftxui::Mouse::Released) {
+        divider_dragging = false;
+      }
+      return false; // the existing ResizableSplit owns its mouse capture
+    }
+
     if (log_scrollbar_dragging_) {
       if (mouse.button == ftxui::Mouse::Left &&
           mouse.motion == ftxui::Mouse::Moved) {
@@ -324,14 +458,15 @@ void TuiApp::run() {
             log_scrollbar_drag_start_thumb_top_ + delta_y));
         return true;
       }
-      if (mouse.button == ftxui::Mouse::Left &&
-          mouse.motion == ftxui::Mouse::Released) {
+      if (mouse.motion == ftxui::Mouse::Released) {
         log_scrollbar_dragging_ = false;
+        scrollbar_capture.reset();
         return true;
       }
     }
 
     if (mouse.button == ftxui::Mouse::WheelUp) {
+      clear_selection();
       if (in_log_pane) {
         scroll_log_by(3);
       } else if (in_console_pane) {
@@ -342,6 +477,7 @@ void TuiApp::run() {
       return true;
     }
     if (mouse.button == ftxui::Mouse::WheelDown) {
+      clear_selection();
       if (in_log_pane) {
         scroll_log_by(-3);
       } else if (in_console_pane) {
@@ -354,6 +490,11 @@ void TuiApp::run() {
 
     if (on_log_scrollbar && mouse.button == ftxui::Mouse::Left &&
         mouse.motion == ftxui::Mouse::Pressed) {
+      clear_selection();
+      scrollbar_capture = screen.CaptureMouse();
+      if (!scrollbar_capture) {
+        return false;
+      }
       int track_y = std::clamp(mouse.y - layout_.log_content_top, 0,
                                std::max(0, log_scrollbar_.track_height - 1));
       if (track_y >= log_scrollbar_.thumb_top &&
@@ -373,10 +514,70 @@ void TuiApp::run() {
       return true;
     }
 
-    if (in_console_pane && mouse.button == ftxui::Mouse::Left &&
+    if (selection.dragging() && (mouse.motion == ftxui::Mouse::Moved ||
+                                 mouse.motion == ftxui::Mouse::Released)) {
+      const auto pane = selection.pane();
+      const int top = pane == ts::Pane::Log ? layout_.log_content_top
+                                            : layout_.separator_y + 2;
+      const int bottom = pane == ts::Pane::Log
+                             ? top + layout_.log_content_height - 1
+                             : layout_.terminal_height - 2;
+      const int width = pane == ts::Pane::Log ? layout_.log_content_width
+                                              : layout_.console_content_width;
+      if (validate_selection()) {
+        if (const auto span =
+                hit(pane, std::clamp(mouse.x, 1, std::max(1, width)), mouse.y,
+                    top, bottom, true)) {
+          selection.update(*span);
+        }
+        if (mouse.motion == ftxui::Mouse::Released) {
+          selection.release();
+          selection_capture.reset();
+        }
+      }
+      return true; // drag/update/release never copies or changes panes
+    }
+
+    if (mouse.button == ftxui::Mouse::Left &&
         mouse.motion == ftxui::Mouse::Pressed) {
-      input_component->TakeFocus();
-      return false; // let the event propagate to the input component
+      clear_selection();
+      if (mouse.y == layout_.separator_y) {
+        divider_dragging = true;
+        return false;
+      }
+      const auto pane = in_log_pane ? ts::Pane::Log : ts::Pane::Console;
+      const int top =
+          in_log_pane ? layout_.log_content_top : layout_.separator_y + 2;
+      const int bottom = in_log_pane ? top + layout_.log_content_height - 1
+                                     : layout_.terminal_height - 2;
+      const int width = in_log_pane ? layout_.log_content_width
+                                    : layout_.console_content_width;
+      if ((in_log_pane || in_console_pane) && mouse.x >= 1 &&
+          mouse.x <= width && mouse.y >= top && mouse.y <= bottom) {
+        if (const auto span = hit(pane, mouse.x, mouse.y, top, bottom, false)) {
+          selection_capture = screen.CaptureMouse();
+          if (!selection_capture) {
+            return false;
+          }
+          selection.start(pane, *span);
+          status =
+              "Output selected; Ctrl+C copies, Esc cancels (no auto-copy).";
+          if (pane == ts::Pane::Log) {
+            log_viewport_.pause_following();
+          } else {
+            console_pin = selection.first_visible(pane, top, bottom);
+          }
+          return true;
+        }
+        if (in_console_pane) {
+          input_component->TakeFocus();
+          input_with_enter->OnEvent(event);
+          // Preserve editor hit testing/capture, but suppress global DOM
+          // selection if this was empty console padding rather than input.
+          return true;
+        }
+      }
+      return true; // no coordinate selection of pane chrome/padding
     }
 
     return false;

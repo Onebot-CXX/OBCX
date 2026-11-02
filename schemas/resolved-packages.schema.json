@@ -1253,11 +1253,6 @@
               {
                 "additionalProperties": false,
                 "properties": {
-                  "baseline": {
-                    "minLength": 1,
-                    "pattern": "^[0-9a-f]{40}$",
-                    "type": "string"
-                  },
                   "default_features": {
                     "type": "boolean"
                   },
@@ -1287,37 +1282,11 @@
                   "kind",
                   "port",
                   "features",
-                  "default_features",
-                  "baseline"
+                  "default_features"
                 ],
                 "type": "object"
               }
             ]
-          },
-          "provenance": {
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "enum": [
-                  "nix",
-                  "vcpkg",
-                  "environment",
-                  "workspace-sdk",
-                  "installed-sdk"
-                ],
-                "type": "string"
-              },
-              "path": {
-                "format": "relative-path",
-                "minLength": 1,
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind",
-              "path"
-            ],
-            "type": "object"
           },
           "targets": {
             "items": {
@@ -1328,10 +1297,6 @@
             "minItems": 1,
             "type": "array",
             "uniqueItems": true
-          },
-          "version": {
-            "minLength": 1,
-            "type": "string"
           },
           "version_probe": {
             "oneOf": [
@@ -1397,33 +1362,6 @@
                   "kind"
                 ],
                 "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "enum": [
-                      "receipt"
-                    ],
-                    "type": "string"
-                  },
-                  "path": {
-                    "format": "relative-path",
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "sha256": {
-                    "minLength": 1,
-                    "pattern": "^[0-9a-f]{64}$",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "path",
-                  "sha256"
-                ],
-                "type": "object"
               }
             ]
           },
@@ -1441,11 +1379,9 @@
           "package",
           "components",
           "targets",
-          "version",
           "version_scheme",
           "version_probe",
-          "package_manager",
-          "provenance"
+          "package_manager"
         ],
         "type": "object"
       },

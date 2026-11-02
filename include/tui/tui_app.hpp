@@ -6,8 +6,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace obcx::common {
@@ -34,7 +36,10 @@ public:
    * @param cli_ctx CLI handler context
    * \endif
    */
-  TuiApp(std::shared_ptr<tui_sink_mt> tui_sink, CliHandler::Context cli_ctx);
+  // The process owns signal delivery; the TUI only requests an interrupt.
+  using InterruptRequest = std::function<std::error_code()>;
+  TuiApp(std::shared_ptr<tui_sink_mt> tui_sink, CliHandler::Context cli_ctx,
+         InterruptRequest request_interrupt);
 
   /**
    * \if CHINESE
@@ -49,6 +54,7 @@ public:
 private:
   std::shared_ptr<tui_sink_mt> tui_sink_;
   CliHandler::Context cli_ctx_;
+  InterruptRequest request_interrupt_;
   std::vector<std::string> console_lines_;
   std::atomic_bool running_{true};
   std::atomic_bool shutdown_started_{false};

@@ -1,58 +1,13 @@
-"""Verify observed providers; a binding is a requirement, not build evidence."""
+"""Check discovered provider targets and consumer ranges, not installation locks."""
 from __future__ import annotations
 
-from pathlib import Path
 import re
 
 from . import PackageError
-from .io import digest, read_json
 from .versions import parse_version, satisfies
 
 
-def verify_environment(binding: dict, targets: list[dict], workspace: Path, build: Path) -> dict:
-    provenance = binding["provenance"]
-    path = workspace / provenance["path"]
-    environment = read_json(path, "provider-environment")
-    if environment["kind"] != provenance["kind"]:
-        raise PackageError(f"provider {binding['id']}: environment kind mismatch")
-    prefixes = []
-    for item in environment["prefixes"]:
-        path = Path(item["path"])
-        if (item["base"] == "absolute") != path.is_absolute() or ".." in path.parts:
-            raise PackageError(f"provider {binding['id']}: invalid explicit environment prefix")
-        if item["base"] == "workspace":
-            path = workspace / path
-        elif item["base"] == "build":
-            path = build / path
-        path = path.resolve()
-        if environment["kind"] == "nix" and not re.fullmatch(r"/nix/store/[0-9a-z]{32}-[^/]+", str(path)):
-            raise PackageError(f"provider {binding['id']}: Nix provenance must name concrete store outputs")
-        prefixes.append(path)
-    for target in targets:
-        paths = [(value, True) for value in target["locations"]]
-        paths.extend((value, False) for value in target["include_directories"])
-        for raw, is_binary in paths:
-            # These two usage wrappers have a defined configure-time meaning.
-            if raw.startswith("$<INSTALL_INTERFACE:") and raw.endswith(">"):
-                continue
-            if raw.startswith("$<BUILD_INTERFACE:") and raw.endswith(">"):
-                raw = raw[len("$<BUILD_INTERFACE:"):-1]
-            for entry in raw.split(";"):
-                if not entry:
-                    continue
-                path = Path(entry)
-                if "$<" in entry or not path.is_absolute():
-                    raise PackageError(f"provider {binding['id']}: unsupported observed path expression")
-                if not any(path.resolve().is_relative_to(prefix) for prefix in prefixes):
-                    raise PackageError(f"provider {binding['id']}: target path is outside declared environment prefixes")
-                if is_binary and not path.is_file():
-                    raise PackageError(f"provider {binding['id']}: declared binary artifact is missing")
-                if not is_binary and not path.is_dir():
-                    raise PackageError(f"provider {binding['id']}: declared include directory is missing")
-    return environment
-
-
-def verify_provider(binding: dict, observation: dict, workspace: Path, build: Path) -> dict:
+def verify_provider(binding: dict, observation: dict, graph: dict) -> dict:
     provider_id = binding["id"]
     if not isinstance(observation, dict) or set(observation) != {"id", "version", "targets"} or observation["id"] != provider_id:
         raise PackageError(f"provider {provider_id}: invalid observation identity/fields")
@@ -73,50 +28,26 @@ def verify_provider(binding: dict, observation: dict, workspace: Path, build: Pa
     if set(observed) != set(binding["targets"]):
         raise PackageError(f"provider {provider_id}: actual targets differ from authorized targets")
 
-    verify_environment(binding, observation["targets"], workspace, build)
+    if binding not in graph["providers"]:
+        raise PackageError(f"provider {provider_id}: binding differs from the selected graph")
     version = observation["version"]
-    probe = binding["version_probe"]
-    if probe["kind"] == "receipt":
-        path = workspace / probe["path"]
-        try:
-            content = path.read_bytes()
-        except OSError:
-            raise PackageError(f"provider {provider_id}: missing version receipt") from None
-        if digest(content) != probe["sha256"]:
-            raise PackageError(f"provider {provider_id}: version receipt digest mismatch")
-        receipt = read_json(path, "provider-receipt")
-        if receipt["id"] != provider_id or receipt["version_scheme"] != binding["version_scheme"]:
-            raise PackageError(f"provider {provider_id}: version receipt identity/scheme mismatch")
-        if len(receipt["targets"]) != len(observed) or {t["name"] for t in receipt["targets"]} != set(observed):
-            raise PackageError(f"provider {provider_id}: receipt target set mismatch")
-        for target in receipt["targets"]:
-            actual = observed[target["name"]]
-            locations = {Path(p).resolve() for p in actual["locations"]}
-            directories = [Path(p).resolve() for p in actual["include_directories"] if "$<" not in p]
-            files = set()
-            for record in target["files"]:
-                file = Path(record["path"])
-                if not file.is_absolute() or file.resolve() in files:
-                    raise PackageError(f"provider {provider_id}: receipt file paths must be absolute and unique")
-                file = file.resolve()
-                if file not in locations and not any(file.is_relative_to(root) for root in directories):
-                    raise PackageError(f"provider {provider_id}: version evidence is unrelated to actual target")
-                try:
-                    actual_hash = digest(file.read_bytes())
-                except OSError:
-                    raise PackageError(f"provider {provider_id}: missing version evidence file") from None
-                if actual_hash != record["sha256"]:
-                    raise PackageError(f"provider {provider_id}: version evidence file changed")
-                files.add(file)
-            if locations - files:
-                raise PackageError(f"provider {provider_id}: receipt omits observed binary artifacts")
-        if version and parse_version(version, binding["version_scheme"]) != parse_version(receipt["version"], binding["version_scheme"]):
-            raise PackageError(f"provider {provider_id}: observed version conflicts with receipt")
-        version = receipt["version"]
     if not version:
-        raise PackageError(f"provider {provider_id}: no reported version; an explicit verified receipt is required")
-    if not satisfies(version, "=" + binding["version"], binding["version_scheme"]):
-        raise PackageError(f"provider {provider_id}: actual version {version} differs from locked {binding['version']}")
+        raise PackageError(f"provider {provider_id}: discovery did not report a version")
+    parse_version(version, binding["version_scheme"])
+    nodes = {node["id"]: node for node in graph["packages"]}
+    for edge in graph["edges"]:
+        if edge["kind"] != "system" or edge["to"] != provider_id:
+            continue
+        if not set(edge["targets"]) <= set(observed):
+            raise PackageError(f"{edge['from']} -> {provider_id}: missing required targets")
+        if not satisfies(version, edge["requirement"], binding["version_scheme"]):
+            raise PackageError(f"{edge['from']} -> {provider_id}: actual version {version} "
+                               f"does not satisfy {edge['requirement']} ({edge['scope']})")
+        owner = nodes[edge["from"]]
+        if provider_id == "obcx-sdk" and owner["kind"] == "actor":
+            requirement = owner["metadata"]["compatibility"]["obcx"]
+            if not satisfies(version, requirement, "semver"):
+                raise PackageError(f"{owner['id']}: compatibility.obcx {requirement} excludes SDK {version}")
     return {"id": provider_id, "version": version, "version_scheme": binding["version_scheme"],
             "targets": observation["targets"]}
 
@@ -174,8 +105,6 @@ def vcpkg_manifest(graph: dict, base: dict, baseline: str) -> dict:
         manager = provider["package_manager"]
         if manager["kind"] != "vcpkg":
             raise PackageError(f"provider {provider['id']}: explicit vcpkg port binding required; names are not guessed")
-        if manager["baseline"] != baseline:
-            raise PackageError(f"provider {provider['id']}: vcpkg baseline conflict")
         additions.append({"name": manager["port"], "features": manager["features"],
                           "default-features": manager["default_features"]})
     return {**base, "builtin-baseline": baseline,

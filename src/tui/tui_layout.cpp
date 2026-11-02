@@ -14,14 +14,13 @@
 namespace obcx::common::tui_layout {
 namespace {
 
-auto is_wrap_boundary(const std::string &glyph) -> bool {
+auto is_wrap_boundary(std::string_view glyph) -> bool {
   return glyph.size() == 1 &&
          std::isspace(static_cast<unsigned char>(glyph.front())) != 0;
 }
 
 auto wrap_line(std::string_view line, int width) -> std::vector<std::string> {
-  auto glyphs = ftxui::Utf8ToGlyphs(std::string(line));
-  std::erase(glyphs, std::string{});
+  const auto glyphs = source_glyphs(std::string(line));
 
   if (glyphs.empty()) {
     return {std::string(line)};
@@ -35,14 +34,15 @@ auto wrap_line(std::string_view line, int width) -> std::vector<std::string> {
     std::size_t last_boundary = start;
 
     while (end < glyphs.size()) {
-      const int glyph_width = std::max(0, ftxui::string_width(glyphs[end]));
+      const int glyph_width = glyphs[end].width;
       if (end != start && row_width + glyph_width > width) {
         break;
       }
 
       row_width += glyph_width;
       ++end;
-      if (is_wrap_boundary(glyphs[end - 1])) {
+      const auto &glyph = glyphs[end - 1];
+      if (is_wrap_boundary(line.substr(glyph.begin, glyph.end - glyph.begin))) {
         last_boundary = end;
       }
 
@@ -59,11 +59,12 @@ auto wrap_line(std::string_view line, int width) -> std::vector<std::string> {
       end = last_boundary;
     }
 
-    std::string row;
-    for (std::size_t index = start; index < end; ++index) {
-      row += glyphs[index];
-    }
-    rows.push_back(std::move(row));
+    // Keep the original contiguous slice, including source whitespace that
+    // FTXUI may omit visually (e.g. tabs), rather than rebuilding glyph text.
+    const auto first_byte = start == 0 ? 0 : glyphs[start].begin;
+    const auto last_byte =
+        end == glyphs.size() ? line.size() : glyphs[end].begin;
+    rows.emplace_back(line.substr(first_byte, last_byte - first_byte));
     start = end;
   }
 
@@ -71,6 +72,40 @@ auto wrap_line(std::string_view line, int width) -> std::vector<std::string> {
 }
 
 } // namespace
+
+auto source_glyphs(const std::string &text) -> std::vector<SourceGlyph> {
+  std::vector<SourceGlyph> result;
+  std::size_t cursor = 0;
+  for (const auto &glyph : ftxui::Utf8ToGlyphs(text)) {
+    if (glyph.empty()) {
+      continue; // FTXUI's second cell of a full-width glyph
+    }
+    std::size_t begin = std::string::npos;
+    // FTXUI can join a combining suffix across omitted controls (e.g. a tab).
+    // Project the glyph's ordered bytes back onto the original source rather
+    // than assuming its rendered bytes form a contiguous source substring.
+    for (const char byte : glyph) {
+      const auto found = text.find(byte, cursor);
+      if (found == std::string::npos) {
+        return {}; // no trustworthy mapping: never fabricate byte positions
+      }
+      if (begin == std::string::npos) {
+        begin = found;
+      }
+      cursor = found + 1;
+    }
+    const auto end = cursor;
+    const int width = std::max(0, ftxui::string_width(glyph));
+    if (width == 0 && !result.empty()) {
+      // FTXUI can put a combining suffix in a wide glyph's placeholder cell.
+      // Keep that suffix with the base when wrapping, highlighting and copying.
+      result.back().end = end;
+    } else {
+      result.push_back({.begin = begin, .end = end, .width = width});
+    }
+  }
+  return result;
+}
 
 auto wrap_text(const std::string &text, int width) -> std::vector<std::string> {
   width = std::max(width, 1);
@@ -200,11 +235,35 @@ void WrappedLogCache::clear() {
   next_sequence_ = 0;
 }
 
+auto wrap_source(const std::string &source, int width)
+    -> std::vector<WrappedSourceRow> {
+  std::vector<WrappedSourceRow> result;
+  std::size_t offset = 0;
+  for (auto &text : wrap_text(source, width)) {
+    const auto begin = offset;
+    offset += text.size();
+    if (offset < source.size() && source[offset] == '\n') {
+      ++offset;
+    }
+    result.push_back({.text = std::move(text), .source_begin = begin});
+  }
+  return result;
+}
+
+auto WrappedLogCache::source(uint64_t sequence) const -> const std::string * {
+  const auto found = std::lower_bound(
+      entries_.begin(), entries_.end(), sequence,
+      [](const Entry &entry, uint64_t id) { return entry.sequence < id; });
+  return found != entries_.end() && found->sequence == sequence ? &found->source
+                                                                : nullptr;
+}
+
 void WrappedLogCache::append(const LogLine &line) {
-  auto rows = wrap_text(line.stripped_text, width_);
+  auto rows = wrap_source(line.stripped_text, width_);
   total_rows_ += rows.size();
   entries_.push_back(Entry{
       .sequence = line.sequence,
+      .source = line.stripped_text,
       .rows = std::move(rows),
       .level = line.level,
   });
@@ -288,7 +347,8 @@ auto WrappedLogCache::rows_range(std::size_t offset, std::size_t count) const
       rows.push_back(WrappedLogRow{
           .sequence = entry.sequence,
           .segment_index = segment,
-          .text = entry.rows[segment],
+          .source_begin = entry.rows[segment].source_begin,
+          .text = entry.rows[segment].text,
           .level = entry.level,
       });
     }
@@ -312,7 +372,7 @@ auto WrappedLogCache::anchor_at(std::size_t row) const
     if (row < offset + entry.rows.size()) {
       return WrappedLogAnchor{
           .sequence = entry.sequence,
-          .segment_index = row - offset,
+          .source_offset = entry.rows[row - offset].source_begin,
       };
     }
     offset += entry.rows.size();
@@ -328,7 +388,15 @@ auto WrappedLogCache::row_index(const WrappedLogAnchor &anchor) const
       if (entry.rows.empty()) {
         return offset;
       }
-      return offset + std::min(anchor.segment_index, entry.rows.size() - 1);
+      auto row = std::upper_bound(
+          entry.rows.begin(), entry.rows.end(), anchor.source_offset,
+          [](std::size_t position, const WrappedSourceRow &candidate) {
+            return position < candidate.source_begin;
+          });
+      if (row != entry.rows.begin()) {
+        --row;
+      }
+      return offset + static_cast<std::size_t>(row - entry.rows.begin());
     }
     offset += entry.rows.size();
   }
@@ -381,6 +449,8 @@ auto LogViewport::offset() const -> int { return offset_; }
 
 auto LogViewport::following_tail() const -> bool { return following_tail_; }
 
+void LogViewport::pause_following() { following_tail_ = false; }
+
 void LogViewport::scroll_to(int offset, std::size_t total_rows,
                             int visible_rows) {
   offset_ = std::clamp(offset, 0, max_scroll_offset(total_rows, visible_rows));
@@ -411,20 +481,21 @@ void LogViewport::apply_sync(
     int visible_rows, const std::optional<WrappedLogAnchor> &reflow_anchor) {
   if (following_tail_) {
     offset_ = 0;
-  } else if (result.rebuilt) {
-    if (reflow_anchor.has_value()) {
-      if (const auto row = cache.row_index(*reflow_anchor); row.has_value()) {
-        offset_ = static_cast<int>(cache.total_rows()) -
-                  std::max(1, visible_rows) - static_cast<int>(*row);
-      }
+  } else if (reflow_anchor.has_value()) {
+    if (const auto row = cache.row_index(*reflow_anchor); row.has_value()) {
+      offset_ = static_cast<int>(cache.total_rows()) -
+                std::max(1, visible_rows) - static_cast<int>(*row);
+    } else if (!result.rebuilt) {
+      offset_ += result.appended_rows;
     }
-  } else {
+  } else if (!result.rebuilt) {
     offset_ += result.appended_rows;
   }
 
   offset_ = std::clamp(offset_, 0,
                        max_scroll_offset(cache.total_rows(), visible_rows));
-  following_tail_ = offset_ == 0;
+  // Only explicit navigation (scroll_to) resumes tail-follow. A pinned view
+  // must stay pinned even when it temporarily coincides with the tail.
 }
 
 } // namespace obcx::common::tui_layout

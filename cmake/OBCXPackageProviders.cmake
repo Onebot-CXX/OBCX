@@ -80,9 +80,9 @@ function(_obcx_observe_provider_target OUT TARGET_NAME)
       PARENT_SCOPE)
 endfunction()
 
-function(obcx_find_declared_provider BINDING WORKSPACE STATE_DIR)
+function(obcx_find_declared_provider BINDING GRAPH STATE_DIR)
   if(NOT ARGC EQUAL 3)
-    message(FATAL_ERROR "obcx_find_declared_provider requires binding, workspace and state directory")
+    message(FATAL_ERROR "obcx_find_declared_provider requires binding, graph and state directory")
   endif()
   find_package(Python3 3.11 COMPONENTS Interpreter REQUIRED)
   string(JSON _id GET "${BINDING}" id)
@@ -98,14 +98,6 @@ function(obcx_find_declared_provider BINDING WORKSPACE STATE_DIR)
   set(_binding_file "${STATE_DIR}/${_id}.binding.json")
   set(_observed_file "${STATE_DIR}/${_id}.observed.json")
   file(WRITE "${_binding_file}" "${BINDING}\n")
-  execute_process(
-    COMMAND "${Python3_EXECUTABLE}" "${_OBCX_PACKAGE_PROVIDER_MODULE_DIR}/package_cmake.py"
-            check-environment --binding "${_binding_file}" --workspace "${WORKSPACE}"
-            --build-dir "${CMAKE_BINARY_DIR}"
-    RESULT_VARIABLE _checked ERROR_VARIABLE _error)
-  if(NOT _checked EQUAL 0)
-    message(FATAL_ERROR "[OBCX Packages] ${_id} environment rejected before discovery:\n${_error}")
-  endif()
 
   set(_find_args)
   if(_components)
@@ -159,7 +151,7 @@ function(obcx_find_declared_provider BINDING WORKSPACE STATE_DIR)
       message(FATAL_ERROR "[OBCX Packages] pkg-config probe requires pkg-config discovery")
     endif()
     set(_actual_version "${${_prefix}_VERSION}")
-  elseif(NOT _probe STREQUAL "receipt")
+  else()
     message(FATAL_ERROR "[OBCX Packages] Unsupported explicit version probe ${_probe}")
   endif()
 
@@ -183,7 +175,7 @@ function(obcx_find_declared_provider BINDING WORKSPACE STATE_DIR)
   execute_process(
     COMMAND "${Python3_EXECUTABLE}" "${_OBCX_PACKAGE_PROVIDER_MODULE_DIR}/package_cmake.py"
             verify-provider --binding "${_binding_file}" --observed "${_observed_file}"
-            --workspace "${WORKSPACE}" --build-dir "${CMAKE_BINARY_DIR}"
+            --graph "${GRAPH}"
             --output "${STATE_DIR}/${_id}.verified.json"
     RESULT_VARIABLE _verified ERROR_VARIABLE _error)
   if(NOT _verified EQUAL 0)
