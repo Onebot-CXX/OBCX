@@ -2,6 +2,10 @@
 
 #include <cstddef>
 
+namespace obcx::common {
+struct ActorRuntimeConfig;
+}
+
 namespace obcx::core {
 
 struct RuntimeThreadBudgetRequest {
@@ -21,5 +25,9 @@ struct RuntimeThreadBudget {
 
 [[nodiscard]] auto resolve_runtime_thread_budget(
     RuntimeThreadBudgetRequest request) -> RuntimeThreadBudget;
+
+[[nodiscard]] auto resolve_runtime_thread_budget(
+    const common::ActorRuntimeConfig &runtime_config,
+    size_t configured_io_sources) -> RuntimeThreadBudget;
 
 } // namespace obcx::core

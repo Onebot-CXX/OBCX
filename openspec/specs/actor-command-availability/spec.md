@@ -107,4 +107,4 @@ Business scope projection and authorization moved on 2026-09-30:
 - [Bridge command routing and cross-actor regression](../../../local_actor/obcx-message-bridge/openspec/specs/bridge-command-routing/spec.md).
 - [ExHentai destination and management authorization](../../../local_actor/obcx-exhentai-fetch/openspec/specs/exhentai-command-authorization/spec.md).
 
-These paths refer to independent repositories in the development workspace; core does not own their business contracts. See [ownership migration](../../ownership-migration-2026-09-30.md).
+These paths refer to independent repositories in the development workspace; core does not own their business contracts. See the [current implementation and ownership handoff](../../../packaging/implementation-handoff.md).

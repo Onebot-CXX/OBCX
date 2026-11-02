@@ -67,7 +67,8 @@ auto telegram_rejected(const Json &document) -> BotOperationResult<Json> {
 auto parse_telegram_operation_response(const std::string_view response,
                                        const bool side_effecting)
     -> obcx::bot::BotOperationResult<obcx::bot::Json> {
-  if (response.empty()) {
+  if (response.empty() ||
+      response.size() > obcx::bot::detail::domain_maximum_bytes) {
     return malformed("Telegram", side_effecting);
   }
   const auto document = Json::parse(response, nullptr, false);
@@ -75,7 +76,14 @@ auto parse_telegram_operation_response(const std::string_view response,
       !document.contains("ok") || !document.at("ok").is_boolean()) {
     return malformed("Telegram", side_effecting);
   }
-  if (!document.at("ok").get<bool>()) {
+  const bool ok = document.at("ok").get<bool>();
+  // A response cannot be both a rejection and a result. For mutations this
+  // must retain possible submission, never authorize a retry as a rejection.
+  if ((!ok && document.contains("result")) ||
+      (ok && document.contains("error_code"))) {
+    return malformed("Telegram", side_effecting);
+  }
+  if (!ok) {
     return telegram_rejected(document);
   }
   if (!document.contains("result")) {

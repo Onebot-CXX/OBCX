@@ -131,15 +131,15 @@ For an authorized `/help` call, core SHALL evaluate the shared route-aware eligi
 - **THEN** generation validation fails rather than truncating commands
 
 ### Requirement: Help replies use exact typed conversation operations
-A platform command adapter SHALL translate each bounded help page and normalized source envelope into a closed typed bot `OperationEnvelope` without invoking a provider. The coordinator SHALL submit it through the generation's exact `BotOperationGateway`. Telegram group, positive topic, and private sources and OneBot group/private sources MUST preserve their exact installation and native destination. Inconsistent source identity MUST fail before provider I/O.
+A platform command adapter SHALL translate each bounded help page and trusted typed source into a common SendMessageRequest without provider I/O. The coordinator SHALL validate exact ConversationRef, original reply relation and SingleMessageOnly policy and send through the process-owned typed client/backend. Telegram group/topic/private and OneBot group/private destinations MUST preserve full installation scope without actor-side native address construction. Inconsistent identity MUST fail before I/O.
 
 #### Scenario: Telegram topic requests help
 - **WHEN** authorized `/help` originates in a Telegram topic
-- **THEN** every page uses the existing exact topic-aware text operation with the source installation, group, and topic ID
+- **THEN** every page uses common typed sending to the exact source ConversationRef, retaining topic scope inside its opaque identity
 
 #### Scenario: OneBot private user requests help
 - **WHEN** authorized `/help` originates in a OneBot private conversation
-- **THEN** every page uses the closed private-message operation for the exact installation and native user ID
+- **THEN** every page uses common typed sending to the exact installation-scoped private ConversationRef
 
 #### Scenario: Page outcome is ambiguous
 - **WHEN** a help page may have been submitted but its confirmation is lost

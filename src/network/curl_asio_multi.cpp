@@ -11,6 +11,7 @@
 #include <boost/asio/post.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/strand.hpp>
+#include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <curl/curl.h>
 
@@ -81,6 +82,34 @@ void ensure_curl_initialized() {
            return std::tolower(static_cast<unsigned char>(lhs)) ==
                   std::tolower(static_cast<unsigned char>(rhs));
          });
+}
+
+// Widen before subtraction: valid time points can straddle signed epochs.
+// Round positive fractions up; zero would mean unlimited to libcurl.
+[[nodiscard]] auto remaining_milliseconds(HttpDeadline deadline,
+                                          HttpDeadline now) -> long {
+  using Clock = std::chrono::steady_clock;
+  using Scale = std::ratio_divide<Clock::period, std::milli>;
+  static_assert(std::numeric_limits<Clock::rep>::is_integer &&
+                std::numeric_limits<Clock::rep>::digits <= 64);
+  if (deadline <= now) {
+    return 0;
+  }
+  const auto ticks = static_cast<unsigned __int128>(
+      static_cast<__int128>(deadline.time_since_epoch().count()) -
+      static_cast<__int128>(now.time_since_epoch().count()));
+  constexpr auto wide_max = ~static_cast<unsigned __int128>(0);
+  if (ticks > wide_max / Scale::num) {
+    return std::numeric_limits<long>::max();
+  }
+  const auto scaled = ticks * Scale::num;
+  const auto whole = scaled / Scale::den;
+  const auto fraction = scaled % Scale::den != 0;
+  if (whole >=
+      static_cast<unsigned __int128>(std::numeric_limits<long>::max())) {
+    return std::numeric_limits<long>::max();
+  }
+  return static_cast<long>(whole) + static_cast<long>(fraction);
 }
 
 } // namespace
@@ -214,38 +243,108 @@ public:
           auto cancellation =
               boost::asio::get_associated_cancellation_slot(handler);
           auto work = boost::asio::make_work_guard(executor);
-          Completion completion = [executor, work = std::move(work),
-                                   handler = std::move(handler)](
-                                      boost::system::error_code error,
-                                      CurlResponse response) mutable {
-            boost::asio::post(
-                executor, [work = std::move(work), handler = std::move(handler),
-                           error, response = std::move(response)]() mutable {
-                  handler(error, std::move(response));
-                });
-          };
+          Completion completion =
+              [executor, work = std::move(work), cancellation,
+               handler = std::move(handler)](boost::system::error_code error,
+                                             CurlResponse response) mutable {
+                boost::asio::post(executor,
+                                  [work = std::move(work), cancellation,
+                                   handler = std::move(handler), error,
+                                   response = std::move(response)]() mutable {
+                                    // Initiation, emission and cleanup must
+                                    // share the caller's serialization domain.
+                                    // Clear before resuming the coroutine that
+                                    // owns the signal; never touch its slot
+                                    // afterward.
+                                    cancellation.clear();
+                                    handler(error, std::move(response));
+                                  });
+              };
           auto transfer = std::make_shared<Transfer>(std::move(request),
-                                                     std::move(cancellation),
                                                      std::move(completion));
-          if (transfer->cancellation.is_connected()) {
-            transfer->cancellation.assign(
-                [weak = std::weak_ptr<Impl>{self},
-                 transfer](boost::asio::cancellation_type_t type) {
-                  if (type == boost::asio::cancellation_type::none) {
-                    return;
-                  }
-                  if (auto owner = weak.lock()) {
-                    boost::asio::dispatch(owner->strand_, [owner, transfer] {
-                      owner->cancel_transfer(transfer);
-                    });
-                  }
+          if (cancellation.is_connected()) {
+            cancellation.assign([weak = std::weak_ptr<Impl>{self}, transfer](
+                                    boost::asio::cancellation_type_t type) {
+              if (type == boost::asio::cancellation_type::none) {
+                return;
+              }
+              if (auto owner = weak.lock()) {
+                boost::asio::dispatch(owner->strand_, [owner, transfer] {
+                  owner->cancel_transfer(transfer);
                 });
+              }
+            });
           }
           boost::asio::dispatch(self->strand_, [self, transfer] {
             self->start_transfer(transfer);
           });
         },
         token);
+  }
+
+  static auto perform_until_owned(std::shared_ptr<Impl> self,
+                                  CurlRequest request, HttpDeadline deadline,
+                                  HttpWriteEligibility eligible)
+      -> boost::asio::awaitable<HttpCallResult> {
+    const auto cancellation_state =
+        co_await boost::asio::this_coro::cancellation_state;
+    if (cancellation_state.cancelled() !=
+        boost::asio::cancellation_type::none) {
+      co_return HttpCallResult{
+          boost::asio::error::operation_aborted, false, 0, {}};
+    }
+    auto token = boost::asio::use_awaitable;
+    try {
+      co_return co_await boost::asio::async_initiate<decltype(token),
+                                                     void(HttpCallResult)>(
+          [self, request = std::move(request), deadline,
+           eligible = std::move(eligible)](auto handler) mutable {
+            auto executor = boost::asio::any_io_executor{
+                boost::asio::get_associated_executor(handler, self->strand_)};
+            auto cancellation =
+                boost::asio::get_associated_cancellation_slot(handler);
+            auto work = boost::asio::make_work_guard(executor);
+            Completion completion =
+                [executor, work = std::move(work), cancellation,
+                 handler = std::move(handler)](boost::system::error_code error,
+                                               CurlResponse response) mutable {
+                  HttpCallResult result{error, !error, response.status_code,
+                                        std::move(response.body)};
+                  boost::asio::post(executor,
+                                    [work = std::move(work), cancellation,
+                                     handler = std::move(handler),
+                                     result = std::move(result)]() mutable {
+                                      // Clear the caller-owned slot before its
+                                      // owner resumes.
+                                      cancellation.clear();
+                                      handler(std::move(result));
+                                    });
+                };
+            auto transfer = std::make_shared<Transfer>(std::move(request),
+                                                       std::move(completion));
+            transfer->deadline = deadline;
+            transfer->eligible = std::move(eligible);
+            if (cancellation.is_connected()) {
+              cancellation.assign([weak = std::weak_ptr<Impl>{self}, transfer](
+                                      boost::asio::cancellation_type_t type) {
+                if (type == boost::asio::cancellation_type::none) {
+                  return;
+                }
+                if (auto owner = weak.lock()) {
+                  boost::asio::dispatch(owner->strand_, [owner, transfer] {
+                    owner->cancel_transfer(transfer);
+                  });
+                }
+              });
+            }
+            boost::asio::dispatch(self->strand_, [self, transfer] {
+              self->start_transfer(transfer);
+            });
+          },
+          token);
+    } catch (const boost::system::system_error &error) {
+      co_return HttpCallResult{error.code(), false, 0, {}};
+    }
   }
 
   void shutdown() noexcept {
@@ -266,27 +365,32 @@ private:
   };
 
   struct Transfer final {
-    Transfer(CurlRequest value,
-             boost::asio::cancellation_slot cancellation_slot,
-             Completion completion_handler)
-        : request(std::move(value)), cancellation(std::move(cancellation_slot)),
-          completion(std::move(completion_handler)) {
+    Transfer(CurlRequest value, Completion completion_handler)
+        : request(std::move(value)), completion(std::move(completion_handler)) {
       error_buffer.fill('\0');
     }
 
-    ~Transfer() {
+    ~Transfer() { release_curl_resources(); }
+
+    // Normal completion releases on the driver before caller-side slot cleanup
+    // can drop the last Transfer owner. Destructor fallback covers abandonment.
+    void release_curl_resources() noexcept {
       if (headers != nullptr) {
         curl_slist_free_all(headers);
+        headers = nullptr;
       }
       if (easy != nullptr) {
         curl_easy_cleanup(easy);
+        easy = nullptr;
       }
     }
 
     CurlRequest request;
     CurlResponse response{.status_code = 0, .body = {}, .header_lines = {}};
-    boost::asio::cancellation_slot cancellation;
     Completion completion;
+    std::optional<HttpDeadline> deadline;
+    HttpWriteEligibility eligible;
+    std::unique_ptr<boost::asio::steady_timer> deadline_timer;
     CURL *easy = nullptr;
     curl_slist *headers = nullptr;
     std::array<char, CURL_ERROR_SIZE> error_buffer;
@@ -518,12 +622,84 @@ private:
   }
 
   void start_transfer(const std::shared_ptr<Transfer> &transfer) {
+    if (transfer->complete) {
+      return;
+    }
     if (shutdown_requested_.load()) {
       complete_transfer(transfer, boost::asio::error::operation_aborted);
       return;
     }
     try {
+      if (transfer->deadline) {
+        if (!transfer->eligible ||
+            transfer->request.maximum_response_bytes == 0 ||
+            transfer->request.maximum_response_bytes >
+                std::string{}.max_size() ||
+            transfer->request.maximum_response_bytes >
+                static_cast<std::uint64_t>(
+                    std::numeric_limits<curl_off_t>::max()) ||
+            transfer->request.body.size() >
+                static_cast<std::uint64_t>(
+                    std::numeric_limits<curl_off_t>::max())) {
+          complete_transfer(transfer, boost::asio::error::invalid_argument);
+          return;
+        }
+        const auto remaining = remaining_milliseconds(
+            *transfer->deadline, std::chrono::steady_clock::now());
+        if (remaining == 0) {
+          complete_transfer(transfer, boost::asio::error::timed_out);
+          return;
+        }
+        // Only this path supersedes the relative total timeout. The configured
+        // connect timeout remains a connect-only cap, never the total budget.
+        transfer->request.total_timeout = std::chrono::milliseconds(remaining);
+        transfer->request.connect_timeout = std::chrono::milliseconds(
+            std::min<__int128>(transfer->request.connect_timeout.count(),
+                               std::numeric_limits<long>::max()));
+      }
       configure_transfer(*transfer);
+      if (transfer->deadline) {
+        transfer->deadline_timer =
+            std::make_unique<boost::asio::steady_timer>(strand_);
+        transfer->deadline_timer->expires_at(*transfer->deadline);
+        transfer->deadline_timer->async_wait(
+            [owner = weak_from_this(),
+             weak = std::weak_ptr<Transfer>{transfer}](
+                const boost::system::error_code &error) {
+              if (!error) {
+                if (auto self = owner.lock()) {
+                  if (auto active = weak.lock()) {
+                    self->complete_transfer(active,
+                                            boost::asio::error::timed_out);
+                  }
+                }
+              }
+            });
+        if (std::chrono::steady_clock::now() >= *transfer->deadline) {
+          complete_transfer(transfer, boost::asio::error::timed_out);
+          return;
+        }
+        // Admission is the linearization point, not a promise to prevent writes
+        // after subsequent authority retirement. No internal mutex is held.
+        bool eligible;
+        try {
+          eligible = transfer->eligible();
+        } catch (...) {
+          complete_transfer(transfer, boost::asio::error::invalid_argument);
+          return;
+        }
+        if (transfer->complete) {
+          return;
+        }
+        if (!eligible || shutdown_requested_.load()) {
+          complete_transfer(transfer, boost::asio::error::operation_aborted);
+          return;
+        }
+        if (std::chrono::steady_clock::now() >= *transfer->deadline) {
+          complete_transfer(transfer, boost::asio::error::timed_out);
+          return;
+        }
+      }
       const auto result = curl_multi_add_handle(multi_, transfer->easy);
       if (result != CURLM_OK) {
         throw std::runtime_error("libcurl could not add transfer");
@@ -552,12 +728,20 @@ private:
       return;
     }
     transfer->complete = true;
-    transfer->cancellation.clear();
+    if (transfer->deadline_timer) {
+      (void)transfer->deadline_timer->cancel();
+      transfer->deadline_timer.reset();
+    }
+    if (transfer->deadline && transfer->easy) {
+      curl_easy_getinfo(transfer->easy, CURLINFO_RESPONSE_CODE,
+                        &transfer->response.status_code);
+    }
     if (transfer->added) {
       curl_multi_remove_handle(multi_, transfer->easy);
       transfer->added = false;
       transfers_.erase(transfer->easy);
     }
+    transfer->release_curl_resources();
     auto completion = std::move(transfer->completion);
     auto response = std::move(transfer->response);
     completion(error, std::move(response));
@@ -781,6 +965,13 @@ CurlAsioMulti::~CurlAsioMulti() { shutdown(); }
 auto CurlAsioMulti::perform(CurlRequest request)
     -> boost::asio::awaitable<CurlResponse> {
   return impl_->perform(std::move(request));
+}
+
+auto CurlAsioMulti::perform_until(CurlRequest request, HttpDeadline deadline,
+                                  HttpWriteEligibility eligible)
+    -> boost::asio::awaitable<HttpCallResult> {
+  return Impl::perform_until_owned(impl_, std::move(request), deadline,
+                                   std::move(eligible));
 }
 
 void CurlAsioMulti::shutdown() noexcept {

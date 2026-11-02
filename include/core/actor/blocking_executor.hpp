@@ -139,7 +139,9 @@ public:
    * Submit a synchronous callable and complete through the token's associated
    * executor. Non-void completion signature is
    * void(exception_ptr, optional<Result>); void completion is
-   * void(exception_ptr).
+   * void(exception_ptr). Core owns the worker and completion trampolines:
+   * callable destruction precedes completion publication, so an actor cannot
+   * finish draining while actor-defined worker frames are still unwinding.
    */
   template <BlockingCallable Func, typename CompletionToken>
   auto async_run(Func &&function, CompletionToken &&token) {
@@ -159,49 +161,18 @@ public:
             auto work_guard = std::make_shared<
                 boost::asio::executor_work_guard<boost::asio::any_io_executor>>(
                 boost::asio::make_work_guard(executor));
-            auto complete = [shared_handler, executor,
-                             work_guard](std::exception_ptr exception) mutable {
-              boost::asio::post(executor,
-                                [shared_handler, work_guard,
-                                 exception = std::move(exception)]() mutable {
-                                  (*shared_handler)(std::move(exception));
-                                  work_guard->reset();
-                                });
+            auto complete = [shared_handler = std::move(shared_handler),
+                             work_guard = std::move(work_guard)](
+                                std::exception_ptr exception) mutable {
+              (*shared_handler)(std::move(exception));
+              work_guard->reset();
             };
-
-            {
-              std::scoped_lock lock(state->admission_mutex);
-              if (!state->accepting.load(std::memory_order_acquire)) {
-                state->rejected.fetch_add(1, std::memory_order_relaxed);
-                complete(std::make_exception_ptr(BlockingExecutorStopped{}));
-                return;
-              }
-              state->submitted.fetch_add(1, std::memory_order_relaxed);
-              state->pending.fetch_add(1, std::memory_order_relaxed);
-              try {
-                boost::asio::post(
-                    state->pool, [state, function = std::move(function),
-                                  complete = std::move(complete)]() mutable {
-                      state->pending.fetch_sub(1, std::memory_order_relaxed);
-                      state->running.fetch_add(1, std::memory_order_relaxed);
-                      std::exception_ptr exception;
-                      try {
-                        std::invoke(function);
-                        state->completed.fetch_add(1,
-                                                   std::memory_order_relaxed);
-                      } catch (...) {
-                        exception = std::current_exception();
-                        state->failed.fetch_add(1, std::memory_order_relaxed);
-                      }
-                      state->running.fetch_sub(1, std::memory_order_relaxed);
-                      complete(std::move(exception));
-                    });
-              } catch (...) {
-                state->pending.fetch_sub(1, std::memory_order_relaxed);
-                state->rejected.fetch_add(1, std::memory_order_relaxed);
-                complete(std::current_exception());
-              }
-            }
+            dispatch_work(
+                state, std::move(executor),
+                [function = std::move(function)]() mutable {
+                  std::invoke(function);
+                },
+                std::move(complete));
           },
           token);
     } else {
@@ -218,53 +189,20 @@ public:
             auto work_guard = std::make_shared<
                 boost::asio::executor_work_guard<boost::asio::any_io_executor>>(
                 boost::asio::make_work_guard(executor));
-            auto complete = [shared_handler, executor, work_guard](
-                                std::exception_ptr exception,
-                                std::optional<result_type> result) mutable {
-              boost::asio::post(
-                  executor,
-                  [shared_handler, work_guard, exception = std::move(exception),
-                   result = std::move(result)]() mutable {
-                    (*shared_handler)(std::move(exception), std::move(result));
-                    work_guard->reset();
-                  });
+            auto result = std::make_shared<std::optional<result_type>>();
+            auto complete = [shared_handler = std::move(shared_handler),
+                             work_guard = std::move(work_guard),
+                             result](std::exception_ptr exception) mutable {
+              (*shared_handler)(std::move(exception), std::move(*result));
+              work_guard->reset();
             };
-
-            {
-              std::scoped_lock lock(state->admission_mutex);
-              if (!state->accepting.load(std::memory_order_acquire)) {
-                state->rejected.fetch_add(1, std::memory_order_relaxed);
-                complete(std::make_exception_ptr(BlockingExecutorStopped{}),
-                         std::nullopt);
-                return;
-              }
-              state->submitted.fetch_add(1, std::memory_order_relaxed);
-              state->pending.fetch_add(1, std::memory_order_relaxed);
-              try {
-                boost::asio::post(
-                    state->pool, [state, function = std::move(function),
-                                  complete = std::move(complete)]() mutable {
-                      state->pending.fetch_sub(1, std::memory_order_relaxed);
-                      state->running.fetch_add(1, std::memory_order_relaxed);
-                      std::exception_ptr exception;
-                      std::optional<result_type> result;
-                      try {
-                        result.emplace(std::invoke(function));
-                        state->completed.fetch_add(1,
-                                                   std::memory_order_relaxed);
-                      } catch (...) {
-                        exception = std::current_exception();
-                        state->failed.fetch_add(1, std::memory_order_relaxed);
-                      }
-                      state->running.fetch_sub(1, std::memory_order_relaxed);
-                      complete(std::move(exception), std::move(result));
-                    });
-              } catch (...) {
-                state->pending.fetch_sub(1, std::memory_order_relaxed);
-                state->rejected.fetch_add(1, std::memory_order_relaxed);
-                complete(std::current_exception(), std::nullopt);
-              }
-            }
+            dispatch_work(
+                state, std::move(executor),
+                [function = std::move(function),
+                 result = std::move(result)]() mutable {
+                  result->emplace(std::invoke(function));
+                },
+                std::move(complete));
           },
           token);
     }
@@ -275,21 +213,31 @@ public:
       -> boost::asio::awaitable<detail::BlockingCallableResult<Func>,
                                 boost::asio::any_io_executor> {
     using result_type = detail::BlockingCallableResult<Func>;
+    // This entry point must not itself be a coroutine: async_run captures the
+    // decayed callable and shared pool state now, before either the callable's
+    // temporary or this facade can be destroyed. Deferred awaiting keeps only
+    // those owned values, and still joins the worker before returning a result.
     if constexpr (std::is_void_v<result_type>) {
-      co_await async_run(std::forward<Func>(function),
-                         boost::asio::use_awaitable);
-      co_return;
+      return async_run(std::forward<Func>(function),
+                       boost::asio::use_awaitable);
     } else {
-      auto result = co_await async_run(std::forward<Func>(function),
-                                       boost::asio::use_awaitable);
-      if (!result.has_value()) {
-        throw std::logic_error("blocking callable completed without a result");
-      }
-      co_return std::move(*result);
+      return await_result<result_type>(
+          async_run(std::forward<Func>(function), boost::asio::use_awaitable));
     }
   }
 
 private:
+  template <typename Result>
+  static auto await_result(boost::asio::awaitable<std::optional<Result>,
+                                                  boost::asio::any_io_executor>
+                               operation)
+      -> boost::asio::awaitable<Result, boost::asio::any_io_executor> {
+    auto result = co_await std::move(operation);
+    if (!result.has_value())
+      throw std::logic_error("blocking callable completed without a result");
+    co_return std::move(*result);
+  }
+
   struct State {
     explicit State(const std::size_t count)
         : pool(count), worker_count(count) {}
@@ -307,6 +255,12 @@ private:
     std::atomic_uint64_t failed = 0;
     std::atomic_uint64_t rejected = 0;
   };
+
+  struct Work;
+  static void dispatch_work(
+      std::shared_ptr<State> state, boost::asio::any_io_executor executor,
+      std::move_only_function<void()> work,
+      std::move_only_function<void(std::exception_ptr)> completion);
 
   std::shared_ptr<State> state_;
 };

@@ -91,7 +91,7 @@ The completed runtime and installed SDK SHALL NOT define or depend on the oversi
 
 #### Scenario: Actor package sends a bot operation
 - **WHEN** an installed actor package needs a supported QQ or Telegram action
-- **THEN** it compiles against `BotOperationClient` and data-only operation contracts without including process component headers
+- **THEN** it compiles against `BotClient` and data-only operation contracts without including process component headers
 
 ### Requirement: Installation recipes are covered by executable conformance tests
 Every supported recipe SHALL have executable tests for assembly, capability publication, ingress, all advertised operations, lifecycle rollback, repeated stop, and executor-safe destruction. Tests MUST use placeholders and fakes and MUST NOT require production credentials or external provider access.

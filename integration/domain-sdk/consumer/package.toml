@@ -1,0 +1,7 @@
+schema_version = 2
+package = { id = "obcx-integration.standard-consumer", name = "offline_standard", version = "0.1.0", kind = "actor" }
+actor = { name = "offline_standard", abi = 2, entrypoint = "obcx_create_actor_v2", input_contract_schema = 3 }
+artifact = { kind = "shared-library", name = "offline_standard", target = "offline_standard_actor", export_target = "obcx::offline_standard_actor", platforms = ["linux-x86_64"] }
+dependencies = { libraries = [], actors = [], system = [{ id = "obcx-sdk", version = ">=2.4.1,<3.0.0", targets = ["obcx::obcx_core"], visibility = "private" }] }
+test_dependencies = { libraries = [], system = [] }
+compatibility = { cpp_standard = 26, compiler = { id = "GNU", version = ">=16.1.0" }, stdlib = "libstdc++", cxx11_abi = 1, pic = true, obcx = ">=2.4.1,<3.0.0", actor_abi_min = 2, actor_abi_max = 2, reflection_macro = 202506 }

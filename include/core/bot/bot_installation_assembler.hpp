@@ -16,6 +16,10 @@ public:
       -> ComponentRecipeValidation;
   [[nodiscard]] static auto assemble(const BotInstallationPlan &plan)
       -> std::unique_ptr<BotInstallation>;
+  [[nodiscard]] static auto assemble(
+      const BotInstallationPlan &plan,
+      std::shared_ptr<BoundedFileReader> file_reader)
+      -> std::unique_ptr<BotInstallation>;
 };
 
 } // namespace obcx::core

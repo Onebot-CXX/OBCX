@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/bot/operation_gateway.hpp"
+#include "core/bot/domain_messaging.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <optional>
@@ -31,11 +31,11 @@ struct CommandCatalogPublishResult {
 };
 
 struct CommandReplyBuildResult {
-  std::optional<bot::OperationEnvelope> operation;
+  std::optional<bot::SendMessageRequest> request;
   std::string code;
   std::string message;
 
-  explicit operator bool() const noexcept { return operation.has_value(); }
+  explicit operator bool() const noexcept { return request.has_value(); }
 };
 
 class CommandCatalogPublisher {

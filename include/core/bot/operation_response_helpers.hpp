@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/messaging.hpp"
+#include "core/bot/operation_result.hpp"
 
 namespace obcx::core::operation_detail {
 inline auto provider_id(const bot::Json &document, const std::string_view key)

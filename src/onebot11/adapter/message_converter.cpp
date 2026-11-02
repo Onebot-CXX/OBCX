@@ -36,98 +36,89 @@ auto MessageConverter::cq_escape(std::string s) -> std::string {
   return s;
 }
 
-auto MessageConverter::cq_unescape(std::string s) -> std::string {
-  if (s.empty()) {
-    return s;
+void MessageConverter::visit_cq_unescaped(
+    std::string_view raw, const std::function<void(std::string_view)> &visit) {
+  // One pass has the same precedence as the historical ordered replacements:
+  // an &amp; result is never reinterpreted as another entity.
+  while (!raw.empty()) {
+    auto amp = raw.find('&');
+    if (amp != 0) {
+      visit(raw.substr(0, amp));
+      if (amp == std::string_view::npos)
+        break;
+      raw.remove_prefix(amp);
+    }
+    bool decoded = false;
+    for (const auto &[encoded, plain] :
+         {std::pair<std::string_view, std::string_view>{"&#91;", "["},
+          {"&#93;", "]"},
+          {"&#44;", ","},
+          {"&amp;", "&"}}) {
+      if (raw.starts_with(encoded)) {
+        visit(plain);
+        raw.remove_prefix(encoded.size());
+        decoded = true;
+        break;
+      }
+    }
+    if (!decoded) {
+      visit(raw.substr(0, 1));
+      raw.remove_prefix(1);
+    }
   }
+}
 
-  auto replace_all = [](std::string &str, const std::string &from,
-                        const std::string &to) -> void {
-    if (from.empty()) {
-      return;
-    }
-    size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
-      str.replace(start_pos, from.length(), to);
-      start_pos += to.length();
-    }
-  };
+auto MessageConverter::cq_unescape(std::string s) -> std::string {
+  std::string result;
+  visit_cq_unescaped(s, [&](auto part) { result.append(part); });
+  return result;
+}
 
-  replace_all(s, "&#91;", "[");
-  replace_all(s, "&#93;", "]");
-  replace_all(s, "&#44;", ",");
-  replace_all(s, "&amp;", "&");
+void MessageConverter::visit_v11_parameters(
+    std::string_view raw,
+    const std::function<void(std::string_view, std::string_view)> &visit) {
+  static const re2::RE2 pattern(R"(([a-zA-Z0-9\-_]+)=([^,\]]*))");
+  re2::StringPiece remaining(raw), key, value;
+  while (RE2::FindAndConsume(&remaining, pattern, &key, &value))
+    visit(std::string_view(key.data(), key.size()),
+          std::string_view(value.data(), value.size()));
+}
 
-  return s;
+void MessageConverter::visit_v11_string(
+    std::string_view raw, const std::function<void(CqSegmentView)> &visit) {
+  static const re2::RE2 pattern(R"(\[CQ:([a-zA-Z0-9\-\._]+)(?:,([^\]]*))?\])");
+  re2::StringPiece remaining(raw), type, params;
+  std::size_t last = 0;
+  while (RE2::FindAndConsume(&remaining, pattern, &type, &params)) {
+    const auto end = raw.size() - remaining.size();
+    // Preserve the predecessor's empty-parameter match boundary as well.
+    const auto length =
+        5 + type.size() + (params.empty() ? 0 : 1 + params.size());
+    const auto start = end - length;
+    if (start > last)
+      visit({"text", {}, raw.substr(last, start - last)});
+    visit({std::string_view(type.data(), type.size()),
+           std::string_view(params.data(), params.size()), std::nullopt});
+    last = end;
+  }
+  if (last < raw.size())
+    visit({"text", {}, raw.substr(last)});
 }
 
 auto MessageConverter::from_v11_string(const std::string &raw_message)
     -> common::Message {
   common::Message message;
-  if (raw_message.empty()) {
-    return message;
-  }
-
-  // Recognize protocol syntax BEFORE decoding escapes. Escaped CQ-looking
-  // text is literal text, not a mention/reply/image segment.
-
-  static const re2::RE2 cq_regex(R"(\[CQ:([a-zA-Z0-9\-\._]+)(?:,([^\]]*))?\])");
-  static const re2::RE2 param_regex(R"(([a-zA-Z0-9\-_]+)=([^,\]]*))");
-
-  re2::StringPiece input(raw_message);
-  re2::StringPiece remaining = input;
-  std::string type_match;
-  std::string params_match;
-
-  size_t last_pos = 0;
-
-  while (
-      RE2::FindAndConsume(&remaining, cq_regex, &type_match, &params_match)) {
-    // RE2::FindAndConsume only exposes captures; recover match_start by
-    // subtracting the rebuilt match length ("[CQ:" + type + optional ","+params
-    // + "]") from match_end.
-    size_t match_end = raw_message.size() - remaining.size();
-    size_t match_len = 4 + type_match.size() + 1;
-    if (!params_match.empty()) {
-      match_len += 1 + params_match.size();
-    }
-    size_t current_pos = match_end - match_len;
-
-    if (current_pos > last_pos) {
-      std::string text =
-          cq_unescape(raw_message.substr(last_pos, current_pos - last_pos));
-      if (!text.empty()) {
-        message.push_back({.type = "text", .data = {{"text", text}}});
-      }
-    }
-
+  visit_v11_string(raw_message, [&](CqSegmentView view) {
     nlohmann::json data;
-
-    if (!params_match.empty()) {
-      re2::StringPiece params_input(params_match);
-      std::string key;
-      std::string value;
-      while (RE2::FindAndConsume(&params_input, param_regex, &key, &value)) {
-        if (!key.empty()) {
-          data[key] = cq_unescape(value);
-        }
-      }
-    }
-
-    if (!type_match.empty()) {
-      message.push_back({.type = type_match, .data = data});
-    }
-
-    last_pos = match_end;
-  }
-
-  if (last_pos < raw_message.length()) {
-    std::string remaining_text = cq_unescape(raw_message.substr(last_pos));
-    if (!remaining_text.empty()) {
-      message.push_back({.type = "text", .data = {{"text", remaining_text}}});
-    }
-  }
-
+    if (view.literal_text)
+      data = {{"text", cq_unescape(std::string(*view.literal_text))}};
+    else
+      visit_v11_parameters(view.parameters, [&](auto key, auto value) {
+        data[std::string(key)] = cq_unescape(std::string(value));
+      });
+    message.push_back(
+        {.type = std::string(view.type), .data = std::move(data)});
+  });
   return message;
 }
 

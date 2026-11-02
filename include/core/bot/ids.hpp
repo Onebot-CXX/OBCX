@@ -1,6 +1,6 @@
 #pragma once
 
-#include <nlohmann/json.hpp>
+#include "core/bot/validation.hpp"
 
 #include <compare>
 #include <cstddef>
@@ -26,6 +26,16 @@ constexpr auto valid_bot_id(const std::string_view value) noexcept -> bool {
   return true;
 }
 
+inline auto checked_bot_id(const std::string_view value) -> std::string_view {
+  if (!valid_bot_id(value)) {
+    // Do not echo arbitrary input, which could contain credentials/controls.
+    throw std::invalid_argument(
+        "bot ID must contain 1..128 lowercase ASCII letters, digits, '.', "
+        "'_' or '-'");
+  }
+  return value;
+}
+
 struct SurfaceIdTag {};
 struct ActionIdTag {};
 
@@ -43,13 +53,7 @@ public:
 
 private:
   static auto checked(const std::string_view value) -> std::string_view {
-    if (!valid_bot_id(value)) {
-      // Do not echo arbitrary input, which could contain credentials/controls.
-      throw std::invalid_argument(
-          "bot ID must contain 1..128 lowercase ASCII letters, digits, '.', "
-          "'_' or '-'");
-    }
-    return value;
+    return checked_bot_id(value);
   }
 
   std::string value_;
@@ -74,6 +78,7 @@ struct adl_serializer<obcx::bot::detail::StableBotId<Tag>> {
   }
 
   static auto from_json(const json &document) -> Id {
+    obcx::bot::detail::validate_domain_wire(document);
     if (!document.is_string()) {
       throw std::invalid_argument("bot ID must be a string");
     }

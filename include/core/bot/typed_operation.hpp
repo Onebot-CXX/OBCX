@@ -24,7 +24,9 @@ concept TypedOperation =
       } -> std::same_as<void>;
     };
 
+// Sends carry domain failures with physical evidence; they must use BotClient.
 template <TypedOperation Request>
+requires(!requires { OperationTraits<Request>::requires_outcome_client; })
 [[nodiscard]] auto invoke(BotOperationGateway &gateway, Request request)
     -> boost::asio::awaitable<
         BotOperationResult<typename OperationTraits<Request>::result_type>> {
@@ -56,7 +58,14 @@ template <TypedOperation Request>
     if (!reply.ok()) {
       co_return Reply::failure(std::move(*reply.error));
     }
-    auto result = GatewayCodec<Result>::decode(std::move(*reply.value));
+    auto result = [&]() -> Result {
+      if constexpr (requires {
+                      Traits::decode_result(request, std::move(*reply.value));
+                    })
+        return Traits::decode_result(request, std::move(*reply.value));
+      else
+        return GatewayCodec<Result>::decode(std::move(*reply.value));
+    }();
     Traits::validate_result(request, result);
     co_return Reply::success(std::move(result));
   } catch (...) {

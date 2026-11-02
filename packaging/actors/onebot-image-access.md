@@ -1,80 +1,81 @@
-# OneBot image access through the frozen SDK
+# OneBot media access through the domain SDK
 
-Public headers: `onebot11/bot/image.hpp` (also included by `operations.hpp`) and
-`network/image_fetch.hpp`. Use a matching newly frozen SDK; an older SDK without
-these interfaces is not compatible merely because its version string matches.
-No additional actor-side HTTP or storage library is required.
+## Ordinary actor migration
 
-## Native reference and typed `get_image`
+Use `<core/bot/bot_client.hpp>` and an actually observed `MediaRef`:
+`BotClient::read_media(ReadMediaRequest{media, maximum_bytes})` returns
+`BotOperationResult<MediaBlob>`. The byte bound is explicit and positive; it is
+not a new default. Check failure before accessing the value. The blob owns its
+`BytesSource`, available metadata, optional kind and optional stable identity.
+Unknown metadata is not zero, an inferred filename or proof of playability.
 
-`OneBotImageRef` contains the exact OneBot installation and the incoming image
-segment's native `file` identifier. `from_segment(installation, segment)` accepts
-an image segment and rejects URL/path-shaped identifiers. Callers must establish
-that the segment is trusted platform input and enforce their own conversation,
-topic and attachment visibility rules. User-written `<image>` text does not
-create a trusted reference.
+Retain the original installation/source association and enforce the actor's
+conversation/topic/attachment visibility policy. A restored archive, opaque ID,
+URL or user-written `<image>` text does not renew read authority. QQ's retained
+receive/query receipts use their original origin, bounds and private retention;
+eviction, expiry or account retirement is explicit unavailability, never a
+reason to reacquire through an old raw-event URL.
 
-```cpp
-auto image = obcx::onebot11::bot::OneBotImageRef::from_segment(
-    installation, segment);
-auto result = co_await obcx::bot::invoke(
-    gateway, obcx::onebot11::bot::GetOneBotImageRequest{
-                 .image = std::move(image), .download = false});
-```
+The previous actor example using `OneBotImageRef::from_segment`,
+`GetOneBotImageRequest`, `onebot11.image.get`, and direct URL consumption is
+retired. `onebot11/bot/image.hpp` is now a **process-only** response recipe and is
+not installed in SDK2.5.18. Do not export it, parse native segments in an ordinary
+actor, or recover it by including core source headers. Chat LLM's migrated image
+path uses bounded owned bytes; this document no longer instructs callers to send
+signed URLs or server paths to an external model.
 
-The action ID is `onebot11.image.get`; the provider action is the standard
-OneBot 11 `get_image`. `download` is mandatory in the typed request and is sent
-explicitly. It is a verified **LLOneBot extension**, not a guarantee made by the
-OneBot 11 standard. With `false`, the audited LLOneBot implementation performs
-metadata/URL lookup without its local download step. OBCX does not manage rkeys,
-reconstruct signed URLs, or add an image cache.
+## Explicit standard media queries
 
-Handle operation failure before accessing `result.value`. `OneBotImageInfo`
-contains the matching image reference and:
+The separately installed `<onebot11/bot/standard_media_queries.hpp>` models
+`GetImageParameters`, `GetRecordParameters`, scoped selectors and explicit
+`RecordFormat`. Use the named standard client operation with its required limits
+and execution mode. This is query intent, not an observed attachment capability.
 
-- `file_path`: the **OneBot server's** filesystem path, possibly empty. Never
-  interpret it as an actor-host path or pass it to an external model.
-- `url`: optional extension, represented by an empty string when absent. Present
-  values must be HTTP(S) URLs on the supported QQ image CDN hosts; userinfo,
-  arbitrary hosts/ports, control characters and fragments are rejected.
-- `file_name` and optional `file_size`: validated metadata, not image contents.
-  Decimal string sizes from LLOneBot are normalized to unsigned integers;
-  malformed/overflowing/conflicting values fail. Unknown size is not zero.
+`ImageFileData` and `ConvertedRecordData` carry `ProviderLocalFile` with an
+explicitly accessed `SensitiveText` path. That path belongs to the provider:
+it does not authorize an OBCX-host open, mapping, download or disclosure to a
+model/log. A record's requested output format is not verified byte metadata.
+Async/rate-limited acknowledgment is not a completed query. The private
+LLOneBot `download=false` behavior is not a standard API promise or a new public
+ordinary-actor URL escape hatch.
 
-Base64 and unrelated provider response fields are not propagated. A standard
-path-only response is a valid typed result but **not** a successful URL-only
-lookup. Such a consumer must report the missing capability rather than read the
-path or silently reuse the incoming message's old URL.
+## Acquisition and caller responsibilities
 
-A new call is not proof of a new signature: LLOneBot can reuse an already-signed
-origin URL, and its file cache may no longer retain a historical file. There is
-no reliable expiry field in the audited `get_image` response. Consumers must
-supply explicit request/reuse/retry bounds; there is no assumed five-minute
-lifetime. Resolved URLs and server paths are transient results, not durable
-attachment identifiers or log fields.
+The owning adapter uses existing bounded, credential-isolated HTTP acquisition
+where actual evidence permits it. SDK syntax validation is not a hostname/IP/CDN
+allowlist or a DNS-pinned SSRF sandbox. Destination/business authorization remains
+caller/deployment-owned. Do not add an SDK access policy or silently inherit bot
+credentials for arbitrary media hosts.
 
-## Bounded HTTP acquisition
+For a caller-owned `HttpSource`, actual bytes must pass the selected adapter's
+bounds, declared-size and format checks before sending. Complete-body acquisition
+cannot silently accept a Range prefix. For `LocalFile`, callers supply the final
+path: QQ's path-capable recipe serializes the provider-visible path without
+assuming that it exists on the OBCX host; Telegram's upload recipe must actually
+read its supplied path through the process reader. Neither maps paths for actors.
 
-`obcx::network::fetch_image` is the shared primitive for Bridge downloads and
-Range probes. `ImageFetchRequest` explicitly specifies `url`, `timeout`,
-`maximum_bytes`, and `prefix_bytes` (`std::nullopt` for a full body). It uses core
-HTTP transport, direct connections, bounded responses, and no redirect following,
-retry policy or disk storage. A server ignoring Range cannot bypass the body cap.
-HTTP statuses, MIME interpretation, retries, placeholders and normalization remain
-actor policy. Cancellation propagates as Asio `operation_aborted`.
+Bridge owns conversion, cache keys, temporary files, leases, placeholders and
+cleanup through all outputs/cancellation/uncertain effects. It must not recover a
+failed read from a native URL/path. See the
+[QQ media implementation boundaries](../../src/onebot11/bot/domain-api.md) and
+[Telegram media matrix](../../src/telegram/bot/domain-api.md) for supported kinds
+and explicit unavailable combinations. A bounded readable blob is not decoder,
+transcoding or provider-playback acceptance.
 
-This is a trusted-caller network API, **not** a DNS-pinned SSRF sandbox and not a
-model-facing arbitrary-URL tool. Lazy QQ LLM vision uses `get_image`'s URL as an
-actual provider image part; it need not call the HTTP acquisition primitive.
+## Historical protocol evidence and verification boundary
 
-## Upstream evidence and verification boundary
+The earlier private get_image review used:
 
-- Standard: <https://github.com/botuniverse/onebot-11/blob/master/api/public.md>
-- Audited LLOneBot commit (renamed repository):
-  <https://github.com/LLOneBot/LuckyLilliaBot/tree/dc2b2b90092ef0f571b5546878288b83fff1e436>
-- Relevant sources: `src/onebot11/action/file/GetImage.ts`, `GetFile.ts`,
+- [OneBot11 public API](https://github.com/botuniverse/onebot-11/blob/master/api/public.md).
+- [LLOneBot/LuckyLilliaBot commit dc2b2b90092ef0f571b5546878288b83fff1e436](https://github.com/LLOneBot/LuckyLilliaBot/tree/dc2b2b90092ef0f571b5546878288b83fff1e436),
+  notably `src/onebot11/action/file/GetImage.ts`, `GetFile.ts`,
   `src/onebot11/transform/message/incoming.ts`, and `src/ntqqapi/api/file.ts`.
 
-These sources establish the audited contract, not the version or availability of
-a deployed bot. Building or freezing an SDK does not deploy it or restart any
-process. Follow the [actor-only build procedure](README.md).
+Those references are historical protocol evidence, not the deployed provider's
+identity or a reason to expose a private recipe. The complete standard inventory
+has its separately pinned reference in the change's standard coverage matrix.
+Current SDK/core and real actor builds are recorded under
+`build/domain-sdk-2.5.18-current/`; media/provider/cancellation and recovery
+acceptance remain open. Follow the [actor-only build procedure](README.md) and
+[coordinated cutover gates](domain-sdk-cutover.md); builds and metadata checks do
+not authorize deployment, restart or probing.

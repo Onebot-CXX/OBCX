@@ -132,6 +132,10 @@ public:
   }
   [[nodiscard]] auto lifecycle_order() const -> std::vector<std::string>;
 
+  [[nodiscard]] auto has_capability(const CapabilityId &id) const -> bool {
+    return capabilities_.contains(id);
+  }
+
   template <typename Capability>
   [[nodiscard]] auto capability(const CapabilityId &id) const
       -> std::shared_ptr<Capability> {

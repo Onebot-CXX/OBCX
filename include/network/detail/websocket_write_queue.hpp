@@ -20,6 +20,7 @@ public:
   using WriteOperation =
       std::function<asio::awaitable<void>(const std::string &)>;
   using CancelOperation = std::function<void()>;
+  using WriteEligibility = std::function<bool()>;
 
   WebsocketWriteQueue(asio::any_io_executor executor, std::size_t capacity,
                       WriteOperation write_operation,
@@ -29,7 +30,13 @@ public:
   WebsocketWriteQueue(const WebsocketWriteQueue &) = delete;
   auto operator=(const WebsocketWriteQueue &) -> WebsocketWriteQueue & = delete;
 
-  auto send(std::string message) -> asio::awaitable<void>;
+  // Requires a nonempty guard. Applicable cancellation delivery before the
+  // writer's claim revokes pending work; after claim it can race guard/write.
+  // Asio cancellation-slot access/emission requires caller serialization.
+  // No delivery or physical interruption guarantee. Payload/guard may remain
+  // until dequeue or drain.
+  auto send(std::string message, WriteEligibility eligible)
+      -> asio::awaitable<void>;
   auto run() -> asio::awaitable<void>;
   void stop(std::exception_ptr failure = {});
 

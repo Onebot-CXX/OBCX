@@ -5,6 +5,7 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -29,15 +30,11 @@ enum class BotOperationErrorCode : std::uint8_t {
   CacheUnavailable,
 };
 
-[[nodiscard]] inline auto redact_bot_diagnostic(const std::string_view value)
-    -> std::string {
-  std::string lowered;
-  lowered.reserve(value.size());
-  for (const auto character : value) {
-    lowered.push_back(
-        static_cast<char>(std::tolower(static_cast<unsigned char>(character))));
-  }
-  constexpr std::array sensitive_markers = {
+namespace detail {
+
+[[nodiscard]] inline auto contains_sensitive_bot_diagnostic_marker(
+    const std::string_view value) -> bool {
+  static constexpr std::array sensitive_markers = {
       std::string_view{"authorization:"}, std::string_view{"bearer "},
       std::string_view{"access_token"},   std::string_view{"api_key="},
       std::string_view{"apikey="},        std::string_view{"secret="},
@@ -46,9 +43,31 @@ enum class BotOperationErrorCode : std::uint8_t {
       std::string_view{"http://"},        std::string_view{"https://"},
   };
   for (const auto marker : sensitive_markers) {
-    if (lowered.contains(marker)) {
-      return "[redacted provider diagnostic]";
+    if (value.size() < marker.size()) {
+      continue;
     }
+    for (std::size_t start = 0; start <= value.size() - marker.size();
+         ++start) {
+      std::size_t matched = 0;
+      while (matched < marker.size() &&
+             static_cast<char>(std::tolower(static_cast<unsigned char>(
+                 value[start + matched]))) == marker[matched]) {
+        ++matched;
+      }
+      if (matched == marker.size()) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+} // namespace detail
+
+[[nodiscard]] inline auto redact_bot_diagnostic(const std::string_view value)
+    -> std::string {
+  if (detail::contains_sensitive_bot_diagnostic_marker(value)) {
+    return "[redacted provider diagnostic]";
   }
   return std::string{value};
 }
@@ -66,6 +85,7 @@ enum class BotOperationErrorCode : std::uint8_t {
 
 [[nodiscard]] inline auto submission_safety_from_id(
     const std::string_view value) -> SubmissionSafety {
+  detail::validate_identifier(value, "submission safety", 24);
   if (value == "definitely_not_submitted") {
     return SubmissionSafety::DefinitelyNotSubmitted;
   }
@@ -107,6 +127,7 @@ enum class BotOperationErrorCode : std::uint8_t {
 
 [[nodiscard]] inline auto error_code_from_id(const std::string_view value)
     -> BotOperationErrorCode {
+  detail::validate_identifier(value, "error code", 18);
   constexpr std::array codes = {
       BotOperationErrorCode::InvalidRequest,
       BotOperationErrorCode::RouteNotFound,
@@ -144,12 +165,12 @@ struct BotOperationError {
           "bot error contains an invalid code or submission safety");
     }
     detail::validate_identifier(message, "error message", 2048);
-    if (redact_bot_diagnostic(message) != message) {
+    if (detail::contains_sensitive_bot_diagnostic_marker(message)) {
       throw std::invalid_argument("error message must be redacted");
     }
     if (provider_code.has_value()) {
       detail::validate_identifier(*provider_code, "provider_code", 256);
-      if (redact_bot_diagnostic(*provider_code) != *provider_code) {
+      if (detail::contains_sensitive_bot_diagnostic_marker(*provider_code)) {
         throw std::invalid_argument("provider_code must be redacted");
       }
     }
@@ -170,10 +191,11 @@ inline void to_json(Json &document, const SubmissionSafety safety) {
 }
 
 inline void from_json(const Json &document, SubmissionSafety &safety) {
+  detail::validate_domain_wire(document);
   if (!document.is_string()) {
     throw std::invalid_argument("SubmissionSafety must be a string");
   }
-  safety = submission_safety_from_id(document.get<std::string>());
+  safety = submission_safety_from_id(document.get_ref<const std::string &>());
 }
 
 inline void to_json(Json &document, const BotOperationErrorCode code) {
@@ -181,10 +203,11 @@ inline void to_json(Json &document, const BotOperationErrorCode code) {
 }
 
 inline void from_json(const Json &document, BotOperationErrorCode &code) {
+  detail::validate_domain_wire(document);
   if (!document.is_string()) {
     throw std::invalid_argument("BotOperationErrorCode must be a string");
   }
-  code = error_code_from_id(document.get<std::string>());
+  code = error_code_from_id(document.get_ref<const std::string &>());
 }
 
 inline void to_json(Json &document, const BotOperationError &error) {
@@ -202,14 +225,15 @@ inline void to_json(Json &document, const BotOperationError &error) {
 }
 
 inline void from_json(const Json &document, BotOperationError &error) {
+  detail::validate_domain_wire(document);
   detail::require_object(document, "BotOperationError");
   if (!document.contains("code") || !document.contains("submission_safety")) {
     throw std::invalid_argument(
         "BotOperationError requires code and submission_safety");
   }
   error.code = document.at("code").get<BotOperationErrorCode>();
-  error.message =
-      detail::require_string(document, "message", "BotOperationError");
+  error.message = detail::require_identifier(document, "message",
+                                             "BotOperationError", 2048);
   if (!document.contains("retryable") ||
       !document.at("retryable").is_boolean()) {
     throw std::invalid_argument("BotOperationError requires boolean retryable");
@@ -219,8 +243,8 @@ inline void from_json(const Json &document, BotOperationError &error) {
       document.at("submission_safety").get<SubmissionSafety>();
   error.provider_code.reset();
   if (document.contains("provider_code")) {
-    error.provider_code =
-        detail::require_string(document, "provider_code", "BotOperationError");
+    error.provider_code = detail::require_identifier(document, "provider_code",
+                                                     "BotOperationError", 256);
   }
   error.retry_after.reset();
   if (document.contains("retry_after_ms")) {

@@ -1,7 +1,9 @@
 #pragma once
 
 #include "common/message_type.hpp"
+#include <functional>
 #include <string>
+#include <string_view>
 
 namespace obcx::adapter::onebot11 {
 
@@ -50,6 +52,21 @@ namespace MessageConverter {
  * @param raw_message The raw message string in v11 format.
  * @return The converted internal Message object.
  */
+// Borrowed native traversal shared by live normalization and archive preflight.
+// Views are valid only during the callback; literal text has no parameters.
+struct CqSegmentView {
+  std::string_view type;
+  std::string_view parameters;
+  std::optional<std::string_view> literal_text;
+};
+void visit_v11_string(std::string_view,
+                      const std::function<void(CqSegmentView)> &);
+void visit_v11_parameters(
+    std::string_view,
+    const std::function<void(std::string_view, std::string_view)> &);
+void visit_cq_unescaped(std::string_view,
+                        const std::function<void(std::string_view)> &);
+
 auto from_v11_string(const std::string &raw_message) -> common::Message;
 
 /**

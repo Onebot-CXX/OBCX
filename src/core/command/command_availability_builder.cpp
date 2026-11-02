@@ -12,7 +12,7 @@ struct CommandAvailabilityBuilder::State {
   bool frozen = false;
   bool invalid = false;
   std::map<std::string, std::set<std::string>> declarations;
-  std::map<std::string, std::string> installations;
+  std::shared_ptr<command::CommandScopeResolver> resolver;
   CommandAvailabilitySnapshot scopes;
 };
 
@@ -21,6 +21,13 @@ class CommandAvailabilityBuilder::Publisher final
 public:
   Publisher(std::shared_ptr<State> state, std::string actor)
       : state_(std::move(state)), actor_(std::move(actor)) {}
+
+  void invalidate() {
+    std::scoped_lock lock(state_->mutex);
+    if (state_->frozen)
+      throw std::logic_error("command availability is frozen");
+    state_->invalid = true;
+  }
 
   void publish(const std::string_view command,
                const command::GroupScopes &scopes) override {
@@ -40,9 +47,7 @@ public:
       reject("command availability publication is duplicated");
     }
     for (const auto &scope : scopes) {
-      const auto bot = state_->installations.find(scope.bot);
-      if (!command::valid_scope(scope) || bot == state_->installations.end() ||
-          bot->second != scope.platform) {
+      if (!state_->resolver->resolve_group(scope).ok()) {
         reject("command availability scope is invalid");
       }
     }
@@ -59,20 +64,18 @@ private:
 };
 
 CommandAvailabilityBuilder::CommandAvailabilityBuilder(
-    const common::RuntimeConfigSnapshot &snapshot,
+    std::shared_ptr<command::CommandScopeResolver> resolver,
     const std::unordered_map<std::string, ActorInputContract> &contracts)
     : state_(std::make_shared<State>()) {
+  if (!resolver)
+    throw std::invalid_argument("command availability requires scope resolver");
+  state_->resolver = std::move(resolver);
   for (const auto &[actor, contract] : contracts) {
     auto &commands = state_->declarations[actor];
     for (const auto &registration : contract.commands) {
       if (registration.actor_scoped) {
         commands.insert(registration.name);
       }
-    }
-  }
-  for (const auto &bot : snapshot.get_bot_configs()) {
-    if (bot.enabled) {
-      state_->installations.emplace(bot.installation_id, bot.ingress_platform);
     }
   }
 }
@@ -84,6 +87,15 @@ auto CommandAvailabilityBuilder::for_actor(const std::string &actor)
     throw std::logic_error("command availability publisher is unavailable");
   }
   return std::make_shared<Publisher>(state_, actor);
+}
+
+void CommandAvailabilityBuilder::invalidate_publication(
+    command::AvailabilityPublisher &publisher) {
+  auto *owned = dynamic_cast<Publisher *>(&publisher);
+  if (!owned)
+    throw std::invalid_argument(
+        "command availability publisher is not core-owned");
+  owned->invalidate();
 }
 
 auto CommandAvailabilityBuilder::freeze() -> CommandAvailabilitySnapshot {

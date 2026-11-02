@@ -14,6 +14,8 @@ set(OBCX_GENERIC_RUNTIME_SOURCES
     network/websocket_write_queue.cpp
     network/proxy_http_client.cpp
     core/actor/actor_manager.cpp
+    core/actor/actor_generation_lifecycle.cpp
+    core/actor/blocking_executor.cpp
     core/actor/command_availability.cpp
     core/actor/actor_package_stager.cpp
     core/actor/actor_work_stealing_executor.cpp
@@ -22,12 +24,17 @@ set(OBCX_GENERIC_RUNTIME_SOURCES
     core/bot/bot_event_components.cpp
     core/bot/bot_installation_assembler.cpp
     core/bot/bot_installation_directory.cpp
+    core/bot/bounded_file_reader.cpp
     core/bot/bot_operation_dispatcher.cpp
     core/bot/operation_registry.cpp
+    core/bot/reply_evidence_store.cpp
     core/bot/self_identity_cache.cpp
     core/bot/platform_catalog.cpp
     core/bot/installation_plan.cpp
     core/command/command_coordinator.cpp
+    core/command/command_source.cpp
+    core/command/command_scope.cpp
+    core/runtime/command_scope_resolver.cpp
     core/command/command_availability_builder.cpp
     core/command/command_matcher.cpp
     core/infrastructure/db_manager.cpp
@@ -35,6 +42,7 @@ set(OBCX_GENERIC_RUNTIME_SOURCES
     core/runtime/actor_runtime_reload_controller.cpp
     core/runtime/message_event_ingress.cpp
     core/runtime/orchestrator.cpp
+    core/runtime/conversation_resolver.cpp
     core/runtime/runtime_generation.cpp
     core/runtime/runtime_thread_budget.cpp
 )
@@ -44,10 +52,39 @@ set(OBCX_ONEBOT11_RUNTIME_SOURCES
     onebot11/network/http/connection_manager.cpp
     onebot11/network/websocket/action_request_tracker.cpp
     onebot11/network/websocket/connection_manager.cpp
+    onebot11/network/websocket/standard_ws_wire.cpp
     onebot11/adapter/protocol_adapter.cpp
     onebot11/adapter/message_converter.cpp
     onebot11/adapter/event_converter.cpp
     onebot11/bot/operations.cpp
+    onebot11/bot/domain_binding.cpp
+    onebot11/bot/received_media.cpp
+    onebot11/bot/special_content.cpp
+    onebot11/bot/content_observations.cpp
+    onebot11/bot/user_target.cpp
+    onebot11/bot/forward_preflight.cpp
+    onebot11/bot/standard_common.cpp
+    onebot11/bot/standard_execution.cpp
+    onebot11/bot/standard_wire_codec.cpp
+    onebot11/bot/standard_call_state.cpp
+    onebot11/bot/standard_operations.cpp
+    onebot11/bot/standard_client.cpp
+    onebot11/bot/standard_operation_binding.cpp
+    onebot11/bot/standard_queries.cpp
+    onebot11/bot/standard_media_queries.cpp
+    onebot11/bot/standard_mutations.cpp
+    onebot11/bot/standard_sensitive.cpp
+    onebot11/bot/standard_service.cpp
+    onebot11/bot/standard_content.cpp
+    onebot11/bot/standard_composition.cpp
+    onebot11/bot/standard_events.cpp
+    onebot11/bot/standard_send.cpp
+    onebot11/bot/standard_lookup.cpp
+    onebot11/bot/standard_login.cpp
+    onebot11/bot/standard_login_coordinator.cpp
+    onebot11/bot/standard_event_actions.cpp
+    onebot11/bot/standard_event_runtime.cpp
+    onebot11/bot/standard_actor_events.cpp
     onebot11/bot/response_parser.cpp
     onebot11/bot/configuration.cpp
     onebot11/bot/recipe.cpp
@@ -62,6 +99,9 @@ set(OBCX_TELEGRAM_RUNTIME_SOURCES
     telegram/adapter/protocol_adapter.cpp
     telegram/network/http/connection_manager.cpp
     telegram/bot/operations.cpp
+    telegram/bot/domain_binding.cpp
+    telegram/bot/domain_send.cpp
+    telegram/bot/sticker_send.cpp
     telegram/bot/response_parser.cpp
     telegram/bot/configuration.cpp
     telegram/bot/recipe.cpp
@@ -179,15 +219,18 @@ add_library(obcx::obcx_core ALIAS obcx_core)
 target_include_directories(obcx_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/generated>)
 
-# Independently consumable Bot contracts, separate from the Actor host library.
+# Bot API entry points belong to the complete SDK, including its matching core.
+# Consumers receive the core dependency transitively; no standalone platform
+# implementation libraries or runtime platform plugins are introduced.
 add_library(bot_common_sdk INTERFACE)
 add_library(obcx::bot_common_sdk ALIAS bot_common_sdk)
 target_include_directories(bot_common_sdk INTERFACE
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/obcx>)
 target_compile_features(bot_common_sdk INTERFACE cxx_std_26)
+target_compile_options(bot_common_sdk INTERFACE -freflection)
 target_link_libraries(bot_common_sdk INTERFACE
-  nlohmann_json::nlohmann_json ${BOOST_SYSTEM_TARGET} Threads::Threads)
+  obcx_core nlohmann_json::nlohmann_json ${BOOST_SYSTEM_TARGET} Threads::Threads)
 foreach(_platform IN ITEMS onebot11 telegram)
   add_library(bot_${_platform}_sdk INTERFACE)
   add_library(obcx::bot_${_platform}_sdk ALIAS bot_${_platform}_sdk)
@@ -218,9 +261,12 @@ install(FILES
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_asio.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_generation_lifecycle.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/actor/actor_event_publisher.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_restart_constraints.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_commands.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/command_availability.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/actor/command_source.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/actor/command_scope.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_manager.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_messages.hpp
     ${CMAKE_SOURCE_DIR}/include/core/actor/actor_task.hpp
@@ -233,35 +279,69 @@ install(FILES
 
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/core/bot/ids.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_ids.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_codec.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_media.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_messaging.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_events.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/received_observations.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_queries.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/send_gateway_codec.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/bot_client.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/conversation_resolver.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/json_codec.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/validation.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/references.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/operation_error.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/operation_result.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/operation_traits.hpp
-    ${CMAKE_SOURCE_DIR}/include/core/bot/messaging.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/gateway_codec.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/operation_gateway.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/structured_operation_gateway.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/owned_structured_operation_gateway.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/self_info.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/typed_operation.hpp
-    ${CMAKE_SOURCE_DIR}/include/core/bot/messaging_client.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obcx/core/bot)
 
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/actions.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/types.hpp
-    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/image.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/user_target.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/message_lookup.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/operations.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/client.hpp
     ${CMAKE_SOURCE_DIR}/include/onebot11/bot/group_forward.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/forward_observation.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/forward_preflight.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/forward_outcome.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/media_path.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/special_content.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/presentation_observation.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_common.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_execution.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_operations.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_client.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_queries.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_media_queries.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_mutations.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_sensitive.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_service.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_content.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_composition.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_events.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_send.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_lookup.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_login.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_event_actions.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_event_runtime.hpp
+    ${CMAKE_SOURCE_DIR}/include/onebot11/bot/standard_actor_events.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obcx/onebot11/bot)
 
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/telegram/bot/actions.hpp
-    ${CMAKE_SOURCE_DIR}/include/telegram/bot/types.hpp
-    ${CMAKE_SOURCE_DIR}/include/telegram/bot/operations.hpp
     ${CMAKE_SOURCE_DIR}/include/telegram/bot/client.hpp
+    ${CMAKE_SOURCE_DIR}/include/telegram/bot/domain_operations.hpp
+    ${CMAKE_SOURCE_DIR}/include/telegram/bot/domain_views.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obcx/telegram/bot)
 
 install(FILES

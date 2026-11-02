@@ -9,11 +9,19 @@ auto BotInstallationAssembler::validate(const BotInstallationPlan &plan)
 
 auto BotInstallationAssembler::assemble(const BotInstallationPlan &plan)
     -> std::unique_ptr<BotInstallation> {
+  return assemble(plan, nullptr);
+}
+
+auto BotInstallationAssembler::assemble(
+    const BotInstallationPlan &plan,
+    std::shared_ptr<BoundedFileReader> file_reader)
+    -> std::unique_ptr<BotInstallation> {
   (void)validate(plan);
   const auto &metadata = plan.metadata();
   auto installation = std::make_unique<BotInstallation>(
       metadata.installation_id, metadata.surface);
-  for (auto &component : plan.create_components(installation->executor())) {
+  for (auto &component : plan.create_components(installation->executor(),
+                                                std::move(file_reader))) {
     installation->add_component(std::move(component));
   }
   installation->assemble();

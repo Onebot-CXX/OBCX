@@ -1,473 +1,164 @@
 #pragma once
-
-#include "core/bot/operation_traits.hpp"
-#include "onebot11/bot/image.hpp"
-#include "onebot11/bot/message_lookup.hpp"
+#include "onebot11/bot/group_forward.hpp"
 #include "onebot11/bot/types.hpp"
-
+#include "onebot11/bot/user_target.hpp"
 namespace obcx::onebot11::bot {
-
 struct SetOneBotMessageEmojiLikeRequest {
-  using obcx_bot_json_factory = void;
   inline static const auto &action = actions::set_message_emoji_like;
-  obcx::bot::BotMessageRef message;
+  MessageRef message;
   std::string emoji_id;
   bool set;
-
   void validate() const { detail::validate_emoji_like(message, emoji_id); }
-
-  static auto from_json(const Json &document)
-      -> SetOneBotMessageEmojiLikeRequest {
-    obcx::bot::detail::require_only_keys(
-        document, "SetOneBotMessageEmojiLikeRequest",
-        {"action", "message", "emoji_id", "set"});
-    if (document.contains("action") &&
-        document.at("action").get<obcx::bot::ActionId>() != action) {
-      throw std::invalid_argument(
-          "SetOneBotMessageEmojiLikeRequest action mismatch");
-    }
-    SetOneBotMessageEmojiLikeRequest result{
-        .message = document.at("message").get<obcx::bot::BotMessageRef>(),
-        .emoji_id = detail::require_string(document, "emoji_id",
-                                           "SetOneBotMessageEmojiLikeRequest"),
-        .set = document.at("set").get<bool>()};
-    result.validate();
-    return result;
-  }
 };
-
-inline void to_json(Json &document,
-                    const SetOneBotMessageEmojiLikeRequest &request) {
-  request.validate();
-  document = {{"action", request.action},
-              {"message", request.message},
-              {"emoji_id", request.emoji_id},
-              {"set", request.set}};
-}
-
 struct GetOneBotUserInfoRequest {
-  using obcx_bot_json_factory = void;
   inline static const auto &action = actions::get_user_info;
-  BotInstallationRef installation;
-  std::string user_id;
+  UserTarget user;
   bool no_cache;
-
-  void validate() const {
-    detail::require_onebot(installation, "GetOneBotUserInfoRequest");
-    detail::validate_user_id(user_id);
-  }
-
-  static auto from_json(const Json &document) -> GetOneBotUserInfoRequest {
-    obcx::bot::detail::require_only_keys(
-        document, "GetOneBotUserInfoRequest",
-        {"action", "installation", "user_id", "no_cache"});
-    if (document.contains("action") &&
-        document.at("action").get<obcx::bot::ActionId>() != action) {
-      throw std::invalid_argument("GetOneBotUserInfoRequest action mismatch");
-    }
-    GetOneBotUserInfoRequest result{
-        .installation = document.at("installation").get<BotInstallationRef>(),
-        .user_id = detail::require_string(document, "user_id",
-                                          "GetOneBotUserInfoRequest"),
-        .no_cache = document.at("no_cache").get<bool>()};
-    result.validate();
-    return result;
-  }
+  void validate() const { validate_user_target(user); }
 };
-
-inline void to_json(Json &document, const GetOneBotUserInfoRequest &request) {
-  request.validate();
-  document = {{"action", request.action},
-              {"installation", request.installation},
-              {"user_id", request.user_id},
-              {"no_cache", request.no_cache}};
-}
-
-struct GetOneBotLoginInfoRequest {
-  using obcx_bot_json_factory = void;
-  inline static const auto &action = actions::get_login_info;
-  BotInstallationRef installation;
-
-  void validate() const {
-    detail::require_onebot(installation, "GetOneBotLoginInfoRequest");
-  }
-
-  static auto from_json(const Json &document) -> GetOneBotLoginInfoRequest {
-    obcx::bot::detail::require_only_keys(document, "GetOneBotLoginInfoRequest",
-                                         {"action", "installation"});
-    if (document.contains("action") &&
-        document.at("action").get<obcx::bot::ActionId>() != action) {
-      throw std::invalid_argument("GetOneBotLoginInfoRequest action mismatch");
-    }
-    GetOneBotLoginInfoRequest result{
-        .installation = document.at("installation").get<BotInstallationRef>()};
-    result.validate();
-    return result;
-  }
-};
-
-inline void to_json(Json &document, const GetOneBotLoginInfoRequest &request) {
-  request.validate();
-  document = {{"action", request.action},
-              {"installation", request.installation}};
-}
-
 struct GetOneBotGroupMemberRequest {
-  using obcx_bot_json_factory = void;
-  static auto from_json(const Json &document) -> GetOneBotGroupMemberRequest;
-
   inline static const auto &action = actions::get_group_member;
-
-  GroupTarget target;
-  std::string user_id;
-  bool no_cache{};
-
+  ConversationRef target;
+  UserTarget user;
+  bool no_cache;
   void validate() const {
     target.validate();
-    detail::require_onebot(target.installation, "GetOneBotGroupMemberRequest");
-    detail::validate_identifier(user_id, "OneBot user_id");
+    validate_user_target(user);
+    if (target.installation != user_target_installation(user))
+      throw std::invalid_argument("QQ member query installation mismatch");
   }
 };
-
-inline void to_json(Json &document,
-                    const GetOneBotGroupMemberRequest &request) {
-  request.validate();
-  document = {{"action", request.action},
-              {"target", request.target},
-              {"user_id", request.user_id},
-              {"no_cache", request.no_cache}};
-}
-
-inline void from_json(const Json &document,
-                      GetOneBotGroupMemberRequest &request) {
-  detail::require_object(document, "GetOneBotGroupMemberRequest");
-  if (document.contains("action") &&
-      document.at("action").get<obcx::bot::ActionId>() != request.action) {
-    throw std::invalid_argument("GetOneBotGroupMemberRequest action mismatch");
-  }
-  if (!document.contains("target")) {
-    throw std::invalid_argument("GetOneBotGroupMemberRequest requires target");
-  }
-  request.target = document.at("target").get<GroupTarget>();
-  request.user_id = detail::require_string(document, "user_id",
-                                           "GetOneBotGroupMemberRequest");
-  request.no_cache = false;
-  if (document.contains("no_cache")) {
-    if (!document.at("no_cache").is_boolean()) {
-      throw std::invalid_argument("no_cache must be boolean");
-    }
-    request.no_cache = document.at("no_cache").get<bool>();
-  }
-  request.validate();
-}
-
-inline auto GetOneBotGroupMemberRequest::from_json(const Json &document)
-    -> GetOneBotGroupMemberRequest {
-  detail::require_object(document, "GetOneBotGroupMemberRequest");
-  if (!document.contains("target")) {
-    throw std::invalid_argument("GetOneBotGroupMemberRequest requires target");
-  }
-  GetOneBotGroupMemberRequest result{
-      .target = document.at("target").get<GroupTarget>()};
-  obcx::onebot11::bot::from_json(document, result);
-  return result;
-}
-
-struct GetOneBotForwardMessageRequest {
-  using obcx_bot_json_factory = void;
-  static auto from_json(const Json &document) -> GetOneBotForwardMessageRequest;
-
-  inline static const auto &action = actions::get_forward_message;
-
-  BotInstallationRef installation;
-  std::string forward_id;
-
+// Read-only QQ file-ID acquisition. The native ID is an opaque provider value,
+// not a path or URL to open. Bridge/caller retains filename/cache/path policy.
+struct ReadOneBotFileRequest {
+  inline static const obcx::bot::ActionId action{"onebot11.file.read"};
+  ConversationRef conversation;
+  std::string file_id;
+  std::size_t maximum_bytes;
   void validate() const {
-    detail::require_onebot(installation, "GetOneBotForwardMessageRequest");
-    detail::validate_identifier(forward_id, "OneBot forward_id");
+    conversation.validate();
+    detail::require_onebot(conversation.installation, "QQ file conversation");
+    detail::validate_identifier(file_id, "QQ file identifier", 1024);
+    obcx::bot::detail::validate_utf8(file_id);
+    if (file_id.find("://") != std::string::npos || file_id.starts_with("//"))
+      throw std::invalid_argument("QQ file identifier is not a URL");
+    if (!maximum_bytes ||
+        maximum_bytes > obcx::bot::detail::domain_maximum_bytes)
+      throw std::invalid_argument("invalid QQ file read byte limit");
   }
 };
-
-inline void to_json(Json &document,
-                    const GetOneBotForwardMessageRequest &request) {
-  request.validate();
-  document = {{"action", request.action},
-              {"installation", request.installation},
-              {"forward_id", request.forward_id}};
-}
-
-inline void from_json(const Json &document,
-                      GetOneBotForwardMessageRequest &request) {
-  detail::require_object(document, "GetOneBotForwardMessageRequest");
-  if (document.contains("action") &&
-      document.at("action").get<obcx::bot::ActionId>() != request.action) {
-    throw std::invalid_argument(
-        "GetOneBotForwardMessageRequest action mismatch");
-  }
-  if (!document.contains("installation")) {
-    throw std::invalid_argument(
-        "GetOneBotForwardMessageRequest requires installation");
-  }
-  request.installation = document.at("installation").get<BotInstallationRef>();
-  request.forward_id = detail::require_string(document, "forward_id",
-                                              "GetOneBotForwardMessageRequest");
-  request.validate();
-}
-
-inline auto GetOneBotForwardMessageRequest::from_json(const Json &document)
-    -> GetOneBotForwardMessageRequest {
-  detail::require_object(document, "GetOneBotForwardMessageRequest");
-  if (!document.contains("installation")) {
-    throw std::invalid_argument(
-        "GetOneBotForwardMessageRequest requires installation");
-  }
-  GetOneBotForwardMessageRequest result{
-      .installation = document.at("installation").get<BotInstallationRef>()};
-  obcx::onebot11::bot::from_json(document, result);
-  return result;
-}
-
 struct ResolveOneBotGroupFileRequest {
-  using obcx_bot_json_factory = void;
-  static auto from_json(const Json &document) -> ResolveOneBotGroupFileRequest;
-
   inline static const auto &action = actions::resolve_group_file;
-
-  GroupTarget target;
-  std::string file_id;
-
+  MediaRef media;
   void validate() const {
-    target.validate();
-    detail::require_onebot(target.installation,
-                           "ResolveOneBotGroupFileRequest");
-    detail::validate_identifier(file_id, "OneBot file_id", 2048);
+    media.validate();
+    detail::require_onebot(media.installation, "QQ group file");
   }
 };
-
-inline void to_json(Json &document,
-                    const ResolveOneBotGroupFileRequest &request) {
-  request.validate();
-  document = {{"action", request.action},
-              {"target", request.target},
-              {"file_id", request.file_id}};
-}
-
-inline void from_json(const Json &document,
-                      ResolveOneBotGroupFileRequest &request) {
-  detail::require_object(document, "ResolveOneBotGroupFileRequest");
-  if (document.contains("action") &&
-      document.at("action").get<obcx::bot::ActionId>() != request.action) {
-    throw std::invalid_argument(
-        "ResolveOneBotGroupFileRequest action mismatch");
-  }
-  if (!document.contains("target")) {
-    throw std::invalid_argument(
-        "ResolveOneBotGroupFileRequest requires target");
-  }
-  request.target = document.at("target").get<GroupTarget>();
-  request.file_id = detail::require_string(document, "file_id",
-                                           "ResolveOneBotGroupFileRequest");
-  request.validate();
-}
-
-inline auto ResolveOneBotGroupFileRequest::from_json(const Json &document)
-    -> ResolveOneBotGroupFileRequest {
-  detail::require_object(document, "ResolveOneBotGroupFileRequest");
-  if (!document.contains("target")) {
-    throw std::invalid_argument(
-        "ResolveOneBotGroupFileRequest requires target");
-  }
-  ResolveOneBotGroupFileRequest result{
-      .target = document.at("target").get<GroupTarget>()};
-  obcx::onebot11::bot::from_json(document, result);
-  return result;
-}
-
 struct ResolveOneBotPrivateFileRequest {
-  using obcx_bot_json_factory = void;
-  static auto from_json(const Json &document)
-      -> ResolveOneBotPrivateFileRequest;
-
   inline static const auto &action = actions::resolve_private_file;
-
-  BotInstallationRef installation;
-  std::string user_id;
-  std::string file_id;
-
+  MediaRef media;
   void validate() const {
-    detail::require_onebot(installation, "ResolveOneBotPrivateFileRequest");
-    detail::validate_identifier(user_id, "OneBot user_id");
-    detail::validate_identifier(file_id, "OneBot file_id", 2048);
+    media.validate();
+    detail::require_onebot(media.installation, "QQ private file");
   }
 };
-
-inline void to_json(Json &document,
-                    const ResolveOneBotPrivateFileRequest &request) {
-  request.validate();
-  document = {{"action", request.action},
-              {"installation", request.installation},
-              {"user_id", request.user_id},
-              {"file_id", request.file_id}};
-}
-
-inline void from_json(const Json &document,
-                      ResolveOneBotPrivateFileRequest &request) {
-  detail::require_object(document, "ResolveOneBotPrivateFileRequest");
-  if (document.contains("action") &&
-      document.at("action").get<obcx::bot::ActionId>() != request.action) {
-    throw std::invalid_argument(
-        "ResolveOneBotPrivateFileRequest action mismatch");
-  }
-  if (!document.contains("installation")) {
-    throw std::invalid_argument(
-        "ResolveOneBotPrivateFileRequest requires installation");
-  }
-  request.installation = document.at("installation").get<BotInstallationRef>();
-  request.user_id = detail::require_string(document, "user_id",
-                                           "ResolveOneBotPrivateFileRequest");
-  request.file_id = detail::require_string(document, "file_id",
-                                           "ResolveOneBotPrivateFileRequest");
-  request.validate();
-}
-
-inline auto ResolveOneBotPrivateFileRequest::from_json(const Json &document)
-    -> ResolveOneBotPrivateFileRequest {
-  detail::require_object(document, "ResolveOneBotPrivateFileRequest");
-  if (!document.contains("installation")) {
-    throw std::invalid_argument(
-        "ResolveOneBotPrivateFileRequest requires installation");
-  }
-  ResolveOneBotPrivateFileRequest result{
-      .installation = document.at("installation").get<BotInstallationRef>()};
-  obcx::onebot11::bot::from_json(document, result);
-  return result;
-}
-
 struct PokeOneBotGroupRequest {
-  using obcx_bot_json_factory = void;
-  static auto from_json(const Json &document) -> PokeOneBotGroupRequest;
-
   inline static const auto &action = actions::poke_group;
-
-  GroupTarget target;
-  std::string user_id;
-
-  void validate() const {
-    target.validate();
-    detail::require_onebot(target.installation, "PokeOneBotGroupRequest");
-    detail::validate_identifier(user_id, "OneBot user_id");
+  ConversationRef target;
+  UserRef user;
+  void validate() const { detail::user_scope(target, user); }
+};
+} // namespace obcx::onebot11::bot
+namespace obcx::bot {
+template <>
+struct detail::DomainRecordPreflight<onebot11::bot::ReadOneBotFileRequest> {
+  static void validate(const Json &d) {
+    onebot11::bot::detail::preflight_text(d, "file_id", 1024, false);
+    (void)detail::bounded_unsigned(d.at("maximum_bytes"),
+                                   detail::domain_maximum_bytes);
   }
 };
-
-inline void to_json(Json &document, const PokeOneBotGroupRequest &request) {
-  request.validate();
-  document = {{"action", request.action},
-              {"target", request.target},
-              {"user_id", request.user_id}};
-}
-
-inline void from_json(const Json &document, PokeOneBotGroupRequest &request) {
-  detail::require_object(document, "PokeOneBotGroupRequest");
-  if (document.contains("action") &&
-      document.at("action").get<obcx::bot::ActionId>() != request.action) {
-    throw std::invalid_argument("PokeOneBotGroupRequest action mismatch");
+OBCX_DOMAIN_FIELDS(onebot11::bot::ReadOneBotFileRequest,
+                   OBCX_DOMAIN_FIELD(conversation), OBCX_DOMAIN_FIELD(file_id),
+                   OBCX_DOMAIN_FIELD(maximum_bytes));
+template <>
+struct OperationTraits<onebot11::bot::ReadOneBotFileRequest>
+    : OperationContract<onebot11::bot::ReadOneBotFileRequest, MediaBlob,
+                        false> {
+  static bool supports_surface(const SurfaceId &s) {
+    return s == onebot11::bot::surface;
   }
-  if (!document.contains("target")) {
-    throw std::invalid_argument("PokeOneBotGroupRequest requires target");
+  static auto installation(const request_type &r)
+      -> const BotInstallationRef & {
+    return r.conversation.installation;
   }
-  request.target = document.at("target").get<GroupTarget>();
-  request.user_id =
-      detail::require_string(document, "user_id", "PokeOneBotGroupRequest");
-  request.validate();
-}
-
-inline auto PokeOneBotGroupRequest::from_json(const Json &document)
-    -> PokeOneBotGroupRequest {
-  detail::require_object(document, "PokeOneBotGroupRequest");
-  if (!document.contains("target")) {
-    throw std::invalid_argument("PokeOneBotGroupRequest requires target");
+  static void validate_result(const request_type &r, const result_type &v) {
+    v.validate();
+    if (v.kind != MediaKind::File || v.identity ||
+        v.source.bytes.size() > r.maximum_bytes ||
+        v.source.metadata.size_bytes != v.source.bytes.size())
+      throw std::invalid_argument("QQ file read result mismatch");
   }
-  PokeOneBotGroupRequest result{.target =
-                                    document.at("target").get<GroupTarget>()};
-  obcx::onebot11::bot::from_json(document, result);
-  return result;
-}
-
-} // namespace obcx::onebot11::bot
-
-namespace obcx::bot {
-
+};
+template <>
+struct detail::DomainRecordPreflight<
+    onebot11::bot::SetOneBotMessageEmojiLikeRequest> {
+  static void validate(const Json &d) {
+    onebot11::bot::detail::preflight_text(d, "emoji_id", 20, false);
+  }
+};
+OBCX_DOMAIN_FIELDS(onebot11::bot::SetOneBotMessageEmojiLikeRequest,
+                   OBCX_DOMAIN_FIELD(message), OBCX_DOMAIN_FIELD(emoji_id),
+                   OBCX_DOMAIN_FIELD(set));
 template <>
 struct OperationTraits<onebot11::bot::SetOneBotMessageEmojiLikeRequest>
     : OperationContract<onebot11::bot::SetOneBotMessageEmojiLikeRequest,
                         onebot11::bot::OneBotMessageEmojiLikeResult, true> {
-  static auto supports_surface(const SurfaceId &surface) -> bool {
-    return surface == onebot11::bot::surface;
+  static bool supports_surface(const SurfaceId &s) {
+    return s == onebot11::bot::surface;
   }
   static auto installation(const request_type &request)
       -> const BotInstallationRef & {
-    return request.message.group.installation;
+    return request.message.conversation.installation;
   }
   static void validate_result(const request_type &request,
                               const result_type &result) {
     result.validate();
     if (result.message != request.message ||
-        result.emoji_id != request.emoji_id || result.set != request.set) {
-      throw std::invalid_argument(
-          "OneBot emoji like result does not match request");
-    }
+        result.emoji_id != request.emoji_id || result.set != request.set)
+      throw std::invalid_argument("QQ result scope mismatch");
   }
 };
-
+OBCX_DOMAIN_FIELDS(onebot11::bot::GetOneBotUserInfoRequest,
+                   OBCX_DOMAIN_FIELD(user), OBCX_DOMAIN_FIELD(no_cache));
 template <>
 struct OperationTraits<onebot11::bot::GetOneBotUserInfoRequest>
     : OperationContract<onebot11::bot::GetOneBotUserInfoRequest,
                         onebot11::bot::OneBotUserInfo, false> {
-  static auto supports_surface(const SurfaceId &surface) -> bool {
-    return surface == onebot11::bot::surface;
+  static bool supports_surface(const SurfaceId &s) {
+    return s == onebot11::bot::surface;
   }
   static auto installation(const request_type &request)
       -> const BotInstallationRef & {
-    return request.installation;
+    return onebot11::bot::user_target_installation(request.user);
   }
   static void validate_result(const request_type &request,
                               const result_type &result) {
     result.validate();
-    if (result.installation != request.installation ||
-        result.user_id != request.user_id) {
-      throw std::invalid_argument(
-          "OneBot user info result does not match request");
-    }
+    if (!onebot11::bot::user_target_matches(request.user, result.user))
+      throw std::invalid_argument("QQ result scope mismatch");
   }
 };
-
-template <>
-struct OperationTraits<onebot11::bot::GetOneBotLoginInfoRequest>
-    : OperationContract<onebot11::bot::GetOneBotLoginInfoRequest,
-                        onebot11::bot::OneBotLoginInfo, false> {
-  static auto supports_surface(const SurfaceId &surface) -> bool {
-    return surface == onebot11::bot::surface;
-  }
-  static auto installation(const request_type &request)
-      -> const BotInstallationRef & {
-    return request.installation;
-  }
-  static void validate_result(const request_type &request,
-                              const result_type &result) {
-    result.validate();
-    if (result.installation != request.installation) {
-      throw std::invalid_argument(
-          "OneBot login result does not match installation");
-    }
-  }
-};
-
+OBCX_DOMAIN_FIELDS(onebot11::bot::GetOneBotGroupMemberRequest,
+                   OBCX_DOMAIN_FIELD(target), OBCX_DOMAIN_FIELD(user),
+                   OBCX_DOMAIN_FIELD(no_cache));
 template <>
 struct OperationTraits<onebot11::bot::GetOneBotGroupMemberRequest>
     : OperationContract<onebot11::bot::GetOneBotGroupMemberRequest,
                         onebot11::bot::OneBotGroupMember, false> {
-  static auto supports_surface(const SurfaceId &surface) -> bool {
-    return surface == onebot11::bot::surface;
+  static bool supports_surface(const SurfaceId &s) {
+    return s == onebot11::bot::surface;
   }
   static auto installation(const request_type &request)
       -> const BotInstallationRef & {
@@ -476,85 +167,59 @@ struct OperationTraits<onebot11::bot::GetOneBotGroupMemberRequest>
   static void validate_result(const request_type &request,
                               const result_type &result) {
     result.validate();
-    if (result.target != request.target || result.user_id != request.user_id) {
-      throw std::invalid_argument(
-          "OneBot result does not match its requested scope");
-    }
+    if (result.target != request.target ||
+        !onebot11::bot::user_target_matches(request.user, result.user))
+      throw std::invalid_argument("QQ result scope mismatch");
   }
 };
-
-template <>
-struct OperationTraits<onebot11::bot::GetOneBotForwardMessageRequest>
-    : OperationContract<onebot11::bot::GetOneBotForwardMessageRequest,
-                        onebot11::bot::OneBotForwardMessage, false> {
-  static auto supports_surface(const SurfaceId &surface) -> bool {
-    return surface == onebot11::bot::surface;
-  }
-  static auto installation(const request_type &request)
-      -> const BotInstallationRef & {
-    return request.installation;
-  }
-  static void validate_result(const request_type &request,
-                              const result_type &result) {
-    result.validate();
-    if (result.installation != request.installation ||
-        result.forward_id != request.forward_id) {
-      throw std::invalid_argument(
-          "OneBot result does not match its requested scope");
-    }
-  }
-};
-
+OBCX_DOMAIN_FIELDS(onebot11::bot::ResolveOneBotGroupFileRequest,
+                   OBCX_DOMAIN_FIELD(media));
 template <>
 struct OperationTraits<onebot11::bot::ResolveOneBotGroupFileRequest>
     : OperationContract<onebot11::bot::ResolveOneBotGroupFileRequest,
                         onebot11::bot::ResolvedOneBotGroupFile, false> {
-  static auto supports_surface(const SurfaceId &surface) -> bool {
-    return surface == onebot11::bot::surface;
+  static bool supports_surface(const SurfaceId &s) {
+    return s == onebot11::bot::surface;
   }
   static auto installation(const request_type &request)
       -> const BotInstallationRef & {
-    return request.target.installation;
+    return request.media.installation;
   }
   static void validate_result(const request_type &request,
                               const result_type &result) {
     result.validate();
-    if (result.target != request.target || result.file_id != request.file_id) {
-      throw std::invalid_argument(
-          "OneBot result does not match its requested scope");
-    }
+    if (result.media != request.media)
+      throw std::invalid_argument("QQ result scope mismatch");
   }
 };
-
+OBCX_DOMAIN_FIELDS(onebot11::bot::ResolveOneBotPrivateFileRequest,
+                   OBCX_DOMAIN_FIELD(media));
 template <>
 struct OperationTraits<onebot11::bot::ResolveOneBotPrivateFileRequest>
     : OperationContract<onebot11::bot::ResolveOneBotPrivateFileRequest,
                         onebot11::bot::ResolvedOneBotPrivateFile, false> {
-  static auto supports_surface(const SurfaceId &surface) -> bool {
-    return surface == onebot11::bot::surface;
+  static bool supports_surface(const SurfaceId &s) {
+    return s == onebot11::bot::surface;
   }
   static auto installation(const request_type &request)
       -> const BotInstallationRef & {
-    return request.installation;
+    return request.media.installation;
   }
   static void validate_result(const request_type &request,
                               const result_type &result) {
     result.validate();
-    if (result.installation != request.installation ||
-        result.user_id != request.user_id ||
-        result.file_id != request.file_id) {
-      throw std::invalid_argument(
-          "OneBot result does not match its requested scope");
-    }
+    if (result.media != request.media)
+      throw std::invalid_argument("QQ result scope mismatch");
   }
 };
-
+OBCX_DOMAIN_FIELDS(onebot11::bot::PokeOneBotGroupRequest,
+                   OBCX_DOMAIN_FIELD(target), OBCX_DOMAIN_FIELD(user));
 template <>
 struct OperationTraits<onebot11::bot::PokeOneBotGroupRequest>
     : OperationContract<onebot11::bot::PokeOneBotGroupRequest,
                         onebot11::bot::OneBotGroupPokeResult, true> {
-  static auto supports_surface(const SurfaceId &surface) -> bool {
-    return surface == onebot11::bot::surface;
+  static bool supports_surface(const SurfaceId &s) {
+    return s == onebot11::bot::surface;
   }
   static auto installation(const request_type &request)
       -> const BotInstallationRef & {
@@ -563,11 +228,8 @@ struct OperationTraits<onebot11::bot::PokeOneBotGroupRequest>
   static void validate_result(const request_type &request,
                               const result_type &result) {
     result.validate();
-    if (result.target != request.target || result.user_id != request.user_id) {
-      throw std::invalid_argument(
-          "OneBot result does not match its requested scope");
-    }
+    if (result.target != request.target || result.user != request.user)
+      throw std::invalid_argument("QQ result scope mismatch");
   }
 };
-
 } // namespace obcx::bot

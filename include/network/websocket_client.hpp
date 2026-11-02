@@ -7,6 +7,7 @@
 #include <boost/beast/websocket.hpp>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace obcx::network {
@@ -27,26 +28,24 @@ public:
   // 定义一个回调函数类型，用于向上层传递收到的消息
   using MessageHandler =
       std::function<void(const beast::error_code &, const std::string &)>;
+  using MessageHandlerFactory = std::function<MessageHandler()>;
+  using WriteEligibility = detail::WebsocketWriteQueue::WriteEligibility;
 
   explicit WebsocketClient(asio::io_context &ioc);
 
-  /**
-   * @brief 连接到服务器并开始循环读取消息。
-   * 这是一个协程，它会一直运行直到连接关闭或发生错误。
-   * @param host 服务器主机名或IP地址。
-   * @param port 服务器端口。
-   * @param access_token OneBot v11 的 access-token。
-   * @param on_message 收到消息时的回调函数。
-   */
+  // on_connection receives establishment/errors, not message payloads. After
+  // establishment notification, before_read creates one nonempty handler
+  // immediately before each async_read; that handler stays fixed across the
+  // await. Capturing policy/authority belongs to the caller, not this client.
   auto run(std::string host, std::string port, std::string access_token,
-           MessageHandler on_message) -> asio::awaitable<void>;
+           MessageHandler on_connection, MessageHandlerFactory before_read)
+      -> asio::awaitable<void>;
 
-  /**
-   * @brief 异步发送一条消息。
-   * @param message 要发送的文本消息。
-   * @return 返回一个awaitable，当消息真正发送完成时恢复执行
-   */
-  auto send(std::string message) -> asio::awaitable<void>;
+  // Captures this shared-owned client and the current writer synchronously.
+  // Absence of a writer is an error. Queue claim semantics
+  // apply; acceptance is neither delivery nor prevention of later writes.
+  auto send(std::string message, WriteEligibility eligible)
+      -> asio::awaitable<void>;
 
   /**
    * @brief 异步关闭WebSocket连接。
@@ -77,6 +76,7 @@ private:
   MessageHandler on_message_;
   beast::flat_buffer buffer_;
 
+  std::mutex write_queue_mutex_;
   std::shared_ptr<detail::WebsocketWriteQueue> write_queue_;
 };
 

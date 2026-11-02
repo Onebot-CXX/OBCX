@@ -11,6 +11,12 @@ template <bot::TypedOperation Request, typename Implementation,
 auto bind_operation_handler(std::shared_ptr<Implementation> implementation,
                             Redactor redact) ->
     typename OperationDefinition<Request>::Handler {
+  static_assert(
+      !requires { bot::OperationTraits<Request>::requires_outcome_client; } &&
+          !std::same_as<typename bot::OperationTraits<Request>::result_type,
+                        bot::SendOutcome>,
+      "send handlers must retain confirmed output evidence across every step; "
+      "bind an outcome-aware handler directly");
   using Traits = bot::OperationTraits<Request>;
   using Reply = bot::BotOperationResult<typename Traits::result_type>;
   return [implementation = std::move(implementation),

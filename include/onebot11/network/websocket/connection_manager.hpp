@@ -4,12 +4,20 @@
 #include "network/connection_config.hpp"
 #include "network/websocket_client.hpp"
 #include "onebot11/adapter/protocol_adapter.hpp"
+#include "onebot11/bot/detail/file_query.hpp"
+#include "onebot11/bot/standard_event_runtime.hpp"
+#include "onebot11/network/receive_origin.hpp"
 #include "onebot11/network/websocket/detail/action_request_tracker.hpp"
 
 #include <boost/asio.hpp>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
+
+namespace obcx::onebot11::bot::standard::detail {
+enum class NativeAction : std::uint8_t;
+}
 
 namespace obcx::network {
 namespace asio = boost::asio;
@@ -22,7 +30,7 @@ namespace asio = boost::asio;
  */
 class WebSocketConnectionManager {
 public:
-  using EventCallback = std::function<void(const common::Event &)>;
+  using EventCallback = onebot11::EventCallback;
   WebSocketConnectionManager(
       asio::io_context &ioc, adapter::onebot11::ProtocolAdapter &adapter,
       detail::ActionDeadlineFactory deadline_factory = {});
@@ -38,60 +46,52 @@ public:
   void connect(const common::ConnectionConfig &config);
   void disconnect();
   [[nodiscard]] auto is_connected() const -> bool;
-  auto send_action_and_wait_async(std::string action_payload, uint64_t echo_id)
+  auto send_action_and_wait_async(
+      std::string action_payload, uint64_t echo_id,
+      std::optional<std::uint64_t> expected_epoch = std::nullopt)
       -> asio::awaitable<std::string>;
+  auto send_profile_action(std::string payload, std::uint64_t echo,
+                           core::SelfIdentityOrigin origin,
+                           onebot11::OriginValidation validate,
+                           onebot11::ProfilePublication publish)
+      -> asio::awaitable<core::SelfIdentityCache::Result>;
+  void set_origin_capture(onebot11::OriginCapture capture);
   void set_event_callback(EventCallback callback);
-  void set_connection_callback(std::function<void(bool)> callback) {
-    connection_callback_ = std::move(callback);
-  }
+  void set_standard_events(
+      std::shared_ptr<
+          obcx::onebot11::bot::standard::StandardEventCapabilityV1>);
+  void set_connection_callback(std::function<void(bool)> callback);
   [[nodiscard]] auto get_connection_type() const -> std::string;
 
   /**
    * @brief 获取发送操作的strand，用于确保发送操作的线程安全
    * @return 发送操作的strand引用
    */
-  auto get_send_strand() -> auto & { return send_strand_; }
+  auto get_send_strand() -> asio::strand<asio::io_context::executor_type> &;
+
+  // Owning synchronous wrapper. Caller cancellation signals must be emitted
+  // on the caller's serialized Asio domain; internal children use send_strand.
+  auto send_standard_action(
+      obcx::onebot11::bot::standard::detail::NativeAction action,
+      obcx::onebot11::bot::standard::ExecutionMode mode, std::string parameters,
+      std::uint64_t echo,
+      std::shared_ptr<obcx::onebot11::bot::standard::detail::StandardCallState>
+          call,
+      std::shared_ptr<core::SelfIdentityCache> identity,
+      core::SelfIdentityOrigin origin) -> asio::awaitable<void>;
+
+  auto send_file_query(
+      obcx::onebot11::bot::detail::FileQueryKind kind, std::string parameters,
+      std::uint64_t echo,
+      std::shared_ptr<obcx::onebot11::bot::standard::detail::StandardCallState>
+          call,
+      std::shared_ptr<core::SelfIdentityCache> identity,
+      core::SelfIdentityOrigin origin) -> asio::awaitable<void>;
 
 private:
-  /**
-   * @brief WebsocketClient 的消息处理回调。
-   * @param ec 错误码。如果无错误，则为空。
-   * @param message 消息内容。如果连接断开，则为空。
-   */
-  void on_ws_message(const beast::error_code &ec, const std::string &message);
-
-  /**
-   * @brief 启动一次新的连接尝试。
-   */
-  void do_connect();
-
-  /**
-   * @brief 安排一次重连。
-   */
-  void schedule_reconnect();
-  void shutdown();
-
-  asio::io_context &ioc_;
-  adapter::onebot11::ProtocolAdapter &adapter_;
-  EventCallback event_callback_;
-  std::function<void(bool)> connection_callback_;
-
-  std::shared_ptr<WebsocketClient> ws_client_;
-  asio::steady_timer reconnect_timer_;
-
-  // 用于串行化所有发送操作的strand
-  asio::strand<asio::io_context::executor_type> send_strand_;
-
-  std::string host_;
-  uint16_t port_{0};
-  std::string access_token_;
-  std::chrono::milliseconds action_timeout_{30000};
-  std::atomic_bool is_running_{false};
-
-  std::shared_ptr<detail::ActionRequestTracker> action_requests_;
-
-  // 连接状态跟踪
-  std::atomic_bool is_connected_ = false;
+  struct ConnectionState;
+  struct StandardRequest;
+  std::shared_ptr<ConnectionState> connection_;
 };
 
 } // namespace obcx::network

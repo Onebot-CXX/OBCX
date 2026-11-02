@@ -5,6 +5,7 @@
 #include "telegram/adapter/protocol_adapter.hpp"
 #include "telegram/bot/capability_ids.hpp"
 #include "telegram/bot/configuration.hpp"
+#include "telegram/network/connection_manager.hpp"
 #include "telegram/provider_types.hpp"
 #include <boost/asio/awaitable.hpp>
 #include <functional>
@@ -15,7 +16,7 @@ namespace obcx::core {
 
 class TelegramTransport {
 public:
-  using EventCallback = std::function<void(const common::Event &)>;
+  using EventCallback = network::TelegramConnectionManager::EventCallback;
 
   TelegramTransport() = default;
   TelegramTransport(const TelegramTransport &) = delete;
@@ -25,9 +26,21 @@ public:
   virtual ~TelegramTransport() = default;
 
   virtual void set_event_callback(EventCallback callback) = 0;
-  virtual void set_connection_callback(std::function<void(bool)> callback) = 0;
+  virtual void configure_identity(std::shared_ptr<SelfIdentityCache>) = 0;
   [[nodiscard]] virtual auto is_connected() const -> bool = 0;
+  [[nodiscard]] virtual auto epoch() const -> std::uint64_t = 0;
+  virtual auto capture_receive(const SelfIdentityOrigin &)
+      -> std::optional<network::TelegramReceiveOrigin> = 0;
+  virtual auto fetch_self(network::TelegramReceiveOrigin)
+      -> boost::asio::awaitable<std::optional<std::string>> = 0;
+  virtual auto publish_self(const network::TelegramReceiveOrigin &,
+                            const obcx::bot::SelfInfo &)
+      -> SelfObservationResult = 0;
   virtual auto send_action(std::string payload, std::uint64_t echo)
+      -> boost::asio::awaitable<std::string> = 0;
+  virtual auto send_domain_request(
+      nlohmann::json parameters,
+      const std::vector<std::pair<std::string, TelegramMediaUpload>> &files)
       -> boost::asio::awaitable<std::string> = 0;
   virtual auto download_file(std::string file_id)
       -> boost::asio::awaitable<std::string> = 0;
@@ -65,9 +78,21 @@ public:
   void start();
   void stop() noexcept;
   void set_event_callback(EventCallback callback) override;
-  void set_connection_callback(std::function<void(bool)> callback) override;
+  void configure_identity(std::shared_ptr<SelfIdentityCache>) override;
   [[nodiscard]] auto is_connected() const -> bool override;
+  [[nodiscard]] auto epoch() const -> std::uint64_t override;
+  auto capture_receive(const SelfIdentityOrigin &)
+      -> std::optional<network::TelegramReceiveOrigin> override;
+  auto fetch_self(network::TelegramReceiveOrigin)
+      -> boost::asio::awaitable<std::optional<std::string>> override;
+  auto publish_self(const network::TelegramReceiveOrigin &,
+                    const obcx::bot::SelfInfo &)
+      -> SelfObservationResult override;
   auto send_action(std::string payload, std::uint64_t echo)
+      -> boost::asio::awaitable<std::string> override;
+  auto send_domain_request(
+      nlohmann::json parameters,
+      const std::vector<std::pair<std::string, TelegramMediaUpload>> &files)
       -> boost::asio::awaitable<std::string> override;
   auto download_file(std::string file_id)
       -> boost::asio::awaitable<std::string> override;
@@ -85,6 +110,7 @@ public:
       -> boost::asio::awaitable<std::string> override;
 
 private:
+  friend class network::detail::TelegramMediaReadAccess;
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

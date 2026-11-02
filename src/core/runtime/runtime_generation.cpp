@@ -2,15 +2,18 @@
 #include "core/runtime/process_configuration.hpp"
 
 #include "common/logger.hpp"
+#include "core/actor/actor_event_publisher.hpp"
 #include "core/actor/actor_generation_lifecycle.hpp"
 #include "core/actor/actor_manager.hpp"
+#include "core/bot/bot_client.hpp"
 #include "core/bot/bot_installation_directory.hpp"
 #include "core/bot/bot_operation_dispatcher.hpp"
-#include "core/bot/messaging.hpp"
 #include "core/bot/typed_operation.hpp"
 #include "core/command/command_coordinator.hpp"
 #include "core/infrastructure/db_manager.hpp"
 #include "core/infrastructure/process_staging_uuid.hpp"
+#include "core/runtime/command_scope_resolver.hpp"
+#include "core/runtime/conversation_resolver.hpp"
 #include "core/runtime/orchestrator.hpp"
 
 #include <algorithm>
@@ -33,6 +36,27 @@ namespace obcx::core {
 namespace {
 
 namespace fs = std::filesystem;
+
+// A named owning coroutine, not a suspended closure borrowing service storage.
+auto publish_actor_event(std::weak_ptr<RuntimeGeneration> weak_generation,
+                         std::weak_ptr<ActorGenerationLifecycle> weak_lifecycle,
+                         ActorGenerationLifecycle::TokenPtr token,
+                         MessageEnvelope message)
+    -> boost::asio::awaitable<bool> {
+  auto generation = weak_generation.lock();
+  auto lifecycle = weak_lifecycle.lock();
+  if (!generation || !lifecycle)
+    co_return false;
+  auto admission = lifecycle->acquire_work(token);
+  if (!admission)
+    co_return false;
+  if (message.id.empty() || message.type.empty())
+    throw std::invalid_argument(
+        "background actor event requires identity and type");
+  const auto result =
+      co_await generation->process(std::move(message), std::move(admission));
+  co_return result.ok();
+}
 
 auto failed(std::string code, std::string message)
     -> RuntimeGenerationBuildResult {
@@ -827,12 +851,8 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
   }
 
   const auto runtime_config = request.snapshot->get_actor_runtime_config();
-  const auto thread_budget =
-      resolve_runtime_thread_budget(RuntimeThreadBudgetRequest{
-          .actor_workers = runtime_config.workers,
-          .io_workers = std::max<std::size_t>(1, request.configured_io_sources),
-          .blocking_workers = runtime_config.blocking_workers,
-      });
+  const auto thread_budget = resolve_runtime_thread_budget(
+      runtime_config, request.configured_io_sources);
   const auto process_fingerprint = request.snapshot->process_owned_fingerprint(
       common::RuntimeThreadFingerprintInput{
           .actor_workers = thread_budget.actor_workers,
@@ -974,13 +994,16 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
     generation->staged_packages_.push_back(std::move(staged.package));
   }
 
-  auto command_table =
-      build_command_routing_table(*request.snapshot, actor_contracts);
+  auto conversations = make_conversation_resolver(request.snapshot);
+  auto command_scopes =
+      CommandScopeResolverFactory::make(request.snapshot, conversations);
+  auto command_table = build_command_routing_table(
+      *request.snapshot, *conversations, actor_contracts);
   if (!command_table) {
     return failed(command_table.failure->code,
                   std::move(command_table.failure->message));
   }
-  CommandAvailabilityBuilder command_availability(*request.snapshot,
+  CommandAvailabilityBuilder command_availability(command_scopes,
                                                   actor_contracts);
 
   if (!request.snapshot->validate_actor_pipeline_contracts(actor_inputs)
@@ -1032,12 +1055,36 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
             }
             return {};
           }));
+  generation->orchestrator_->register_service<ActorEventPublisher>(
+      std::make_shared<ActorEventPublisher>(
+          [weak = std::weak_ptr<RuntimeGeneration>(generation),
+           lifecycle = std::weak_ptr<ActorGenerationLifecycle>(
+               generation->services_->get_service<ActorGenerationLifecycle>())](
+              ActorGenerationLifecycle::TokenPtr token,
+              MessageEnvelope message) {
+            return publish_actor_event(weak, lifecycle, std::move(token),
+                                       std::move(message));
+          }));
   generation->orchestrator_->register_service<ActorRestartConstraintRegistry>(
       restart_constraints_);
   generation->orchestrator_->register_service<DbManager>(
       generation->db_manager_);
   generation->orchestrator_->register_service<bot::BotOperationGateway>(
       generation->bot_operation_client_);
+  struct ClientOwner {
+    std::shared_ptr<bot::BotOperationGateway> gateway;
+    bot::BotClient client;
+    explicit ClientOwner(std::shared_ptr<bot::BotOperationGateway> value)
+        : gateway(std::move(value)), client(*gateway) {}
+  };
+  auto client_owner =
+      std::make_shared<ClientOwner>(generation->bot_operation_client_);
+  generation->orchestrator_->register_service<bot::BotClient>(
+      std::shared_ptr<bot::BotClient>(client_owner, &client_owner->client));
+  generation->orchestrator_->register_service<bot::ConversationResolver>(
+      conversations);
+  generation->orchestrator_->register_service<command::CommandScopeResolver>(
+      command_scopes);
   generation->orchestrator_->register_service<common::ActorConfigService>(
       std::make_shared<common::ActorConfigService>(request.snapshot));
   generation->orchestrator_->register_service<boost::asio::any_io_executor>(
@@ -1046,6 +1093,34 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
   if (generation->blocking_executor_) {
     generation->orchestrator_->register_service<BlockingExecutor>(
         generation->blocking_executor_);
+  }
+
+  try {
+    const CapabilityId contributor_id{
+        std::string{ActorServiceContributor::capability_id}};
+    for (const auto &plan : ProcessConfigAccess::plans(*request.snapshot)) {
+      if (!plan->metadata().enabled)
+        continue;
+      const auto declared = std::ranges::any_of(
+          plan->recipe().components, [&](const auto &component) {
+            return std::ranges::find(component.provides, contributor_id) !=
+                   component.provides.end();
+          });
+      if (!declared)
+        continue;
+      auto contributor = plan->create_actor_service_contributor(
+          generation->bot_installation_directory_);
+      if (!contributor)
+        return failed("reload_actor_services_failed",
+                      "declared actor service contributor unavailable");
+      contributor->contribute(
+          *generation->services_,
+          generation->services_->get_service<ActorGenerationLifecycle>(),
+          generation->actor_io_pool_->get_executor());
+    }
+  } catch (...) {
+    return failed("reload_actor_services_failed",
+                  "generation actor service contribution failed");
   }
 
   for (const auto &actor : *ordered) {

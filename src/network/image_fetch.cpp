@@ -1,14 +1,19 @@
 #include "network/image_fetch.hpp"
 
+#include "network/detail/media_fetch.hpp"
+
 #include <algorithm>
 #include <boost/asio/this_coro.hpp>
 #include <boost/system/system_error.hpp>
 #include <charconv>
+#include <chrono>
 #include <curl/curl.h>
 #include <limits>
 #include <map>
 #include <memory>
+#include <ratio>
 #include <string_view>
+#include <utility>
 
 namespace obcx::network {
 namespace {
@@ -96,6 +101,80 @@ auto parse_url(const std::string &text) -> ParsedUrl {
 
 ImageFetchError::ImageFetchError(ImageFetchFailure failure)
     : std::runtime_error(failure_message(failure)), failure_(failure) {}
+
+auto is_valid_media_http_url(std::string_view url) -> bool {
+  if (url.size() > 8192) {
+    return false;
+  }
+  try {
+    static_cast<void>(parse_url(std::string{url}));
+    return true;
+  } catch (const ImageFetchError &) {
+    return false;
+  }
+}
+
+auto detail::fetch_media_until(std::string url, std::uint64_t maximum_bytes,
+                               HttpDeadline deadline,
+                               HttpWriteEligibility eligible)
+    -> boost::asio::awaitable<HttpCallResult> {
+  const auto cancellation = co_await boost::asio::this_coro::cancellation_state;
+  if (cancellation.cancelled() != boost::asio::cancellation_type::none) {
+    co_return HttpCallResult{
+        boost::asio::error::operation_aborted, false, 0, {}};
+  }
+  if (!eligible || maximum_bytes == 0 ||
+      maximum_bytes > std::string{}.max_size() ||
+      maximum_bytes > std::numeric_limits<std::int64_t>::max() ||
+      maximum_bytes >
+          static_cast<std::uint64_t>(std::numeric_limits<curl_off_t>::max())) {
+    co_return HttpCallResult{
+        boost::asio::error::invalid_argument, false, 0, {}};
+  }
+  try {
+    const auto parsed = parse_url(url);
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= deadline) {
+      co_return HttpCallResult{boost::asio::error::timed_out, false, 0, {}};
+    }
+    // Widen before subtracting epochs, and round up: zero means unlimited to
+    // libcurl. This is only the connect cap; the original deadline stays
+    // intact.
+    using WideDuration =
+        std::chrono::duration<__int128, std::chrono::steady_clock::period>;
+    const auto remaining =
+        std::chrono::ceil<std::chrono::duration<__int128, std::milli>>(
+            WideDuration{
+                static_cast<__int128>(deadline.time_since_epoch().count()) -
+                static_cast<__int128>(now.time_since_epoch().count())});
+    common::ConnectionConfig config;
+    config.host = parsed.host;
+    config.port = parsed.port;
+    config.use_ssl = parsed.use_ssl;
+    config.connect_timeout = std::chrono::milliseconds(
+        static_cast<std::chrono::milliseconds::rep>(std::min<__int128>(
+            remaining.count(), std::numeric_limits<long>::max())));
+    config.access_token.clear();
+    config.secret.clear();
+    config.proxy_host.clear();
+    config.proxy_port = 0;
+    config.proxy_type.clear();
+    config.proxy_username.clear();
+    config.proxy_password.clear();
+
+    const auto executor = co_await boost::asio::this_coro::executor;
+    HttpClient client(executor, config);
+    std::map<std::string, std::string> headers{{"Accept-Encoding", "identity"}};
+    co_return co_await HttpCallAccess::get_until(
+        client, parsed.target, std::move(headers), maximum_bytes, deadline,
+        std::move(eligible));
+  } catch (const boost::system::system_error &error) {
+    co_return HttpCallResult{error.code(), false, 0, {}};
+  } catch (...) {
+    co_return HttpCallResult{
+        boost::asio::error::invalid_argument, false, 0, {}};
+  }
+}
 
 auto fetch_image(ImageFetchRequest request)
     -> boost::asio::awaitable<HttpResponse> {

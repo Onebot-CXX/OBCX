@@ -79,7 +79,7 @@ def package_branch(kind: str) -> dict:
     if kind == "actor":
         fields["actor"] = obj({"name": NAME, "abi": integer(2),
                                "entrypoint": choice("obcx_create_actor_v2"),
-                               "input_contract_schema": integer(2)})
+                               "input_contract_schema": integer(3)})
     return obj(fields)
 
 

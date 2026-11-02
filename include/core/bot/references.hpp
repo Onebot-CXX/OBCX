@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/bot/domain_ids.hpp"
 #include "core/bot/ids.hpp"
 #include "core/bot/json_codec.hpp"
 #include "core/bot/validation.hpp"
@@ -14,18 +15,21 @@ struct BotInstallationRef {
 
   void validate() const {
     detail::validate_identifier(installation_id, "installation_id", 256);
+    detail::validate_utf8(installation_id);
     surface.validate();
   }
 
   using obcx_bot_json_factory = void;
   static auto from_json(const Json &document) -> BotInstallationRef {
-    detail::require_object(document, "BotInstallationRef");
+    detail::validate_domain_wire(document);
+    detail::require_only_keys(document, "BotInstallationRef",
+                              {"installation_id", "surface"});
     if (!document.contains("surface")) {
       throw std::invalid_argument("BotInstallationRef requires surface");
     }
     BotInstallationRef result{
-        .installation_id = detail::require_string(document, "installation_id",
-                                                  "BotInstallationRef"),
+        .installation_id = detail::require_identifier(
+            document, "installation_id", "BotInstallationRef", 256),
         .surface = document.at("surface").get<SurfaceId>()};
     result.validate();
     return result;
@@ -34,139 +38,77 @@ struct BotInstallationRef {
   auto operator==(const BotInstallationRef &) const -> bool = default;
 };
 
-struct GroupTarget {
-  BotInstallationRef installation;
-  std::string native_group_id;
-
-  void validate() const {
-    installation.validate();
-    detail::validate_identifier(native_group_id, "native_group_id");
-  }
-
-  using obcx_bot_json_factory = void;
-  static auto from_json(const Json &document) -> GroupTarget {
-    detail::require_object(document, "GroupTarget");
-    if (!document.contains("installation")) {
-      throw std::invalid_argument("GroupTarget requires installation");
-    }
-    GroupTarget result{
-        .installation = document.at("installation").get<BotInstallationRef>(),
-        .native_group_id =
-            detail::require_string(document, "native_group_id", "GroupTarget")};
-    result.validate();
-    return result;
-  }
-
-  auto operator==(const GroupTarget &) const -> bool = default;
-};
-
-struct PrivateTarget {
-  BotInstallationRef installation;
-  std::string native_user_id;
-
-  void validate() const {
-    installation.validate();
-    detail::validate_identifier(native_user_id, "native_user_id");
-  }
-
-  using obcx_bot_json_factory = void;
-  static auto from_json(const Json &document) -> PrivateTarget {
-    detail::require_only_keys(document, "PrivateTarget",
-                              {"installation", "native_user_id"});
-    if (!document.contains("installation")) {
-      throw std::invalid_argument("PrivateTarget requires installation");
-    }
-    PrivateTarget result{
-        .installation = document.at("installation").get<BotInstallationRef>(),
-        .native_user_id = detail::require_string(document, "native_user_id",
-                                                 "PrivateTarget")};
-    result.validate();
-    return result;
-  }
-
-  auto operator==(const PrivateTarget &) const -> bool = default;
-};
-
-struct PrivateMessageRef {
-  PrivateTarget target;
-  std::string native_message_id;
-
-  void validate() const {
-    target.validate();
-    detail::validate_identifier(native_message_id, "native_message_id");
-  }
-
-  using obcx_bot_json_factory = void;
-  static auto from_json(const Json &document) -> PrivateMessageRef {
-    detail::require_only_keys(document, "PrivateMessageRef",
-                              {"target", "native_message_id"});
-    if (!document.contains("target") || !document.at("target").is_object()) {
-      throw std::invalid_argument("PrivateMessageRef requires target");
-    }
-    PrivateMessageRef result{
-        .target = document.at("target").get<PrivateTarget>(),
-        .native_message_id = detail::require_string(
-            document, "native_message_id", "PrivateMessageRef")};
-    result.validate();
-    return result;
-  }
-
-  auto operator==(const PrivateMessageRef &) const -> bool = default;
-};
-
-struct BotMessageRef {
-  GroupTarget group;
-  std::string native_message_id;
-
-  void validate() const {
-    group.validate();
-    detail::validate_identifier(native_message_id, "native_message_id");
-  }
-
-  using obcx_bot_json_factory = void;
-  static auto from_json(const Json &document) -> BotMessageRef {
-    detail::require_object(document, "BotMessageRef");
-    if (!document.contains("group") || !document.at("group").is_object()) {
-      throw std::invalid_argument("BotMessageRef requires group");
-    }
-    BotMessageRef result{.group = document.at("group").get<GroupTarget>(),
-                         .native_message_id = detail::require_string(
-                             document, "native_message_id", "BotMessageRef")};
-    result.validate();
-    return result;
-  }
-
-  auto operator==(const BotMessageRef &) const -> bool = default;
-};
-
 inline void to_json(Json &document, const BotInstallationRef &installation) {
   installation.validate();
   document = {{"installation_id", installation.installation_id},
               {"surface", installation.surface}};
 }
 
-inline void to_json(Json &document, const GroupTarget &target) {
-  target.validate();
-  document = {{"installation", target.installation},
-              {"native_group_id", target.native_group_id}};
+struct ConversationRef {
+  using obcx_bot_json_factory = void;
+  BotInstallationRef installation;
+  ConversationId id;
+  void validate() const {
+    installation.validate();
+    id.validate_surface(installation.surface);
+  }
+  static auto from_json(const Json &d) -> ConversationRef {
+    detail::validate_domain_wire(d);
+    detail::require_only_keys(d, "ConversationRef", {"installation", "id"});
+    ConversationRef v{d.at("installation").get<BotInstallationRef>(),
+                      d.at("id").get<ConversationId>()};
+    v.validate();
+    return v;
+  }
+  auto operator==(const ConversationRef &) const -> bool = default;
+};
+struct UserRef {
+  using obcx_bot_json_factory = void;
+  BotInstallationRef installation;
+  UserId id;
+  void validate() const {
+    installation.validate();
+    id.validate_surface(installation.surface);
+  }
+  static auto from_json(const Json &d) -> UserRef {
+    detail::validate_domain_wire(d);
+    detail::require_only_keys(d, "UserRef", {"installation", "id"});
+    UserRef v{d.at("installation").get<BotInstallationRef>(),
+              d.at("id").get<UserId>()};
+    v.validate();
+    return v;
+  }
+  auto operator==(const UserRef &) const -> bool = default;
+};
+struct MessageRef {
+  using obcx_bot_json_factory = void;
+  ConversationRef conversation;
+  MessageId id;
+  void validate() const {
+    conversation.validate();
+    id.validate_surface(conversation.installation.surface);
+  }
+  static auto from_json(const Json &d) -> MessageRef {
+    detail::validate_domain_wire(d);
+    detail::require_only_keys(d, "MessageRef", {"conversation", "id"});
+    MessageRef v{d.at("conversation").get<ConversationRef>(),
+                 d.at("id").get<MessageId>()};
+    v.validate();
+    return v;
+  }
+  auto operator==(const MessageRef &) const -> bool = default;
+};
+inline void to_json(Json &d, const ConversationRef &v) {
+  v.validate();
+  d = {{"installation", v.installation}, {"id", v.id}};
 }
-
-inline void to_json(Json &document, const PrivateTarget &target) {
-  target.validate();
-  document = {{"installation", target.installation},
-              {"native_user_id", target.native_user_id}};
+inline void to_json(Json &d, const UserRef &v) {
+  v.validate();
+  d = {{"installation", v.installation}, {"id", v.id}};
 }
-
-inline void to_json(Json &document, const PrivateMessageRef &message) {
-  message.validate();
-  document = {{"target", message.target},
-              {"native_message_id", message.native_message_id}};
-}
-
-inline void to_json(Json &document, const BotMessageRef &message) {
-  message.validate();
-  document = {{"group", message.group},
-              {"native_message_id", message.native_message_id}};
+inline void to_json(Json &d, const MessageRef &v) {
+  v.validate();
+  d = {{"conversation", v.conversation}, {"id", v.id}};
 }
 
 } // namespace obcx::bot

@@ -3,9 +3,12 @@
 #include "common/config_snapshot.hpp"
 #include "core/actor/actor_commands.hpp"
 #include "core/actor/actor_manager.hpp"
+#include "core/bot/conversation_resolver.hpp"
+#include "core/bot/operation_gateway.hpp"
 #include "core/command/command_availability_builder.hpp"
 #include "core/command/command_matcher.hpp"
 #include "core/command/command_platform_adapter.hpp"
+#include "core/command/command_source_projector.hpp"
 #include "core/runtime/orchestrator.hpp"
 
 #include <atomic>
@@ -117,6 +120,7 @@ struct ActiveCommandBot {
   bot::BotInstallationRef installation;
   std::string target;
   std::shared_ptr<ICommandPlatformAdapter> adapter;
+  std::shared_ptr<CommandSourceProjector> source_projector;
   std::vector<CommandCatalogEntry> catalog;
   std::vector<ActiveCommandPattern> patterns;
 };
@@ -153,7 +157,7 @@ public:
 private:
   friend struct CommandRoutingBuildResult;
   friend auto build_command_routing_table(
-      const common::RuntimeConfigSnapshot &,
+      const common::RuntimeConfigSnapshot &, const bot::ConversationResolver &,
       const std::unordered_map<std::string, ActorInputContract> &)
       -> struct CommandRoutingBuildResult;
 
@@ -191,6 +195,7 @@ struct CommandRoutingBuildResult {
 
 [[nodiscard]] auto build_command_routing_table(
     const common::RuntimeConfigSnapshot &snapshot,
+    const bot::ConversationResolver &conversations,
     const std::unordered_map<std::string, ActorInputContract> &contracts)
     -> CommandRoutingBuildResult;
 

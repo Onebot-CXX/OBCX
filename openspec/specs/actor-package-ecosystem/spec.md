@@ -1,62 +1,77 @@
 # actor-package-ecosystem Specification
 
 ## Purpose
-TBD - created by archiving change actor-only-runtime-cutover. Update Purpose after archive.
+Define the current schema-v2 package metadata, installed actor tooling and
+kind-aware development registry shared by actors and ordinary libraries.
+
 ## Requirements
+
 ### Requirement: Actor packages use one canonical metadata contract
-Every standalone actor package SHALL declare its build and publication
-metadata in `actor.toml`. The contract SHALL include actor identity and
-semantic version, the supported numeric V2 ABI generation, artifact identity,
-the explicitly built and verified release platforms, dependencies, publication
-data, and supported OBCX/ABI ranges. OBCX build and packaging tools SHALL
-derive actor dependencies and publishable platform assets exclusively from
-that contract.
+Every standalone actor package SHALL declare schema-v2 package.toml with an
+explicit package.kind discriminator, identity/version, ABI/input contract,
+artifact, typed dependencies, publication and compatibility metadata. Required
+fields and empty dependency lists SHALL be explicit; unknown fields, actor.toml
+and old workspace actors.toml SHALL be rejected without compatibility defaults.
+Current declarations, not a package lock or registry solver, SHALL select builds.
 
 #### Scenario: Standalone actor declares dependencies
-- **WHEN** an actor package with canonical actor metadata is included in a build
-- **THEN** the build tooling resolves its declared dependencies without consulting a plugin manifest
+- **WHEN** a schema-v2 actor enters the selected build graph
+- **THEN** tooling checks its declared library, logical actor and system edges against explicit source/provider bindings
 
 #### Scenario: Actor metadata omits a required field
-- **WHEN** `actor.toml` lacks required identity, ABI, artifact, dependency, or publication data
-- **THEN** actor package validation rejects it with a field-specific error
+- **WHEN** package.toml lacks required identity, ABI, artifact, dependency, compatibility or publication data
+- **THEN** validation reports the field and inserts no implicit value
 
 #### Scenario: Actor platform was not built and verified
-- **WHEN** a registry or release process resolves a platform absent from `artifact.platforms`
-- **THEN** no download entry or release asset is generated for that platform
+- **WHEN** development metadata is indexed without verified release assets
+- **THEN** no download URL or deployable platform artifact is fabricated
+
+#### Scenario: An old package format is supplied
+- **WHEN** a caller supplies only actor.toml or workspace actors.toml
+- **THEN** tooling requires current package.toml/packages.toml rather than converting it
 
 ### Requirement: Installed SDK builds V2 actor packages
-The installed OBCX SDK SHALL expose only the public headers, libraries, export
-helper, and CMake functions needed to build and load an `IActorV2` package.
+The installed SDK SHALL provide public headers, its matching imported core,
+ABI V2 export helpers, canonical schema-v2 parser and CMake graph/audit tooling.
+It SHALL support declared ordinary libraries without treating them as runtime
+actors. Workspace and installed builds SHALL use explicit current declarations
+and the same supported dependency/toolchain checks. A successful development
+build MUST NOT be advertised as full release or runtime acceptance.
 
 #### Scenario: Clean external actor build
-- **WHEN** a standalone V2 actor is configured against a clean OBCX installation
-- **THEN** it compiles, links, installs, loads, and handles an invocation using the actor SDK alone
+- **WHEN** a standalone V2 actor and declared libraries use the installed SDK with explicit dependencies
+- **THEN** configuration and compilation do not require core-private source headers or an old metadata helper
 
 #### Scenario: Installed surface is actor-only
-- **WHEN** the installed include and CMake package contents are audited
-- **THEN** no plugin SDK, V1 actor helper, or Asio-v1 build target is exported
-
-### Requirement: Actor registry accepts actor packages only
-The package registry SHALL publish an actor-named index whose schema describes
-V2 actor identity, version, artifact, metadata, and supported OBCX/ABI ranges.
-Its generator and validation workflow SHALL operate only on actor package
-entries and SHALL NOT invent artifacts for undeclared platforms.
-
-#### Scenario: Valid actor is indexed
-- **WHEN** a repository submits a valid actor package entry
-- **THEN** registry validation publishes it in the generated actor index
-
-#### Scenario: Entry lacks actor package fields
-- **WHEN** a registry entry does not satisfy the actor package schema
-- **THEN** registry validation rejects it without applying plugin-schema compatibility rules
+- **WHEN** installed runtime extension interfaces are inspected
+- **THEN** they expose ABI V2 actors, not plugin/V1/Asio-v1 factories; ordinary library helpers add no runtime factory
 
 ### Requirement: Active project surfaces use actor terminology
-Active project surfaces MUST use actor terminology. This includes current
-source layout, examples, package names, CMake entry points, registry artifacts,
-and user documentation for runtime extensions. Historical records and explicit
-breaking-change notes MAY retain the word plugin where needed to identify
-removed behavior.
+Runtime extension surfaces SHALL use actor terminology. General build and
+registry surfaces SHALL use package terminology for actor/library kinds.
+Historical notes MAY identify removed names, but active tooling SHALL NOT
+provide an old-format reader or plugin ABI entry point.
 
 #### Scenario: Active surface audit
-- **WHEN** the release source tree and installed artifacts are audited
-- **THEN** extension-facing paths and identifiers use actor terminology and expose no active plugin entry point
+- **WHEN** current source and installed interfaces are inspected
+- **THEN** runtime extension paths identify actors and generic metadata paths identify packages without active plugin factories
+
+### Requirement: Package registry distinguishes actors from ordinary libraries
+The local development registry SHALL validate schema-v2 actor/library records
+using the canonical core package tooling rather than a copied validator. Kind,
+artifact, dependency and compatibility rules SHALL agree with local builds.
+The deterministic index SHALL identify development-metadata-only status and
+source metadata digests without inventing download assets or published tooling
+pins. Registry entries SHALL NOT select workspace dependency versions.
+
+#### Scenario: A valid library is indexed
+- **WHEN** a valid library record is supplied to canonical registry tooling
+- **THEN** its kind and exports can be indexed without actor ABI/factory fields
+
+#### Scenario: A package kind and artifact disagree
+- **WHEN** actor metadata declares a static artifact or library metadata declares an actor factory
+- **THEN** canonical registry and build validation reject it consistently
+
+#### Scenario: A package is absent from explicit workspace bindings
+- **WHEN** a compatible registry record exists but the workspace has no required source binding
+- **THEN** resolution fails rather than choosing the registry record

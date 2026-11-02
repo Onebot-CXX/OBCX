@@ -438,7 +438,7 @@ public:
   [[nodiscard]] static auto input_contract_json() -> const std::string & {
     static const std::string contract = [] {
       common::json document = {
-          {"schema_version", 2},
+          {"schema_version", 3},
           {"actor", actor_name},
           {"accepted_inputs", detail::accepted_inputs<Derived>()},
       };

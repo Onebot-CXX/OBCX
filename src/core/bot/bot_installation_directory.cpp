@@ -14,18 +14,34 @@ void BotInstallationDirectory::register_installation(
     command_catalog =
         installation.capability<CommandCatalogPublisher>(*publisher_capability);
   }
+  std::shared_ptr<ActorServiceContributor> actor_services;
+  const CapabilityId contributor_id{
+      std::string{ActorServiceContributor::capability_id}};
+  if (installation.has_capability(contributor_id)) {
+    actor_services =
+        installation.capability<ActorServiceContributor>(contributor_id);
+  }
   register_capabilities(
       {.installation_id = installation.installation_id(),
        .surface = installation.surface()},
       installation.capability<BotOperationEndpoint>(
           CapabilityId{std::string{bot_capability_ids::operations}}),
-      std::move(command_catalog));
+      std::move(command_catalog), std::move(actor_services));
 }
 
 void BotInstallationDirectory::register_capabilities(
     bot::BotInstallationRef installation,
     std::shared_ptr<BotOperationEndpoint> endpoint,
     std::shared_ptr<CommandCatalogPublisher> command_catalog) {
+  register_capabilities(std::move(installation), std::move(endpoint),
+                        std::move(command_catalog), {});
+}
+
+void BotInstallationDirectory::register_capabilities(
+    bot::BotInstallationRef installation,
+    std::shared_ptr<BotOperationEndpoint> endpoint,
+    std::shared_ptr<CommandCatalogPublisher> command_catalog,
+    std::shared_ptr<ActorServiceContributor> actor_services) {
   installation.validate();
   if (endpoint == nullptr || endpoint->installation() != installation) {
     throw std::invalid_argument(
@@ -33,7 +49,8 @@ void BotInstallationDirectory::register_capabilities(
   }
   Entry entry{.installation = std::move(installation),
               .endpoint = std::move(endpoint),
-              .command_catalog = std::move(command_catalog)};
+              .command_catalog = std::move(command_catalog),
+              .actor_services = std::move(actor_services)};
   std::scoped_lock lock(mutex_);
   if (!entries_.emplace(entry.installation.installation_id, std::move(entry))
            .second) {
@@ -56,6 +73,17 @@ auto BotInstallationDirectory::endpoint(
     return {};
   }
   return entry->second.endpoint.lock();
+}
+
+auto BotInstallationDirectory::actor_service_contributor(
+    const bot::BotInstallationRef &installation) const
+    -> std::shared_ptr<ActorServiceContributor> {
+  std::scoped_lock lock(mutex_);
+  const auto entry = entries_.find(installation.installation_id);
+  if (entry == entries_.end() || entry->second.installation != installation) {
+    return {};
+  }
+  return entry->second.actor_services.lock();
 }
 
 auto BotInstallationDirectory::command_catalog_publisher(

@@ -6,7 +6,7 @@
 #include "core/bot/bot_installation_assembler.hpp"
 #include "core/bot/bot_installation_directory.hpp"
 #include "core/bot/bot_operation_dispatcher.hpp"
-#include "core/bot/messaging.hpp"
+#include "core/bot/bounded_file_reader.hpp"
 #include "core/infrastructure/db_manager.hpp"
 #include "core/runtime/actor_runtime_reload_controller.hpp"
 #include "core/runtime/message_event_ingress.hpp"
@@ -52,17 +52,6 @@ std::mutex g_stop_mtx;
 std::condition_variable g_stop_cv;
 
 constexpr int BOT_SHUTDOWN_TIMEOUT_SECONDS = 5;
-
-auto is_telegram_message_send_action(const obcx::bot::ActionId &action)
-    -> bool {
-  return action == obcx::bot::SendGroupMessageRequest::action ||
-         action == obcx::bot::SendPrivateMessageRequest::action ||
-         action == obcx::telegram::bot::actions::send_topic ||
-         action == obcx::telegram::bot::actions::send_photo ||
-         action == obcx::telegram::bot::actions::send_photo_upload ||
-         action == obcx::telegram::bot::actions::send_group_urls ||
-         action == obcx::telegram::bot::actions::send_group_uploads;
-}
 
 class SignalMonitor final {
 public:
@@ -271,6 +260,15 @@ public:
     if (!parsed) {
       fmt::print(std::cerr, "Failed to load configuration from: {}\n",
                  config_path);
+      if (parsed.diagnostic) {
+        const auto &diagnostic = *parsed.diagnostic;
+        // Report location and classification only. Parser descriptions or raw
+        // configuration excerpts can contain credentials.
+        fmt::print(std::cerr,
+                   "Config load failed [{}] path={} line={} column={}\n",
+                   diagnostic.code, diagnostic.path, diagnostic.line,
+                   diagnostic.column);
+      }
       return 1;
     }
     auto config_snapshot = std::move(parsed.snapshot);
@@ -342,6 +340,16 @@ public:
     std::vector<std::future<void>> bot_thread_completions;
     auto process_blocking_executor =
         actor_runtime ? actor_runtime->blocking_executor() : nullptr;
+    if (!process_blocking_executor &&
+        actor_runtime_build.status ==
+            core::RuntimeGenerationBuildStatus::NotConfigured) {
+      const auto thread_budget = core::resolve_runtime_thread_budget(
+          config_snapshot->get_actor_runtime_config(), bot_configs.size());
+      process_blocking_executor = std::make_shared<core::BlockingExecutor>(
+          thread_budget.blocking_workers);
+    }
+    auto process_file_reader =
+        std::make_shared<core::BoundedFileReader>(process_blocking_executor);
     if (process_blocking_executor) {
       OBCX_INFO("Created process BlockingExecutor with {} threads",
                 process_blocking_executor->worker_count());
@@ -439,13 +447,12 @@ public:
     if (reload_controller) {
       process_bot_operation_dispatcher->set_success_handler(
           notification_pool->get_executor(),
-          [weak_controller =
+          [platform_catalog,
+           weak_controller =
                std::weak_ptr<core::ActorRuntimeReloadController>{
                    reload_controller}](core::SuccessfulBotOperation operation)
               -> boost::asio::awaitable<void> {
-            if (operation.installation.surface !=
-                    obcx::telegram::bot::surface ||
-                !is_telegram_message_send_action(operation.action)) {
+            if (!operation.send_receipt) {
               co_return;
             }
             const auto controller = weak_controller.lock();
@@ -453,10 +460,11 @@ public:
               co_return;
             }
             try {
-              const auto result =
-                  co_await controller->process(core::bot_message_sent_envelope(
-                      "telegram", operation.installation.installation_id,
-                      operation.action));
+              const auto result = co_await controller->process(
+                  core::bot_send_succeeded_envelope(
+                      platform_catalog->ingress_platform(
+                          operation.installation.surface),
+                      operation));
               if (!result.ok()) {
                 const auto &first = result.failures.front();
                 OBCX_ERROR(
@@ -470,9 +478,37 @@ public:
                     first.failure.message);
               }
             } catch (const std::exception &error) {
+              OBCX_ERROR("Actor runtime failed to process successful send: "
+                         "{}",
+                         error.what());
+            }
+          });
+    }
+    if (reload_controller) {
+      process_bot_operation_dispatcher->set_confirmation_handler(
+          notification_pool->get_executor(),
+          [platform_catalog,
+           weak_controller =
+               std::weak_ptr<core::ActorRuntimeReloadController>{
+                   reload_controller}](bot::SendConfirmation confirmation)
+              -> boost::asio::awaitable<void> {
+            const auto controller = weak_controller.lock();
+            if (!controller)
+              co_return;
+            try {
+              const auto result = co_await controller->process(
+                  core::bot_send_confirmed_envelope(
+                      platform_catalog->ingress_platform(
+                          confirmation.output.message.conversation.installation
+                              .surface),
+                      confirmation));
+              if (!result.ok())
+                OBCX_ERROR("Actor runtime confirmation observation failed "
+                           "attempt={} failures={}",
+                           confirmation.attempt_id, result.failures.size());
+            } catch (const std::exception &error) {
               OBCX_ERROR(
-                  "Actor runtime failed to process successful Telegram send: "
-                  "{}",
+                  "Actor runtime failed to observe send confirmation: {}",
                   error.what());
             }
           });
@@ -492,10 +528,42 @@ public:
       const auto &bot_platform = config.ingress_platform;
       const auto bot_instance = config.installation_id;
       try {
-        auto installation = core::BotInstallationAssembler::assemble(*plan);
+        auto installation = core::BotInstallationAssembler::assemble(
+            *plan, process_file_reader);
         auto events = installation->capability<core::BotEventCapability>(
             core::CapabilityId{"bot.events"});
         if (reload_controller && !bot_platform.empty()) {
+          auto operations =
+              installation->capability<core::BotOperationEndpoint>(
+                  core::CapabilityId{"bot.operations"});
+          const auto binding = platform_catalog->domain_binding(config.surface);
+          events->set_origin_capture_handler(
+              [operations] { return operations->capture_origin(); });
+          events->set_message_admission_handler(
+              [operations, binding](const core::BotEventContext &context,
+                                    const common::MessageEvent &event)
+                  -> core::MessageAdmissionResult {
+                if (!context.source_origin)
+                  return {{core::SelfObservationStatus::RejectedOrigin,
+                           std::nullopt},
+                          std::nullopt};
+                const bot::BotInstallationRef owner{context.installation_id,
+                                                    context.surface};
+                auto captured =
+                    operations->capture_message_admission_generation(
+                        *context.source_origin,
+                        binding->observed_self(owner, event));
+                if (!captured.evidence_generation)
+                  return {std::move(captured.observation), std::nullopt};
+                return {std::move(captured.observation),
+                        core::MessageIngressAdmission{
+                            *captured.evidence_generation,
+                            bot::TimePoint{std::chrono::duration_cast<
+                                               std::chrono::milliseconds>(
+                                               std::chrono::system_clock::now()
+                                                   .time_since_epoch())
+                                               .count()}}};
+              });
           auto process_actor_event =
               [reload_controller, bot_platform, bot_instance](
                   std::string ingress_type, core::MessageEnvelope envelope)
@@ -521,28 +589,27 @@ public:
             co_return;
           };
           events->subscribe_messages(
-              [process_actor_event, process_bot_operation_dispatcher](
-                  const core::BotEventContext &context,
-                  const common::MessageEvent &event)
+              [process_actor_event, process_bot_operation_dispatcher,
+               platform_catalog](const core::BotEventContext &context,
+                                 const common::MessageEvent &event)
                   -> boost::asio::awaitable<void> {
-                process_bot_operation_dispatcher->observe_self_id(
-                    {.installation_id = context.installation_id,
-                     .surface = context.surface},
-                    event.self_id);
                 co_await process_actor_event(
                     "message",
-                    core::raw_message_envelope_from_event(
-                        context.platform, context.installation_id, event));
+                    core::message_envelope_from_event(
+                        context, event,
+                        *platform_catalog->domain_binding(context.surface),
+                        *process_bot_operation_dispatcher));
               });
-          events->subscribe_notices(
-              [process_actor_event](const core::BotEventContext &context,
-                                    const common::NoticeEvent &event)
-                  -> boost::asio::awaitable<void> {
-                co_await process_actor_event(
-                    "notice",
-                    core::raw_notice_envelope_from_event(
-                        context.platform, context.installation_id, event));
-              });
+          events->subscribe_notices([process_actor_event, platform_catalog](
+                                        const core::BotEventContext &context,
+                                        const common::NoticeEvent &event)
+                                        -> boost::asio::awaitable<void> {
+            co_await process_actor_event(
+                "notice",
+                core::notice_envelope_from_event(
+                    context, event,
+                    *platform_catalog->domain_binding(context.surface)));
+          });
           events->subscribe_heartbeats(
               [process_actor_event](const core::BotEventContext &context,
                                     const common::HeartbeatEvent &event)

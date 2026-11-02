@@ -1,6 +1,12 @@
 #pragma once
 
 #include <atomic>
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/system/error_code.hpp>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -81,7 +87,8 @@ public:
 
   // The returned lease participates in the generation's existing route drain.
   // Keep it until ALL callbacks for the admitted operation have retired, not
-  // just until cancellation is requested. Idle timer waits need no work lease.
+  // just until cancellation is requested. A timer retaining actor code needs
+  // this lease even while idle; cancellation alone does not retire its handler.
   [[nodiscard]] auto acquire_work(const TokenPtr &token) -> WorkLease {
     std::scoped_lock lock(state_mutex_);
     if (!token || token != token_ || !token->valid()) {
@@ -89,6 +96,27 @@ public:
     }
     return acquire_work_();
   }
+
+  // These non-inline core implementations own the outer Asio handlers. A
+  // lease captured only in an actor-compiled handler can expire while its
+  // destructor/continuation still executes DSO code. These boundaries destroy
+  // actor closures and coroutine frames before releasing the route lease.
+  // spawn_owned uses a serial executor and posts terminal completion after
+  // the final actor awaitable handler has unwound. Cancellation-slot emission
+  // must use the supplied serial executor (as must slot setup/replacement).
+  // Use this factory rather than constructing actor-owned executor erasure
+  // tables: executor/control-block destruction must remain core-owned too.
+  static auto make_serial_executor(boost::asio::any_io_executor executor)
+      -> boost::asio::any_io_executor;
+  static void spawn_owned(boost::asio::any_io_executor serial_executor,
+                          WorkLease lease, boost::asio::awaitable<void> work,
+                          std::function<void(std::exception_ptr)> completion,
+                          boost::asio::cancellation_slot cancellation);
+  static void wait_owned(
+      boost::asio::steady_timer &timer, WorkLease lease,
+      std::function<void(boost::system::error_code)> completion);
+  static void post_owned(boost::asio::any_io_executor executor, WorkLease lease,
+                         std::function<void()> completion);
 
   // Destroy DSO-owned callback closures before unloading actor libraries.
   // Idempotent and terminal: this generation can never reactivate afterward.

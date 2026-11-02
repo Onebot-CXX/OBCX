@@ -3,28 +3,32 @@
 Actors use one public contract, independent of the platform's native API:
 
 ```cpp
-#include <core/bot/self_info.hpp>
+#include <core/bot/bot_client.hpp>
 
-// gateway is a BotOperationGateway; installation is an exact BotInstallationRef.
-auto result = co_await obcx::bot::SelfClient{gateway}.execute(
+// client is the injected BotClient; installation is an exact BotInstallationRef.
+auto result = co_await client.get_self(
     obcx::bot::GetSelfRequest{.installation = installation});
 if (result.ok()) {
   const obcx::bot::SelfInfo &self = *result.value;
-  // self.installation, self.user_id, self.display_name, self.username
+  // self.user is the same scoped UserRef type used by typed senders/mentions.
+  // self.display_name and self.username are optional profile values.
 }
 ```
 
 The action is `bot.self.get`. Both platform recipes advertise it. The result
-contains the exact installation, a validated positive native user ID, a display
-name (empty if unavailable), and an optional username. Profile values are data,
+contains `UserRef{installation, id}` plus optional display name and username.
+The user ID is opaque; actors compare complete UserRefs instead of decoding native
+numbers. Missing profile fields remain absent. The username uses the same owning
+platform normalization as typed unresolved mentions. Profile values are data,
 not instructions. The API does not perform `is_self`/mention/reply classification.
+The former `SelfClient` and flat `installation/user_id` DTO are not the domain SDK
+API or a binary-compatible representation; use the matching schema-3 SDK/core.
 
 ## Cache semantics
 
-- Every query reads core's in-memory cache; it never starts or waits for a native
-  platform request, including on a cache miss. The existing QQ
-  `GetOneBotLoginInfoRequest` keeps its request/result types but now reads this
-  same cache; it cannot bypass the refresh schedule.
+- `BotClient::get_self` reads core's in-memory cache; it never starts or waits
+  for a native platform request, including on a cache miss. The obsolete QQ
+  cache-only login projection has been removed; use the common self contract.
 - An empty, invalidated or closed cache returns `cache_unavailable`, with
   `definitely_not_submitted` safety and no caller-driven retry instruction.
 - Background refresh uses QQ `get_login_info` or Telegram `getMe`, retaining the
@@ -61,15 +65,44 @@ Connection configuration is part of the existing process fingerprint. Changing
 this interval requires the normal explicit core configuration/restart procedure;
 an actor-only reload does not reconfigure it.
 
-## Exact QQ reply lookup
+## Explicit standard login is a different operation
 
-`<onebot11/bot/message_lookup.hpp>` additionally exposes
-`GetOneBotMessageRequest{message}` -> `OneBotMessageAuthor{message, user_id}`.
-`message` is an exact group `BotMessageRef`. The native result must agree with
-both the requested message ID and group and contain a valid author. Missing scope
-or a mismatch is `malformed_response`, not inferred identity. This is a OneBot
-extension, not a portable history API; Telegram has no equivalent arbitrary
-message fetch.
+`onebot11::bot::standard::GetLoginInfoRequest` is the distinctly named, explicitly
+requested standard provider query. It uses the existing identity coordinator and
+same cache, not another identity store or a second refresh schedule. A valid
+synchronous observation can publish through the original-origin checks; its
+returned `LoginInfo` retains the actual nickname, including an empty nickname,
+rather than pretending a later cache read was the observed response. Async or
+rate-limited acknowledgment is not an identity observation or completed query.
+This does not change cache-only `BotClient::get_self`; there is no retained
+legacy login projection. Adding the standard interface is not authorization to
+execute it against a provider.
+
+## Evidence-bound reply lookup
+
+Use `BotClient::resolve_reply(ResolveReplyRequest)` with an actually observed
+`ReplyRef` and an explicit `LocalOnly` or `AllowProviderLookup` policy. The genuine
+source/target relation must still exist in the installation's bounded admission
+store; structural restoration or a message number in text does not create it.
+A permitted QQ native lookup must match the exact message and full conversation
+and contain a usable author. Telegram has no arbitrary history lookup through
+this common interface. Missing, expired or unsupported evidence remains explicit
+unavailability; no historical-page automatic query loop is allowed.
+
+The old `GetOneBotMessageRequest`/`OneBotMessageAuthor` API is retired.
+`<onebot11/bot/message_lookup.hpp>` is only a transition include for the common
+query types, not an exported unrestricted get-message service. The separate
+standard `GetMsg`/`GetForwardMsg` selectors return detached observations and do not
+create conversation, reply or media-read authority.
+
+The source now joins admitted target-author observations and binding-provided
+confirmed-author evidence in the same bounded reply store. A genuine retained
+reply relation is still required: a confirmed ID alone cannot create a relation,
+renew its TTL or prove authorship. Native author evidence or an explicit
+initiating-self proof must match the original admission identity/generation;
+contradictory authors make local resolution unavailable. Tasks 5.2–5.3 cover the
+implementation/build boundary, not completed lifecycle/provider runtime
+acceptance. Do not advertise a local author solely because a send was confirmed.
 
 ## Deployment boundary
 
@@ -79,7 +112,9 @@ its library over a running core or attempt to activate it with actor-only reload
 Core rollout/restart must be separately authorized. Keep the previous matching
 core, SDK, actor artifacts and config for rollback; never delete session data.
 
-The matching `chat_llm` actor uses this cache for native QQ/Telegram addressing.
+Chat LLM's addressing policy remains actor-owned; migration of all its domain SDK
+use sites and historical acceptance is tracked separately. Its established policy
+uses cached identity for QQ/Telegram addressing.
 Confirmed relationships add `[at:self]` / `[reply:self]` outside the existing
 message envelope and request an assessment even when proactive assessment is
 disabled. They still permit `decline_reply`; only an authorized explicit `/chat`
@@ -92,10 +127,11 @@ retired.
 1. Record the running core/SDK/actor/config versions and retain that exact set.
    Take a consistent backup using the existing database procedure; keep all
    existing source/state paths. Do not clear or replace session data.
-2. Select a matching candidate set. The locally verified build is
-   `build/addressing-core`, `build/addressing-sdk-verified`, and
-   `build/addressing-actors-verified/cmake/actors/{chat_llm,message_store}.so`.
-   Keep release directories immutable; do not overwrite a mapped core library.
+2. Select a matching candidate core, frozen installed SDK and rebuilt actor set
+   from the current generation's acceptance receipt. Earlier `build/addressing-*`
+   artifacts belong to the preceding addressing work, not proof of this domain
+   migration. Keep release directories immutable; do not overwrite a mapped core
+   library. Source review or core compilation alone is not rollout acceptance.
 3. During an explicitly authorized maintenance window, stop the old process.
    Update the process executable/library selection and actor paths together;
    validate the candidate configuration, then start the matching core. This is

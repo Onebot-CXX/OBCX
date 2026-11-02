@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.30)
+if(NOT DEFINED OBCX_CURRENT_PACKAGE)
+  message(FATAL_ERROR "Use scripts/actor_build.py with the offline workspace")
+endif()
+obcx_add_actor(SOURCES legacy.cpp)

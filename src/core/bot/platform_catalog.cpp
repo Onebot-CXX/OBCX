@@ -13,8 +13,16 @@ void BotPlatformCatalog::register_recipe(BotRecipeRegistration registration) {
   registration.surface.validate();
   if (!bot::detail::valid_bot_id(registration.transport) ||
       !bot::detail::valid_bot_id(registration.ingress_platform) ||
-      !registration.parse) {
+      !registration.parse || !registration.domain_binding ||
+      registration.domain_binding->codec().surface() != registration.surface) {
     throw std::invalid_argument("incomplete bot recipe registration");
+  }
+  for (const auto &[key, existing] : recipes_) {
+    if (key.first == registration.surface &&
+        (existing.domain_binding != registration.domain_binding ||
+         existing.ingress_platform != registration.ingress_platform))
+      throw std::invalid_argument(
+          "surface recipes must share a domain binding");
   }
   Key key{registration.surface, registration.transport};
   if (!recipes_.emplace(std::move(key), std::move(registration)).second) {
@@ -33,6 +41,24 @@ void BotPlatformCatalog::require_sealed() const {
   if (!sealed_) {
     throw std::logic_error("bot platform catalog must be sealed before use");
   }
+}
+
+auto BotPlatformCatalog::domain_binding(const bot::SurfaceId &surface) const
+    -> std::shared_ptr<const PlatformDomainBinding> {
+  require_sealed();
+  for (const auto &[key, registration] : recipes_)
+    if (key.first == surface)
+      return registration.domain_binding;
+  throw std::invalid_argument("surface has no registered domain binding");
+}
+
+auto BotPlatformCatalog::ingress_platform(const bot::SurfaceId &surface) const
+    -> std::string {
+  require_sealed();
+  for (const auto &[key, registration] : recipes_)
+    if (key.first == surface)
+      return registration.ingress_platform;
+  throw std::invalid_argument("surface has no registered ingress platform");
 }
 
 auto BotPlatformCatalog::supports(const bot::SurfaceId &surface) const -> bool {

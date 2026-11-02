@@ -7,14 +7,83 @@ reference; do not restore old snapshots over maintained local repositories.
 
 ## Platform image interfaces
 
-See [OneBot image access](onebot-image-access.md) for typed `get_image`, the
-LLOneBot URL-only extension, and shared bounded HTTP acquisition. Native image
-references, transient URLs, and OneBot server paths are distinct types of data.
+See [OneBot media access](onebot-image-access.md) for ordinary bounded
+`MediaRef` reads, separate sensitive standard media-query results, and retirement
+of the private native-image/URL actor example. Provider paths and detached query
+selectors do not grant common media-read authority.
+
+## Domain identity persistence
+
+See [domain identity encoding and persistence](domain-identities.md) for the
+version-1 wire format, full installation/conversation scope, fixed examples,
+and the distinction between structural restoration and live authority.
 
 ## Shared self identity
 
 See [cached self identity](self-identity.md) for the common QQ/Telegram
 `GetSelfRequest` API, its refresh configuration, and installation lifecycle.
+
+## Domain migration SDK floor
+
+SDK 2.7.0 removes old messaging DTOs/facades, the QQ cache-only login projection,
+CardView, archive decoders/imports and generic reference conversion. Current
+configuration uses explicit kind/native ID/topic with ConversationResolver.
+Store schema 5 persists typed messages only; Chat/Bridge consume those snapshots.
+Bridge schema 5 removes old scalar member/publication/route projections, while
+preserving scoped receipts, retries and command fences. Old database schemas are
+rejected without runtime migration. The standalone Python offline utility is
+operator-run only; see [the coordinated cutover](domain-sdk-cutover.md).
+
+The maintained Message Store, Bridge, Chat LLM, ExHentai, template and QQ
+forward probe sources now require SDK/core **>=2.7.0,<3.0.0** in both package
+dependencies and runtime compatibility; standalone CMake uses the same minimum.
+This is the conservative floor for the coordinated migration, not a claim that
+all earlier 2.x binaries are compatible or that every actor uses every new API.
+Scheduler ABI V2, package manifest 2 and input contract schema 3 are unchanged.
+
+The preceding migration build used a frozen SDK2.5.19 at
+`build-dev/forward-resource-fix/sdk`; all six real consumers built through
+`actor_build.py` against it (20 workers, 90 production actor/library objects).
+Those products are historical build evidence, not the current generation. This
+snapshot includes the Telegram receipt/empty-photo and QQ forward resource-ID
+fixes; older SDK2.5.19 snapshots lack some of these corrections. A version string
+alone does not establish binary identity.
+
+The operator requested implementation handoff without new verification programs
+and will test after deployment. Loader, full ABI, media and recovery acceptance
+remain unexecuted, not passed. Older frozen SDKs remain immutable retained
+products; do not alter their manifests or weaken requirements to reuse them.
+Core/SDK replacement and restart remain separate operations, not actor hot reload. See the
+[coordinated cutover inventory](domain-sdk-cutover.md) for the six package
+versions, public API migration, owner-specific data boundaries and matching
+backup/rollback gates. The development registry is not a binary release.
+
+## Generation-owned background callbacks
+
+The 2.5.18 source adds out-of-line `ActorGenerationLifecycle` helpers:
+`make_serial_executor`, `spawn_owned`, `wait_owned`, and `post_owned`. These
+require a matching built/frozen SDK; they are not in the frozen 2.5.17 SDK.
+
+Subscribe during preparation, admit work with the active token, and retain its
+route lease through every timer, continuation, completion and cancellation post.
+Use the core-created serial executor for a coroutine and its cancellation-slot
+emission. The core helpers own the outer Asio handlers and destroy actor closures,
+coroutine frames and exceptions before releasing the lease. Merely capturing a
+lease inside an actor-compiled lambda does not protect its final destructor or
+an inline awaitable completion. Terminal completion is posted after that handler
+unwinds. A catastrophic terminal-post failure retains the pin and makes drain
+fail rather than allowing unsafe DSO unload. Allocation/initiation failure also
+clears actor callbacks before the caller's lease can expire; function-parameter
+destruction order is not an ownership guarantee. Standard `ActorEvents` delivery
+uses this terminal-retirement boundary too. These paths remain unverified at
+runtime; the helper's pin is not proof that arbitrary actor destructors or
+externally retained callbacks are safe.
+
+Stop must close new admission. An owner that preserves a flush-on-close contract
+may finish batches admitted under existing leases; that is not admission of new
+retry attempts. Never force-stop an executor to bypass drain. Publication can be
+refused after invalidation; a durable completed send is not replayed to repair a
+notification. These are source contracts pending consolidated runtime acceptance.
 
 ## Hot-reloadable actor builds
 

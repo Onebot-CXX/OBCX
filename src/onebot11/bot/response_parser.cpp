@@ -44,7 +44,8 @@ auto onebot_rejected(const Json &document) -> BotOperationResult<Json> {
 auto parse_onebot11_operation_response(const std::string_view response,
                                        const bool side_effecting)
     -> obcx::bot::BotOperationResult<obcx::bot::Json> {
-  if (response.empty()) {
+  if (response.empty() ||
+      response.size() > obcx::bot::detail::domain_maximum_bytes) {
     return malformed("OneBot", side_effecting);
   }
   const auto document = Json::parse(response, nullptr, false);
@@ -53,16 +54,20 @@ auto parse_onebot11_operation_response(const std::string_view response,
     return malformed("OneBot", side_effecting);
   }
 
-  bool retcode_ok = true;
-  if (document.contains("retcode")) {
-    if (!document.at("retcode").is_number_integer()) {
-      return malformed("OneBot", side_effecting);
-    }
-    retcode_ok = document.at("retcode").get<std::int64_t>() == 0;
+  if (!document.contains("retcode") ||
+      !document.at("retcode").is_number_integer() ||
+      (document.at("retcode").is_number_unsigned() &&
+       document.at("retcode").get<std::uint64_t>() > INT64_MAX)) {
+    return malformed("OneBot", side_effecting);
   }
-  if (document.at("status").get<std::string>() != "ok" || !retcode_ok) {
+  const auto code = document.at("retcode").get<std::int64_t>();
+  const auto &status = document.at("status").get_ref<const std::string &>();
+  if (status == "failed" && code != 0)
     return onebot_rejected(document);
-  }
+  // async means accepted/queued, not a proven rejection; unknown statuses or
+  // contradictory status/retcode pairs cannot authorize retry after a send.
+  if (status != "ok" || code != 0)
+    return malformed("OneBot", side_effecting);
   if (!document.contains("data")) {
     return malformed("OneBot", side_effecting);
   }

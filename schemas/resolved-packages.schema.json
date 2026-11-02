@@ -123,7 +123,7 @@
                         "type": "string"
                       },
                       "input_contract_schema": {
-                        "const": 2,
+                        "const": 3,
                         "type": "integer"
                       },
                       "name": {

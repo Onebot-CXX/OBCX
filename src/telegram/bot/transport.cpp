@@ -1,6 +1,8 @@
 #include "telegram/bot/transport.hpp"
 #include "telegram/network/connection_manager.hpp"
+#include "telegram/network/detail/media_read.hpp"
 
+#include <atomic>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -54,10 +56,8 @@ public:
   boost::asio::io_context *io_context;
   obcx::telegram::configuration::HttpConnection config;
   std::shared_ptr<adapter::telegram::ProtocolAdapter> protocol;
-  std::unique_ptr<network::TelegramConnectionManager> manager;
+  std::shared_ptr<network::TelegramConnectionManager> manager;
   EventCallback event_callback;
-  std::function<void(bool)> connection_callback;
-  bool running{};
 };
 
 TelegramTransportCapability::TelegramTransportCapability(
@@ -74,24 +74,21 @@ void TelegramTransportCapability::configure(
         "Telegram transport can only be configured once with a protocol");
   }
   impl_->protocol = std::move(protocol);
-  impl_->manager = std::make_unique<network::TelegramConnectionManager>(
-      *impl_->io_context, *impl_->protocol);
+  impl_->manager = std::make_shared<network::TelegramConnectionManager>(
+      *impl_->io_context, impl_->protocol);
   if (impl_->event_callback) {
     impl_->manager->set_event_callback(impl_->event_callback);
   }
 }
 
 void TelegramTransportCapability::start() {
-  if (impl_->running) {
+  if (is_connected()) {
     return;
   }
   if (impl_->manager == nullptr) {
     throw BotComponentRuntimeError("Telegram transport is not configured");
   }
   impl_->manager->connect(network_config(impl_->config));
-  impl_->running = true;
-  if (impl_->connection_callback)
-    impl_->connection_callback(true);
 }
 
 void TelegramTransportCapability::stop() noexcept {
@@ -101,17 +98,13 @@ void TelegramTransportCapability::stop() noexcept {
     }
   } catch (...) { // NOLINT(bugprone-empty-catch)
   }
-  impl_->running = false;
-  try {
-    if (impl_->connection_callback)
-      impl_->connection_callback(false);
-  } catch (...) { // Teardown cannot propagate observer scheduling errors.
-  }
 }
 
-void TelegramTransportCapability::set_connection_callback(
-    std::function<void(bool)> callback) {
-  impl_->connection_callback = std::move(callback);
+void TelegramTransportCapability::configure_identity(
+    std::shared_ptr<SelfIdentityCache> cache) {
+  if (!impl_->manager)
+    throw BotComponentRuntimeError("Telegram transport not configured");
+  impl_->manager->configure_identity(std::move(cache));
 }
 
 void TelegramTransportCapability::set_event_callback(EventCallback callback) {
@@ -119,6 +112,31 @@ void TelegramTransportCapability::set_event_callback(EventCallback callback) {
   if (impl_->manager != nullptr) {
     impl_->manager->set_event_callback(impl_->event_callback);
   }
+}
+
+auto TelegramTransportCapability::epoch() const -> std::uint64_t {
+  return impl_->manager ? impl_->manager->epoch() : 0;
+}
+auto TelegramTransportCapability::capture_receive(
+    const SelfIdentityOrigin &origin)
+    -> std::optional<network::TelegramReceiveOrigin> {
+  return impl_->manager ? impl_->manager->capture_receive(origin)
+                        : std::nullopt;
+}
+auto TelegramTransportCapability::fetch_self(
+    network::TelegramReceiveOrigin origin)
+    -> boost::asio::awaitable<std::optional<std::string>> {
+  auto manager = impl_->manager;
+  if (!manager)
+    co_return std::nullopt;
+  co_return co_await manager->fetch_self(std::move(origin));
+}
+auto TelegramTransportCapability::publish_self(
+    const network::TelegramReceiveOrigin &origin,
+    const obcx::bot::SelfInfo &info) -> SelfObservationResult {
+  if (!impl_->manager)
+    return {SelfObservationStatus::RejectedOrigin, std::nullopt};
+  return impl_->manager->publish_self(origin, info);
 }
 
 auto TelegramTransportCapability::is_connected() const -> bool {
@@ -133,6 +151,16 @@ auto TelegramTransportCapability::send_action(std::string payload,
   }
   co_return co_await impl_->manager->send_action_and_wait_async(
       std::move(payload), echo);
+}
+
+auto TelegramTransportCapability::send_domain_request(
+    nlohmann::json parameters,
+    const std::vector<std::pair<std::string, TelegramMediaUpload>> &files)
+    -> boost::asio::awaitable<std::string> {
+  if (!impl_->manager)
+    throw BotComponentRuntimeError("Telegram transport not prepared");
+  co_return co_await impl_->manager->send_domain_request(std::move(parameters),
+                                                         files);
 }
 
 auto TelegramTransportCapability::download_file(std::string file_id)
@@ -213,3 +241,28 @@ void TelegramHttpTransportComponent::start() { transport_->start(); }
 void TelegramHttpTransportComponent::stop() { transport_->stop(); }
 
 } // namespace obcx::core
+
+namespace obcx::network::detail {
+
+auto TelegramMediaReadAccess::available(
+    const core::TelegramTransport &transport) -> bool {
+  const auto *native =
+      dynamic_cast<const core::TelegramTransportCapability *>(&transport);
+  return native && native->impl_->manager;
+}
+
+auto TelegramMediaReadAccess::read(
+    const core::TelegramTransport &transport,
+    const std::optional<core::SelfIdentityOrigin> &authority,
+    const obcx::bot::ReadMediaRequest &request, HttpDeadline deadline)
+    -> asio::awaitable<Result> {
+  request.validate(); // Bound borrowed request fields before the owned copy.
+  const auto *native =
+      dynamic_cast<const core::TelegramTransportCapability *>(&transport);
+  auto manager = native ? native->impl_->manager : nullptr;
+  auto origin = manager && authority ? manager->capture_receive(*authority)
+                                     : std::nullopt;
+  return run(std::move(manager), std::move(origin), request, deadline);
+}
+
+} // namespace obcx::network::detail

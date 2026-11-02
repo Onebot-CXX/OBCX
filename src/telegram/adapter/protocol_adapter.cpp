@@ -52,7 +52,7 @@ auto ProtocolAdapter::parse_event(std::string_view json_str)
     -> std::optional<common::Event> {
   try {
     auto json = nlohmann::json::parse(json_str);
-    OBCX_DEBUG("Parsing event: {}", json_str);
+    OBCX_DEBUG("Parsing Telegram update ({} bytes)", json_str.size());
 
     if (json.contains("update_id")) {
       if (json.contains("message")) {
@@ -76,8 +76,10 @@ auto ProtocolAdapter::parse_event(std::string_view json_str)
     OBCX_DEBUG("No update_id field in JSON");
 
     return std::nullopt;
-  } catch (const std::exception &e) {
-    OBCX_ERROR("Failed to parse event: {}. JSON: {}", e.what(), json_str);
+  } catch (const std::exception &) {
+    // Parser diagnostics may quote the input. Neither raw updates nor native
+    // exception text belong in logs: either can carry sensitive locators.
+    OBCX_ERROR("Failed to parse Telegram update");
     return std::nullopt;
   }
 }
@@ -91,7 +93,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
     event.time = std::chrono::system_clock::now();
     event.post_type = "message";
     event.type = common::EventType::message;
-    // TODO: Bot ID should be set properly in a real implementation
+    // Bot API updates do not carry the receiving bot identity. The domain
+    // binding deliberately does not admit this legacy placeholder as a user.
     event.self_id = "0";
 
     // Keep the raw payload around for handlers that need fields beyond the
@@ -124,7 +127,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
         if (chat.contains("type")) {
           std::string chat_type = chat["type"];
-          OBCX_DEBUG("Chat type: {}", chat_type);
+          OBCX_DEBUG("Extracted Telegram chat type");
 
           if (chat_type == "supergroup" || chat_type == "group") {
             event.group_id = chat_id;
@@ -141,7 +144,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
     if (message.contains("text")) {
       event.raw_message = message["text"];
-      OBCX_DEBUG("Extracted message text: {}", event.raw_message);
+      OBCX_DEBUG("Extracted Telegram text ({} bytes)",
+                 event.raw_message.size());
 
       common::MessageSegment segment;
       segment.type = "text";
@@ -156,7 +160,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
         std::string file_id = photo["file_id"];
 
         event.raw_message = std::string("[Photo]");
-        OBCX_DEBUG("Extracted photo file_id: {}", file_id);
+        OBCX_DEBUG("Extracted Telegram photo attachment");
 
         common::MessageSegment segment;
         segment.type = "image";
@@ -172,7 +176,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = sticker["file_id"];
 
       event.raw_message = std::string("[Sticker]");
-      OBCX_DEBUG("Extracted sticker file_id: {}", file_id);
+      OBCX_DEBUG("Extracted Telegram sticker attachment");
 
       common::MessageSegment segment;
 
@@ -194,7 +198,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = video["file_id"];
 
       event.raw_message = std::string("[Video]");
-      OBCX_DEBUG("Extracted video file_id: {}", file_id);
+      OBCX_DEBUG("Extracted Telegram video attachment");
 
       common::MessageSegment segment;
       segment.type = "video";
@@ -221,7 +225,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = animation["file_id"];
 
       event.raw_message = std::string("[Animation]");
-      OBCX_DEBUG("Extracted animation file_id: {}", file_id);
+      OBCX_DEBUG("Extracted Telegram animation attachment");
 
       common::MessageSegment segment;
       segment.type = "animation";
@@ -248,7 +252,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = document["file_id"];
 
       event.raw_message = std::string("[Document]");
-      OBCX_DEBUG("Extracted document file_id: {}", file_id);
+      OBCX_DEBUG("Extracted Telegram document attachment");
 
       common::MessageSegment segment;
       segment.type = "document";
@@ -274,7 +278,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = audio["file_id"];
 
       event.raw_message = std::string("[Audio]");
-      OBCX_DEBUG("Extracted audio file_id: {}", file_id);
+      OBCX_DEBUG("Extracted Telegram audio attachment");
 
       common::MessageSegment segment;
       segment.type = "audio";
@@ -300,7 +304,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = voice["file_id"];
 
       event.raw_message = std::string("[Voice]");
-      OBCX_DEBUG("Extracted voice file_id: {}", file_id);
+      OBCX_DEBUG("Extracted Telegram voice attachment");
 
       common::MessageSegment segment;
       segment.type = "voice";
@@ -317,7 +321,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = video_note["file_id"];
 
       event.raw_message = std::string("[Video Note]");
-      OBCX_DEBUG("Extracted video_note file_id: {}", file_id);
+      OBCX_DEBUG("Extracted Telegram video-note attachment");
 
       common::MessageSegment segment;
       segment.type = "video_note";
@@ -338,8 +342,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
     OBCX_DEBUG("Successfully parsed event");
     return event;
-  } catch (const std::exception &e) {
-    OBCX_ERROR("Failed to parse event: {}", e.what());
+  } catch (const std::exception &) {
+    OBCX_ERROR("Failed to parse Telegram message");
     return std::nullopt;
   }
 }
@@ -381,13 +385,13 @@ auto ProtocolAdapter::parse_channel_post_event(
 
 auto ProtocolAdapter::parse_edited_channel_post_event(
     const nlohmann::json &update_json) -> std::optional<common::Event> {
-  // For now, we'll treat edited channel posts similar to regular messages
-  // In a full implementation, we might want to handle them differently
+  // Preserve the observed update kind even if edit_date is unavailable. The
+  // ordinary edit parser adds the marker without inventing an edit timestamp.
   if (update_json.contains("edited_channel_post")) {
     auto update_copy = update_json;
-    update_copy["message"] = update_copy["edited_channel_post"];
+    update_copy["edited_message"] = update_copy["edited_channel_post"];
     update_copy.erase("edited_channel_post");
-    return parse_message_event(update_copy);
+    return parse_edited_message_event(update_copy);
   }
   return std::nullopt;
 }
@@ -404,7 +408,8 @@ auto ProtocolAdapter::parse_callback_query_event(
       event.time = std::chrono::system_clock::now();
       event.post_type = "notice";
       event.type = common::EventType::notice;
-      // TODO: Bot ID should be set properly in a real implementation
+      // Bot API updates do not carry the receiving bot identity. The domain
+      // binding deliberately does not admit this legacy placeholder as a user.
       event.self_id = "0";
       event.notice_type = "callback_query";
 
@@ -424,8 +429,8 @@ auto ProtocolAdapter::parse_callback_query_event(
       OBCX_DEBUG("Successfully parsed callback query event");
       return event;
     }
-  } catch (const std::exception &e) {
-    OBCX_ERROR("Failed to parse callback query event: {}", e.what());
+  } catch (const std::exception &) {
+    OBCX_ERROR("Failed to parse Telegram callback query");
   }
 
   return std::nullopt;

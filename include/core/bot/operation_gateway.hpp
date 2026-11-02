@@ -6,6 +6,7 @@
 #include <boost/asio/awaitable.hpp>
 
 #include <algorithm>
+#include <optional>
 #include <vector>
 
 namespace obcx::bot {
@@ -32,6 +33,7 @@ struct SupportedActions {
 
   using obcx_bot_json_factory = void;
   static auto from_json(const Json &document) -> SupportedActions {
+    detail::validate_domain_wire(document);
     detail::require_object(document, "SupportedActions");
     if (!document.contains("installation") || !document.contains("actions") ||
         !document.at("actions").is_array()) {
@@ -56,20 +58,50 @@ inline void to_json(Json &document, const SupportedActions &supported) {
               {"actions", std::move(sorted)}};
 }
 
+// Actor-known attempt matching only. Not authorization, provider idempotency,
+// deduplication or retry policy. Preserve the supplied spelling exactly.
+struct OperationCorrelation {
+  std::string attempt_id;
+
+  void validate() const {
+    detail::validate_identifier(attempt_id, "operation attempt_id", 1024);
+    detail::validate_utf8(attempt_id);
+    // validate_identifier excludes C0/DEL; also exclude Unicode C1 controls.
+    for (std::size_t i = 1; i < attempt_id.size(); ++i) {
+      const auto previous = static_cast<unsigned char>(attempt_id[i - 1]);
+      const auto current = static_cast<unsigned char>(attempt_id[i]);
+      if (previous == 0xc2 && current >= 0x80 && current <= 0x9f)
+        throw std::invalid_argument(
+            "operation attempt_id contains a control character");
+    }
+  }
+};
+
 struct OperationEnvelope {
   BotInstallationRef installation;
   ActionId action;
   // SDK DTO values, with binary media fields. Never an arbitrary provider call.
   Json payload;
+  std::optional<OperationCorrelation> correlation;
 
   void validate() const {
     installation.validate();
     action.validate();
+    if (correlation)
+      correlation->validate();
     detail::require_object(payload, "operation payload");
-    if (payload.contains("action") &&
-        payload.at("action").get<ActionId>() != action) {
-      throw std::invalid_argument(
-          "operation payload action disagrees with envelope");
+    if (payload.contains("action")) {
+      const auto &payload_action = payload.at("action");
+      detail::validate_domain_wire(payload_action);
+      if (!payload_action.is_string()) {
+        throw std::invalid_argument("bot ID must be a string");
+      }
+      const auto spelling =
+          detail::checked_bot_id(payload_action.get_ref<const std::string &>());
+      if (spelling != action.value()) {
+        throw std::invalid_argument(
+            "operation payload action disagrees with envelope");
+      }
     }
   }
 };

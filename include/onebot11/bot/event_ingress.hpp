@@ -2,6 +2,7 @@
 
 #include "core/bot/bot_event_components.hpp"
 #include "onebot11/bot/capability_ids.hpp"
+#include "onebot11/bot/standard_event_runtime.hpp"
 
 namespace obcx::core {
 
@@ -18,6 +19,8 @@ public:
 
 private:
   std::shared_ptr<BotEventCapability> events_;
+  std::shared_ptr<obcx::onebot11::bot::standard::StandardEventCapabilityV1>
+      standard_events_;
 };
 
 } // namespace obcx::core

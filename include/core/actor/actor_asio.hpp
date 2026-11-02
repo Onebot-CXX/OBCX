@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/actor/actor_generation_lifecycle.hpp"
 #include "core/actor/actor_task.hpp"
 
 #include <boost/asio/any_io_executor.hpp>
@@ -8,6 +9,7 @@
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/system/system_error.hpp>
 
@@ -212,7 +214,9 @@ public:
 
   ActorAsioAwaiter(boost::asio::any_io_executor executor, Factory factory,
                    std::shared_ptr<void> actor_lifetime = {})
-      : executor_(std::move(executor)), factory_(std::move(factory)),
+      : executor_(ActorGenerationLifecycle::make_serial_executor(
+            std::move(executor))),
+        factory_(std::move(factory)),
         operation_(std::make_shared<ActorAsioOperationState<value_type>>(
             std::move(actor_lifetime))) {}
 
@@ -249,34 +253,14 @@ public:
       // nested Asio coroutine reports completion, even if cancellation destroys
       // the owning ActorTask frame first.
       auto factory = std::make_shared<Factory>(std::move(factory_));
-      auto awaitable = std::invoke(*factory);
-      if constexpr (std::is_void_v<value_type>) {
-        boost::asio::co_spawn(executor_, std::move(awaitable),
-                              boost::asio::bind_cancellation_slot(
-                                  operation_->cancellation_slot(),
-                                  [operation = operation_, factory](
-                                      std::exception_ptr exception) mutable {
-                                    operation->complete(std::move(exception));
-                                  }));
-      } else {
-        boost::asio::co_spawn(
-            executor_, std::move(awaitable),
-            boost::asio::bind_cancellation_slot(
-                operation_->cancellation_slot(),
-                [operation = operation_, factory](std::exception_ptr exception,
-                                                  value_type value) mutable {
-                  if (exception) {
-                    operation->complete_exception(std::move(exception));
-                  } else {
-                    operation->complete(std::move(value));
-                  }
-                }));
-      }
-
-      if (promise.runtime().cancellation) {
+      auto cancellation = promise.runtime().cancellation;
+      // Registration may allocate or synchronously report an existing stop.
+      // Finish it before launching work: a failure after co_spawn must never
+      // publish completion while the nested operation is still running.
+      if (cancellation) {
         auto weak_operation =
             std::weak_ptr<ActorAsioOperationState<value_type>>{operation_};
-        auto registration = promise.runtime().cancellation->register_callback(
+        auto registration = cancellation->register_callback(
             [weak_operation, executor = executor_]() mutable {
               boost::asio::post(executor, [weak_operation]() mutable {
                 if (auto operation = weak_operation.lock()) {
@@ -286,6 +270,56 @@ public:
             });
         operation_->attach_cancellation(std::move(registration));
       }
+      // Preserve synchronous factory invocation and its argument ownership.
+      // Only coroutine initiation moves to the serial I/O executor.
+      auto awaitable = std::invoke(*factory);
+      boost::asio::post(executor_, [operation = operation_, factory,
+                                    executor = executor_,
+                                    cancellation = std::move(cancellation),
+                                    work = std::move(awaitable)]() mutable {
+        try {
+          // A cancellation queued before slot installation is otherwise
+          // lost. Do not enter the nested coroutine for an existing stop.
+          if (cancellation && cancellation->cancellation_requested()) {
+            throw boost::system::system_error(
+                boost::asio::error::operation_aborted);
+          }
+          // Both co_spawn's initial slot installation and later signal
+          // emission now run on the same strand, including with multiple
+          // generation I/O workers.
+          if constexpr (std::is_void_v<value_type>) {
+            boost::asio::co_spawn(
+                executor, std::move(work),
+                boost::asio::bind_cancellation_slot(
+                    operation->cancellation_slot(),
+                    [operation, factory](std::exception_ptr exception) {
+                      operation->complete(std::move(exception));
+                    }));
+          } else {
+            boost::asio::co_spawn(
+                executor, std::move(work),
+                boost::asio::bind_cancellation_slot(
+                    operation->cancellation_slot(),
+                    [operation, factory](std::exception_ptr exception,
+                                         value_type value) {
+                      if (exception) {
+                        operation->complete_exception(std::move(exception));
+                      } else {
+                        operation->complete(std::move(value));
+                      }
+                    }));
+          }
+        } catch (...) {
+          // Retire an unstarted frame while its factory is still alive,
+          // before waking a caller that may release its local resources.
+          work = {};
+          if constexpr (std::is_void_v<value_type>) {
+            operation->complete(std::current_exception());
+          } else {
+            operation->complete_exception(std::current_exception());
+          }
+        }
+      });
     } catch (...) {
       if constexpr (std::is_void_v<value_type>) {
         operation_->complete(std::current_exception());

@@ -5,7 +5,7 @@ Define exact installation configuration, typed connection validation, and secret
 
 ## Requirements
 ### Requirement: Bot configuration identifies exact installations and surfaces
-Each `bots.<installation_id>` table SHALL define `enabled`, an exact `surface`, and a `transport`. The table key SHALL be the installation id used by ingress and `BotOperationClient`; supported surfaces in this change are exactly `onebot11.qq` and `telegram.bot_api`.
+Each `bots.<installation_id>` table SHALL define `enabled`, an exact `surface`, and a `transport`. The table key SHALL be the installation id used by ingress and `BotClient`; supported surfaces in this change are exactly `onebot11.qq` and `telegram.bot_api`.
 
 #### Scenario: Valid OneBot installation is parsed
 - **WHEN** configuration declares an enabled installation with surface `onebot11.qq` and transport `websocket` or `http`
@@ -19,12 +19,12 @@ Each `bots.<installation_id>` table SHALL define `enabled`, an exact `surface`, 
 - **WHEN** a bot declares `qq.official`, an unknown surface, or a platform alias without an implemented provider
 - **THEN** validation rejects the exact configuration path before any installation or network resource is constructed
 
-### Requirement: Configuration produces a closed typed connection variant
-After parsing, runtime code SHALL consume a typed `BotInstallationConfig` containing one of the supported OneBot WebSocket, OneBot HTTP, or Telegram HTTP connection variants. Runtime assembly, components, and transports MUST NOT read a raw `toml::table`, reinterpret a bot type string, or apply a default provider/transport fallback.
+### Requirement: Configuration produces module-owned typed installation plans
+The registered platform module SHALL parse its closed connection schema into an immutable BotInstallationPlan retaining typed process-private values in module factories. Generic runtime SHALL consume plan metadata and factories, not a central provider enum, connection variant, raw connection TOML or provider-specific type. Assembly MUST NOT apply a default surface/transport fallback.
 
 #### Scenario: OneBot WebSocket configuration reaches assembly
 - **WHEN** a valid OneBot WebSocket table is parsed
-- **THEN** the assembler receives the OneBot WebSocket variant and cannot accidentally select OneBot HTTP or Telegram HTTP
+- **THEN** the owning module supplies its validated WebSocket plan/factories without exposing its private connection type to generic runtime
 
 #### Scenario: Unknown transport is configured
 - **WHEN** transport is missing or not valid for the declared surface

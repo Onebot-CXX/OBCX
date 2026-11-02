@@ -1,5 +1,7 @@
 #pragma once
 
+#include "network/http_call.hpp"
+
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/system/error_code.hpp>
@@ -71,6 +73,10 @@ public:
 
   [[nodiscard]] auto perform(CurlRequest request)
       -> boost::asio::awaitable<CurlResponse>;
+
+  [[nodiscard]] auto perform_until(CurlRequest request, HttpDeadline deadline,
+                                   HttpWriteEligibility eligible)
+      -> boost::asio::awaitable<HttpCallResult>;
 
   // Terminal, idempotent cancellation. Cleanup retains state on the owning
   // strand; keep that executor/context alive and runnable until work drains.

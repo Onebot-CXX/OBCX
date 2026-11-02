@@ -143,8 +143,6 @@ db_namespace = "bridge"
 
 [actors.bridge.config]
 bridge_files_dir = "/tmp/bridge_files"
-legacy_state_pair = "primary"
-legacy_unresolved_mapping_policy = "fail"
 enable_retry_queue = true
 message_retry_max_attempts = 5
 message_retry_base_interval_sec = 2

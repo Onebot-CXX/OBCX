@@ -13,6 +13,11 @@ python3 cmake/package_tool.py registry-index --entries actor-registry/entries \
   --output actor-registry/index/packages.json --check
 ```
 
+The six maintained actor manifests match the independent registry and their
+current source packages: SDK/core `>=2.7.0,<3.0.0`, input schema 3, ABI V2.
+See [coordinated cutover requirements](../packaging/actors/domain-sdk-cutover.md)
+for package versions, matching backup/rollback scope and remaining acceptance.
+
 This is an **unpublished development snapshot**, not a newly pinned release.
 The index has status `development-metadata-only` and advertises no downloads.
 Old release binaries cannot become verified v2 assets merely by renaming their

@@ -6,6 +6,7 @@
 #include <boost/asio/error.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/system/errc.hpp>
+#include <stdexcept>
 #include <utility>
 
 namespace obcx::network {
@@ -13,11 +14,16 @@ namespace obcx::network {
 WebsocketClient::WebsocketClient(asio::io_context &ioc) : ws_(ioc) {}
 
 auto WebsocketClient::run(std::string host, std::string port,
-                          std::string access_token, MessageHandler on_message)
+                          std::string access_token,
+                          MessageHandler on_connection,
+                          MessageHandlerFactory before_read)
     -> asio::awaitable<void> {
+  if (!on_connection || !before_read)
+    throw std::invalid_argument(
+        "WebSocket requires connection and read handlers");
   host_ = std::move(host);
   access_token_ = std::move(access_token);
-  on_message_ = std::move(on_message);
+  on_message_ = std::move(on_connection);
   auto port_str = port;
 
   try {
@@ -51,8 +57,11 @@ auto WebsocketClient::run(std::string host, std::string port,
 
     while (ws_.is_open()) {
       buffer_.clear();
+      auto on_read = before_read();
+      if (!on_read)
+        throw std::invalid_argument("WebSocket read handler must be nonempty");
       co_await ws_.async_read(buffer_, asio::use_awaitable);
-      on_message_({}, beast::buffers_to_string(buffer_.data()));
+      on_read({}, beast::buffers_to_string(buffer_.data()));
     }
   } catch (const beast::system_error &se) {
     if (se.code() != websocket::error::closed &&
@@ -70,17 +79,36 @@ auto WebsocketClient::run(std::string host, std::string port,
   OBCX_WARN("WebSocket connection closed.");
 }
 
-auto WebsocketClient::send(std::string message) -> asio::awaitable<void> {
-  if (!ws_.is_open()) {
-    OBCX_WARN("WebSocket not connected, cannot send message.");
-    co_return;
-  }
+namespace {
 
-  const auto queue = write_queue_;
+auto send_guarded(std::shared_ptr<detail::WebsocketWriteQueue> queue,
+                  std::string message,
+                  WebsocketClient::WriteEligibility eligible)
+    -> asio::awaitable<void> {
   if (!queue) {
     throw boost::system::system_error{asio::error::operation_aborted};
   }
-  co_await queue->send(std::move(message));
+  co_await queue->send(std::move(message), std::move(eligible));
+}
+
+} // namespace
+
+auto WebsocketClient::send(std::string message, WriteEligibility eligible)
+    -> asio::awaitable<void> {
+  if (!eligible) {
+    throw std::invalid_argument("WebSocket write eligibility is required");
+  }
+  auto self = shared_from_this();
+  auto queue = [this] {
+    std::scoped_lock lock(write_queue_mutex_);
+    return write_queue_;
+  }();
+  // The queued item retains the client even if its caller cancels. Dequeue or
+  // stop/drain releases this lease; it is not kept by the idle queue itself.
+  return send_guarded(std::move(queue), std::move(message),
+                      [self = std::move(self), eligible = std::move(eligible)] {
+                        return eligible();
+                      });
 }
 
 auto WebsocketClient::close() -> asio::awaitable<void> {
@@ -111,7 +139,10 @@ void WebsocketClient::start_writer() {
         static_cast<void>(beast::get_lowest_layer(ws_).socket().cancel(
             error)); // NOLINT(bugprone-unused-return-value)
       });
-  write_queue_ = queue;
+  {
+    std::scoped_lock lock(write_queue_mutex_);
+    write_queue_ = queue;
+  }
   asio::co_spawn(
       ws_.get_executor(),
       [queue = std::move(queue)]() -> asio::awaitable<void> {
@@ -121,7 +152,11 @@ void WebsocketClient::start_writer() {
 }
 
 void WebsocketClient::stop_writer() {
-  if (auto queue = std::exchange(write_queue_, nullptr)) {
+  auto queue = [this] {
+    std::scoped_lock lock(write_queue_mutex_);
+    return std::exchange(write_queue_, nullptr);
+  }();
+  if (queue) {
     queue->stop();
   }
 }

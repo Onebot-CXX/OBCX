@@ -1,4 +1,5 @@
 #include "core/runtime/runtime_thread_budget.hpp"
+#include "common/config_snapshot.hpp"
 
 #include <algorithm>
 #include <thread>
@@ -75,6 +76,16 @@ auto resolve_runtime_thread_budget(RuntimeThreadBudgetRequest request)
   // any unclaimed remainder after explicit pool requests are honored.
   result.actor_workers += remaining;
   return result;
+}
+
+auto resolve_runtime_thread_budget(
+    const common::ActorRuntimeConfig &runtime_config,
+    size_t configured_io_sources) -> RuntimeThreadBudget {
+  return resolve_runtime_thread_budget(RuntimeThreadBudgetRequest{
+      .actor_workers = runtime_config.workers,
+      .io_workers = std::max<size_t>(1, configured_io_sources),
+      .blocking_workers = runtime_config.blocking_workers,
+  });
 }
 
 } // namespace obcx::core

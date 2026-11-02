@@ -3,9 +3,11 @@
 #include "core/bot/bot_component_runtime.hpp"
 #include "core/bot/operation_registry.hpp"
 #include "core/bot/self_identity_cache.hpp"
-#include "telegram/bot/operations.hpp"
+#include "telegram/provider_types.hpp"
 
 namespace obcx::core {
+
+class BoundedFileReader;
 
 class TelegramMediaUploader {
 public:
@@ -18,10 +20,8 @@ public:
   virtual ~TelegramMediaUploader() = default;
 
   virtual auto upload(
-      const obcx::telegram::bot::SendTelegramPhotoUploadRequest &request)
-      -> boost::asio::awaitable<std::string> = 0;
-  virtual auto upload(
-      const obcx::telegram::bot::SendTelegramMediaGroupUploadsRequest &request)
+      nlohmann::json parameters,
+      const std::vector<std::pair<std::string, TelegramMediaUpload>> &files)
       -> boost::asio::awaitable<std::string> = 0;
 };
 
@@ -44,7 +44,13 @@ class TelegramOperationsComponent final : public BotComponent {
 public:
   TelegramOperationsComponent(std::string installation_id, bool include_upload,
                               boost::asio::any_io_executor executor,
-                              std::chrono::milliseconds self_refresh_interval);
+                              std::chrono::milliseconds self_refresh_interval,
+                              std::chrono::milliseconds action_timeout);
+  TelegramOperationsComponent(std::string installation_id, bool include_upload,
+                              boost::asio::any_io_executor executor,
+                              std::chrono::milliseconds self_refresh_interval,
+                              std::chrono::milliseconds action_timeout,
+                              std::shared_ptr<BoundedFileReader> file_reader);
 
   [[nodiscard]] auto descriptor() const -> ComponentDescriptor override;
   void install_capabilities(CapabilityRegistry &registry) override;

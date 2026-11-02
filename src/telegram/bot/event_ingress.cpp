@@ -33,9 +33,11 @@ void TelegramEventIngressComponent::prepare(
     const CapabilityRegistry &registry) {
   auto transport = registry.get<TelegramTransport>(CapabilityId{
       std::string{obcx::telegram::bot::capability_ids::transport}});
-  transport->set_event_callback([events = events_](const common::Event &event) {
-    events->publish(event);
-  });
+  transport->set_event_callback(
+      [events = events_](const common::Event &event,
+                         const SelfIdentityOrigin &origin) {
+        return events->publish(event, origin);
+      });
   events_->activate();
 }
 

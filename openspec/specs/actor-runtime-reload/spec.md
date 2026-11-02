@@ -130,20 +130,20 @@ MUST NOT apply a supported subset of an otherwise rejected candidate.
 - **WHEN** a candidate changes database instance definitions or the resolved actor, actor-I/O, or blocking worker counts
 - **THEN** reload is rejected as restart-required and no candidate values become active
 
-### Requirement: Live bot lookup remains process-owned across generations
-OBCX SHALL keep live bot connections and their populated `BotRegistry`
-process-owned. Startup and every candidate generation MUST register the same
-process-owned registry reference in actor services; a generation builder MUST
-NOT create, clone, clear, or repopulate a generation-local registry during
-reload.
+### Requirement: Bot installations remain process-owned across generations
+OBCX SHALL retain its process-owned installation directory, sealed platform
+catalog and operation gateway across actor generations. Generation services
+SHALL expose data-only clients and current configuration resolution, not a
+live-bot registry. Candidate construction MUST NOT recreate connections,
+replace the catalog, mutate the active self cache or rebuild process resources.
 
 #### Scenario: Candidate generation becomes active
 - **WHEN** a reload cuts over after bots have already been started and registered
-- **THEN** actors in the new generation resolve and forward through the same still-running bot instances without re-registering or reconnecting them
+- **THEN** generation clients route through the same process-owned gateway/installations without re-registering or reconnecting them
 
 #### Scenario: Candidate preparation inspects bot availability
 - **WHEN** the candidate builder validates a configured bot identity before readiness
-- **THEN** it resolves the identity against the process-owned registry without mutating the registry or the active generation
+- **THEN** it checks the process-owned installation metadata/capabilities without mutating live installations or the active generation
 
 ### Requirement: Reload state is observable without exposing contents
 OBCX SHALL report a monotonically increasing reload attempt identifier, active

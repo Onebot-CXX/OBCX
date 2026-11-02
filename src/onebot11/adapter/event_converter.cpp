@@ -1,18 +1,19 @@
 #include "common/json_utils.hpp"
 #include "common/logger.hpp"
 #include "onebot11/adapter/message_converter.hpp"
+#include "onebot11/adapter/native_fields.hpp"
 #include "onebot11/adapter/protocol_adapter.hpp"
 
 namespace obcx::adapter::onebot11 {
 
 auto ProtocolAdapter::parse_event(std::string_view json_str)
     -> std::optional<common::Event> {
-  auto j_opt = common::JsonUtils::parse(std::string(json_str));
-  if (!j_opt) {
-    OBCX_WARN("OneBot ProtocolAdapter: Failed to parse JSON: {}", json_str);
+  // Avoid the shared parser helper: its diagnostics contain native snippets.
+  const auto j = common::json::parse(json_str, nullptr, false);
+  if (j.is_discarded()) {
+    OBCX_WARN("OneBot ProtocolAdapter: Failed to parse JSON");
     return std::nullopt;
   }
-  const auto &j = j_opt.value();
 
   auto post_type = common::JsonUtils::get_value<std::string>(j, "post_type");
   if (post_type.empty()) {
@@ -20,16 +21,27 @@ auto ProtocolAdapter::parse_event(std::string_view json_str)
   }
 
   try {
+    validate_event_identities(j);
     if (post_type == "message") {
       common::MessageEvent event;
+      auto normalized = j;
+      if (normalized.contains("anonymous") &&
+          normalized["anonymous"].is_object())
+        normalized["anonymous"] = "native-anonymous";
       if (j.contains("message") && j.at("message").is_string()) {
-        auto normalized = j;
         normalized["message"] = MessageConverter::from_v11_string(
             j.at("message").get<std::string>());
-        event.from_json(normalized);
-      } else {
-        event.from_json(j);
       }
+      event.from_json(normalized);
+
+      // The sibling standard carrier owns authentic anonymous context. Legacy
+      // snapshots retain only the existing observation marker, never its flag.
+      event.data = j;
+      event.data.erase("flag");
+      event.data.erase("anonymous_flag");
+      if (event.data.contains("anonymous") &&
+          event.data["anonymous"].is_object())
+        event.data["anonymous"] = "native-anonymous";
 
       // Structured segments are already decoded. For string wire messages,
       // the converter recognizes native CQ syntax before unescaping literals.
@@ -46,7 +58,11 @@ auto ProtocolAdapter::parse_event(std::string_view json_str)
     }
     if (post_type == "request") {
       common::RequestEvent event;
-      event.from_json(j);
+      auto legacy = j;
+      // Preserve the legacy layout, but never publish live request secrets.
+      legacy["flag"] = "";
+      legacy.erase("anonymous_flag");
+      event.from_json(legacy);
       return event;
     }
     if (post_type == "meta_event") {
@@ -65,14 +81,15 @@ auto ProtocolAdapter::parse_event(std::string_view json_str)
         return event;
       }
     }
-  } catch (const nlohmann::json::exception &e) {
-    OBCX_ERROR("OneBot ProtocolAdapter: JSON exception creating event object: "
-               "{}. JSON: {}",
-               e.what(), json_str);
+  } catch (const std::invalid_argument &) {
+    OBCX_WARN("OneBot event rejected: invalid raw identity");
+    return std::nullopt;
+  } catch (const nlohmann::json::exception &) {
+    OBCX_ERROR("OneBot ProtocolAdapter: JSON exception creating event object");
     return std::nullopt;
   }
 
-  OBCX_TRACE("OneBot ProtocolAdapter: Unknown post_type '{}'", post_type);
+  OBCX_TRACE("OneBot ProtocolAdapter: Unknown post_type");
   return std::nullopt;
 }
 

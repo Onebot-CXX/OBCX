@@ -1,0 +1,8 @@
+schema_version = 2
+package = { "id" = "vollate.exhentai-fetch", "name" = "exhentai_fetch", "version" = "0.2.0", "kind" = "actor" }
+actor = { "name" = "exhentai_fetch", "abi" = 2, "entrypoint" = "obcx_create_actor_v2", "input_contract_schema" = 3 }
+artifact = { "kind" = "shared-library", "name" = "exhentai_fetch", "target" = "exhentai_fetch_actor", "export_target" = "obcx::exhentai_fetch_actor", "platforms" = ["linux-x86_64", "linux-arm64"] }
+dependencies = { "libraries" = [{ "id" = "obcx.path-mapping", "version" = ">=0.1.0,<0.2.0", "target" = "obcx::path_mapping", "visibility" = "private" }], "actors" = [], "system" = [{ "id" = "obcx-sdk", "version" = ">=2.7.0,<3.0.0", "targets" = ["obcx::obcx_core"], "visibility" = "private" }, { "id" = "libxml2", "version" = ">=2.15.0,<3.0.0", "targets" = ["LibXml2::LibXml2"], "visibility" = "private" }] }
+test_dependencies = { "libraries" = [], "system" = [] }
+compatibility = { "cpp_standard" = 26, "compiler" = { "id" = "GNU", "version" = ">=16.1.0" }, "stdlib" = "libstdc++", "cxx11_abi" = 1, "pic" = true, "obcx" = ">=2.7.0,<3.0.0", "actor_abi_min" = 2, "actor_abi_max" = 2, "reflection_macro" = 202506 }
+publication = { "repository" = "https://github.com/vollate/obcx-exhentai-fetch", "homepage" = "https://github.com/vollate/obcx-exhentai-fetch", "license" = "MIT", "description" = "Persistent ExHentai search subscriptions for OBCX groups" }

@@ -154,10 +154,10 @@ auto parse_actor_contract(const char *document,
     error = "actor input contract schema_version must be a positive integer";
     return std::nullopt;
   }
-  if (*signed_schema_version != 2) {
+  if (*signed_schema_version != 3) {
     error = std::format(
         "unsupported actor input contract schema_version {}; rebuild the actor "
-        "with the matching schema-2 OBCX SDK",
+        "with the matching schema-3 OBCX SDK",
         *signed_schema_version);
     return std::nullopt;
   }

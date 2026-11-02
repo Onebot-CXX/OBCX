@@ -7,6 +7,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 namespace obcx::network {
 
@@ -38,11 +39,16 @@ private:
   ImageFetchFailure failure_;
 };
 
+// Syntax-only validation using the fetch parser, without DNS or network I/O.
+// Success is not destination authorization; access is the caller/deployment's
+// responsibility.
+[[nodiscard]] auto is_valid_media_http_url(std::string_view url) -> bool;
+
 // Direct HTTP(S), without proxy credentials, redirects, persistence or retries.
-// The caller owns destination authorization: this is not a DNS-pinning/SSRF
-// sandbox and must not receive arbitrary model-supplied URLs. HTTP status and
-// image interpretation are caller policy. Cancellation propagates as Asio
-// operation_aborted; other transport diagnostics never contain the input URL.
+// Destination access is the caller/deployment's responsibility: this is not a
+// DNS-pinning/SSRF sandbox. HTTP status and image interpretation are caller
+// policy. Cancellation propagates as Asio operation_aborted; other transport
+// diagnostics never contain the input URL.
 // Keep the caller's executor running through transport cleanup.
 [[nodiscard]] auto fetch_image(ImageFetchRequest request)
     -> boost::asio::awaitable<HttpResponse>;

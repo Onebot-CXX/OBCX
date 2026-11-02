@@ -2,15 +2,36 @@
 
 #include "common/message_type.hpp"
 #include "core/actor/actor.hpp"
+#include "core/bot/bot_event_components.hpp"
 #include "core/bot/ids.hpp"
+#include "core/bot/platform_domain_binding.hpp"
 
 #include <string>
 
 namespace obcx::core {
 
+class BotOperationDispatcher;
+struct SuccessfulBotOperation;
+auto bot_send_confirmed_envelope(const std::string &source_platform,
+                                 const bot::SendConfirmation &confirmation)
+    -> MessageEnvelope;
+auto bot_send_succeeded_envelope(const std::string &source_platform,
+                                 const SuccessfulBotOperation &operation)
+    -> MessageEnvelope;
+auto message_envelope_from_event(const BotEventContext &context,
+                                 const common::MessageEvent &event,
+                                 const PlatformDomainBinding &binding,
+                                 BotOperationDispatcher &dispatcher)
+    -> MessageEnvelope;
+
 auto raw_message_envelope_from_event(const std::string &source_platform,
                                      const std::string &source_bot,
                                      const common::MessageEvent &event)
+    -> MessageEnvelope;
+
+auto notice_envelope_from_event(const BotEventContext &context,
+                                const common::NoticeEvent &event,
+                                const PlatformDomainBinding &binding)
     -> MessageEnvelope;
 
 auto raw_notice_envelope_from_event(const std::string &source_platform,

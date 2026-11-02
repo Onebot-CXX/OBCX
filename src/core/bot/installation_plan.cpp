@@ -87,14 +87,26 @@ auto plan_fingerprint(const common::BotInstallationMetadata &metadata,
 } // namespace
 
 BotInstallationPlan::BotInstallationPlan(
+    ResourceAwareComponentFactory factory,
     common::BotInstallationMetadata metadata, BotRecipeDescription recipe,
-    std::string connection_digest, ComponentFactory factory,
+    std::string connection_digest,
     std::shared_ptr<ICommandPlatformAdapter> command_adapter)
+    : BotInstallationPlan(std::move(factory), std::move(metadata),
+                          std::move(recipe), std::move(connection_digest),
+                          std::move(command_adapter), ActorServiceFactory{}) {}
+
+BotInstallationPlan::BotInstallationPlan(
+    ResourceAwareComponentFactory factory,
+    common::BotInstallationMetadata metadata, BotRecipeDescription recipe,
+    std::string connection_digest,
+    std::shared_ptr<ICommandPlatformAdapter> command_adapter,
+    ActorServiceFactory actor_service_factory)
     : metadata_(std::move(metadata)),
       recipe_(checked_recipe(std::move(recipe), metadata_)),
       fingerprint_(plan_fingerprint(metadata_, recipe_, connection_digest)),
       factory_(std::move(factory)),
-      command_adapter_(std::move(command_adapter)) {
+      command_adapter_(std::move(command_adapter)),
+      actor_service_factory_(std::move(actor_service_factory)) {
   if (!factory_) {
     throw std::invalid_argument(
         "installation plan requires a component factory");
@@ -121,9 +133,18 @@ BotInstallationPlan::BotInstallationPlan(
 
 BotInstallationPlan::~BotInstallationPlan() = default;
 
-auto BotInstallationPlan::create_components(boost::asio::io_context &executor)
-    const -> std::vector<std::unique_ptr<BotComponent>> {
-  auto components = factory_(executor);
+auto BotInstallationPlan::create_actor_service_contributor(
+    std::weak_ptr<BotInstallationDirectory> directory) const
+    -> std::shared_ptr<ActorServiceContributor> {
+  return actor_service_factory_ ? actor_service_factory_(std::move(directory))
+                                : nullptr;
+}
+
+auto BotInstallationPlan::create_components(
+    boost::asio::io_context &executor,
+    std::shared_ptr<BoundedFileReader> file_reader) const
+    -> std::vector<std::unique_ptr<BotComponent>> {
+  auto components = factory_(executor, std::move(file_reader));
   if (components.size() != recipe_.components.size()) {
     throw BotComponentRuntimeError(
         "component factory does not match recipe manifest");

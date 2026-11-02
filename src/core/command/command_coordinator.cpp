@@ -1,8 +1,10 @@
 #include "core/command/command_coordinator.hpp"
+#include "core/bot/bot_client.hpp"
 
 #include "common/logger.hpp"
 #include "core/actor/actor_messages.hpp"
 #include "core/actor/reflected_actor_impl.hpp"
+#include "core/runtime/command_scope_resolver.hpp"
 #include "core/runtime/process_configuration.hpp"
 
 #include <algorithm>
@@ -48,62 +50,6 @@ auto command_timeout(const common::CommandRuntimeConfig &runtime,
     -> std::chrono::milliseconds {
   return std::chrono::milliseconds{route.timeout_ms == 0 ? runtime.timeout_ms
                                                          : route.timeout_ms};
-}
-
-auto compile_group_policy(const common::CommandGroupPolicyConfig &configured)
-    -> std::optional<ActiveCommandAccessPolicy> {
-  if (!configured.mode || !configured.entries_present) {
-    return std::nullopt;
-  }
-  ActiveCommandAccessPolicy policy{.mode = *configured.mode};
-  for (const auto &entry : configured.entries) {
-    if (!policy.entries
-             .emplace(CommandAccessIdentity{.platform = entry.platform,
-                                            .bot = entry.bot,
-                                            .native_id = entry.native_group_id})
-             .second) {
-      return std::nullopt;
-    }
-  }
-  if (policy.mode == common::CommandAccessMode::Unrestricted &&
-      !policy.entries.empty()) {
-    return std::nullopt;
-  }
-  return policy;
-}
-
-auto compile_user_policy(const common::CommandUserPolicyConfig &configured)
-    -> std::optional<ActiveCommandAccessPolicy> {
-  if (!configured.mode || !configured.entries_present) {
-    return std::nullopt;
-  }
-  ActiveCommandAccessPolicy policy{.mode = *configured.mode};
-  for (const auto &entry : configured.entries) {
-    if (!policy.entries
-             .emplace(CommandAccessIdentity{.platform = entry.platform,
-                                            .bot = entry.bot,
-                                            .native_id = entry.native_user_id})
-             .second) {
-      return std::nullopt;
-    }
-  }
-  if (policy.mode == common::CommandAccessMode::Unrestricted &&
-      !policy.entries.empty()) {
-    return std::nullopt;
-  }
-  return policy;
-}
-
-auto compile_command_policy(const common::CommandGroupPolicyConfig &groups,
-                            const common::CommandUserPolicyConfig &users)
-    -> std::optional<ActiveCommandPolicy> {
-  auto group_policy = compile_group_policy(groups);
-  auto user_policy = compile_user_policy(users);
-  if (!group_policy || !user_policy) {
-    return std::nullopt;
-  }
-  return ActiveCommandPolicy{.groups = std::move(*group_policy),
-                             .users = std::move(*user_policy)};
 }
 
 auto valid_utf8(const std::string_view value) -> bool {
@@ -193,101 +139,6 @@ auto render_help_entries(const std::vector<CommandCatalogEntry> &catalog,
             .message = "command help catalog exceeds the page-count bound"};
   }
   return result;
-}
-
-auto json_string(const common::json &document, const std::string_view key)
-    -> std::string {
-  if (!document.is_object() || !document.contains(key) ||
-      !document.at(key).is_string()) {
-    return {};
-  }
-  return document.at(key).get<std::string>();
-}
-
-auto valid_policy_value(const std::string_view value) -> bool {
-  return value.size() <= 1024U &&
-         std::ranges::all_of(value, [](const unsigned char byte) {
-           return byte >= 0x20U && byte != 0x7FU;
-         });
-}
-
-auto command_policy_subject(const MessageEnvelope &message,
-                            const ActiveCommandBot &bot)
-    -> std::optional<CommandPolicySubject> {
-  if (message.source_platform != bot.key.platform ||
-      message.source_bot != bot.key.bot || !message.payload.is_object()) {
-    return std::nullopt;
-  }
-  const auto configured_bot = message.payload.find("source_bot_configured");
-  if (configured_bot == message.payload.end() ||
-      !configured_bot->is_boolean() || !configured_bot->get<bool>()) {
-    return std::nullopt;
-  }
-  const auto field =
-      [&message](const std::string_view key) -> std::optional<std::string> {
-    const auto value = message.payload.find(key);
-    if (value == message.payload.end() || !value->is_string()) {
-      return std::nullopt;
-    }
-    auto result = value->get<std::string>();
-    return valid_policy_value(result) ? std::optional{std::move(result)}
-                                      : std::nullopt;
-  };
-  const auto kind = field("message_type");
-  const auto sender = field("sender");
-  const auto group = field("group_id");
-  if (!kind || !sender || !group || sender->empty()) {
-    return std::nullopt;
-  }
-  const auto chat = field("chat_id");
-  if (message.payload.contains("chat_id") && !chat) {
-    return std::nullopt;
-  }
-  const auto chat_id = chat.value_or(std::string{});
-
-  std::optional<std::int64_t> topic;
-  if (message.payload.contains("topic_id")) {
-    const auto &value = message.payload.at("topic_id");
-    if (bot.key.platform != "telegram" || !value.is_number_integer()) {
-      return std::nullopt;
-    }
-    topic = value.get<std::int64_t>();
-    if (*topic <= 0) {
-      return std::nullopt;
-    }
-  }
-
-  if (*kind == "group") {
-    if (group->empty() || (!chat_id.empty() && chat_id != *group) ||
-        (!group->empty() && message.conversation_id != "group:" + *group &&
-         !(bot.key.platform == "telegram" &&
-           message.conversation_id == "chat:" + *group))) {
-      return std::nullopt;
-    }
-    return CommandPolicySubject{.platform = bot.key.platform,
-                                .bot = bot.key.bot,
-                                .conversation = CommandConversationKind::Group,
-                                .group_id = *group,
-                                .user_id = *sender,
-                                .topic_id = topic};
-  }
-  if (*kind == "private") {
-    if (!group->empty() || topic.has_value() ||
-        (!chat_id.empty() && chat_id != *sender) ||
-        (!sender->empty() && message.conversation_id != "private:" + *sender &&
-         !(bot.key.platform == "telegram" &&
-           message.conversation_id == "chat:" + *sender))) {
-      return std::nullopt;
-    }
-    return CommandPolicySubject{
-        .platform = bot.key.platform,
-        .bot = bot.key.bot,
-        .conversation = CommandConversationKind::Private,
-        .group_id = {},
-        .user_id = *sender,
-    };
-  }
-  return std::nullopt;
 }
 
 auto message_field_value(const MessageEnvelope &message,
@@ -706,6 +557,7 @@ auto CommandRoutingTable::help_maximum_pages() const noexcept -> std::size_t {
 
 auto build_command_routing_table(
     const common::RuntimeConfigSnapshot &snapshot,
+    const bot::ConversationResolver &conversations,
     const std::unordered_map<std::string, ActorInputContract> &contracts)
     -> CommandRoutingBuildResult {
   auto table = std::make_shared<CommandRoutingTable>();
@@ -718,8 +570,8 @@ auto build_command_routing_table(
     }
     table->help_page_bytes_ = *runtime.help.page_bytes;
     table->help_maximum_pages_ = *runtime.help.maximum_pages;
-    table->global_policy_ =
-        compile_command_policy(runtime.access.groups, runtime.access.users);
+    table->global_policy_ = compile_command_policy(
+        snapshot, conversations, runtime.access.groups, runtime.access.users);
     if (!table->global_policy_) {
       return command_failure(
           "command_access_configuration_invalid",
@@ -936,15 +788,19 @@ auto build_command_routing_table(
             "command_platform_adapter_unavailable",
             "configured bot platform has no command adapter: " + platform);
       }
+      auto source_projector =
+          std::dynamic_pointer_cast<CommandSourceProjector>(adapter);
+      if (!source_projector || adapter->platform() != platform) {
+        return command_failure(
+            "command_source_projection_unavailable",
+            "configured command adapter cannot project its admitted source");
+      }
       const auto &actions = bot_actions.at(bot_name);
       const auto supports = [&actions](const std::string_view action) {
         return std::ranges::find(actions, bot::ActionId{std::string{action}}) !=
                actions.end();
       };
-      if (!supports("message.send_group") ||
-          !supports("message.send_private") ||
-          (platform == "telegram" &&
-           !supports("telegram.message.send_topic"))) {
+      if (!supports("message.send")) {
         return command_failure(
             "command_reply_capability_unavailable",
             "configured bot cannot provide every typed command reply action");
@@ -959,6 +815,7 @@ auto build_command_routing_table(
               .installation = {bot_name, configured_bot->second.surface},
               .target = configured_bot->second.command_target,
               .adapter = std::move(adapter),
+              .source_projector = std::move(source_projector),
           });
       if (!inserted &&
           active_bot->second.target != configured_bot->second.command_target) {
@@ -1046,7 +903,8 @@ auto build_command_routing_table(
           "command_access_override_inactive",
           "command access override does not name an active canonical command");
     }
-    auto policy = compile_command_policy(configured.groups, configured.users);
+    auto policy = compile_command_policy(snapshot, conversations,
+                                         configured.groups, configured.users);
     if (!policy) {
       return command_failure("command_access_override_invalid",
                              "command access override is incomplete");
@@ -1225,7 +1083,9 @@ auto CommandCoordinator::process(MessageEnvelope message,
     merge_result(result, std::move(continued));
     co_return result;
   }
-  const auto subject = command_policy_subject(message, *bot);
+  const auto projection =
+      bot->source_projector->project_source(message, bot->installation);
+  const auto *subject = projection.ok() ? &projection.value->subject : nullptr;
   if (detected->name == command::help_name) {
     if (!subject || routing_table_->eligibility(command::help_name, *subject) !=
                         CommandEligibility::Eligible) {
@@ -1253,19 +1113,19 @@ auto CommandCoordinator::process(MessageEnvelope message,
                                  "help delivery was cancelled");
         co_return result;
       }
-      auto reply = bot->adapter->build_text_reply(message, page);
-      if (!reply) {
-        add_core_command_failure(result, command::help_name,
-                                 std::move(reply.code),
-                                 std::move(reply.message));
-        co_return result;
-      }
       try {
-        auto delivered =
-            co_await operation_gateway_->invoke(std::move(*reply.operation));
-        delivered.validate();
-        if (!delivered.ok()) {
-          const auto uncertain = delivered.error->submission_safety ==
+        const auto &source = projection.value->source;
+        obcx::bot::SendMessageRequest reply{
+            .target = source.message.conversation,
+            .body = {obcx::bot::RichText{obcx::bot::Text{page, {}}}},
+            .reply_to = source.message,
+            .delivery = obcx::bot::DeliveryPolicy::SingleMessageOnly,
+            .limits = {1, 0, 0}};
+        obcx::bot::BotClient client{*operation_gateway_};
+        auto delivered = co_await client.send(std::move(reply));
+        if (const auto *failure =
+                std::get_if<obcx::bot::SendFailure>(&delivered)) {
+          const auto uncertain = failure->error.submission_safety ==
                                  obcx::bot::SubmissionSafety::PossiblySubmitted;
           add_core_command_failure(result, command::help_name,
                                    uncertain ? "command_help_delivery_uncertain"
@@ -1327,7 +1187,7 @@ auto CommandCoordinator::process(MessageEnvelope message,
       .source_platform = message.source_platform,
       .source_bot = message.source_bot,
       .conversation_id = message.conversation_id,
-      .sender = json_string(message.payload, "sender"),
+      .sender = subject->user_id,
       .source_event = message.payload,
   };
   MessageEnvelope request;

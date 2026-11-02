@@ -8,42 +8,42 @@ namespace obcx::bot {
 
 struct SelfInfo {
   using obcx_bot_json_factory = void;
-  BotInstallationRef installation;
-  std::string user_id;
-  std::string display_name;
+  UserRef user;
+  std::optional<std::string> display_name;
   std::optional<std::string> username;
 
   void validate() const {
-    installation.validate();
-    detail::validate_identifier(user_id, "self user_id", 20);
-    if (user_id.front() == '0' || !std::ranges::all_of(user_id, [](char c) {
-          return c >= '0' && c <= '9';
-        }))
-      throw std::invalid_argument("self user_id must be a positive native ID");
-    if (!display_name.empty())
-      detail::validate_identifier(display_name, "self display_name", 2048);
+    user.validate();
+    if (display_name)
+      detail::validate_identifier(*display_name, "self display_name", 2048);
     if (username)
       detail::validate_identifier(*username, "self username", 1024);
   }
   static auto from_json(const Json &document) -> SelfInfo {
-    detail::require_only_keys(
-        document, "SelfInfo",
-        {"installation", "user_id", "display_name", "username"});
-    SelfInfo result{
-        .installation = document.at("installation").get<BotInstallationRef>(),
-        .user_id = document.at("user_id").get<std::string>(),
-        .display_name = document.at("display_name").get<std::string>()};
+    detail::validate_domain_wire(document);
+    detail::require_only_keys(document, "SelfInfo",
+                              {"schema", "user", "display_name", "username"});
+    if (!document.at("schema").is_number_integer() ||
+        document.at("schema") != 1)
+      throw std::invalid_argument("SelfInfo schema mismatch");
+    SelfInfo result{.user = document.at("user").get<UserRef>(),
+                    .display_name = std::nullopt,
+                    .username = std::nullopt};
+    if (document.contains("display_name"))
+      result.display_name = detail::require_identifier(document, "display_name",
+                                                       "SelfInfo", 2048);
     if (document.contains("username"))
-      result.username = document.at("username").get<std::string>();
+      result.username =
+          detail::require_identifier(document, "username", "SelfInfo", 1024);
     result.validate();
     return result;
   }
 };
 inline void to_json(Json &document, const SelfInfo &value) {
   value.validate();
-  document = {{"installation", value.installation},
-              {"user_id", value.user_id},
-              {"display_name", value.display_name}};
+  document = {{"schema", 1}, {"user", value.user}};
+  if (value.display_name)
+    document["display_name"] = *value.display_name;
   if (value.username)
     document["username"] = *value.username;
 }
@@ -55,8 +55,12 @@ struct GetSelfRequest {
   BotInstallationRef installation;
   void validate() const { installation.validate(); }
   static auto from_json(const Json &document) -> GetSelfRequest {
+    detail::validate_domain_wire(document);
     detail::require_only_keys(document, "GetSelfRequest",
-                              {"action", "installation"});
+                              {"schema", "action", "installation"});
+    if (!document.at("schema").is_number_integer() ||
+        document.at("schema") != 1)
+      throw std::invalid_argument("GetSelfRequest schema mismatch");
     if (document.contains("action") &&
         document.at("action").get<ActionId>() != action)
       throw std::invalid_argument("GetSelfRequest action mismatch");
@@ -68,7 +72,8 @@ struct GetSelfRequest {
 };
 inline void to_json(Json &document, const GetSelfRequest &request) {
   request.validate();
-  document = {{"action", request.action},
+  document = {{"schema", 1},
+              {"action", request.action},
               {"installation", request.installation}};
 }
 
@@ -86,19 +91,9 @@ struct OperationTraits<GetSelfRequest>
   static void validate_result(const request_type &request,
                               const result_type &result) {
     result.validate();
-    if (result.installation != request.installation)
+    if (result.user.installation != request.installation)
       throw std::invalid_argument("self result installation mismatch");
   }
 };
 
-class SelfClient {
-public:
-  explicit SelfClient(BotOperationGateway &gateway) : gateway_(gateway) {}
-  auto execute(GetSelfRequest request) {
-    return obcx::bot::invoke(gateway_, std::move(request));
-  }
-
-private:
-  BotOperationGateway &gateway_;
-};
 } // namespace obcx::bot

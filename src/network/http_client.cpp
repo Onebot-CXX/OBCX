@@ -118,6 +118,57 @@ constexpr std::uint64_t kMaximumResponseHeaderBytes = 64ULL * 1024ULL;
   };
 }
 
+auto request_until_owned(std::shared_ptr<HttpClientState> self,
+                         detail::CurlHttpMethod method, std::string path,
+                         std::string body,
+                         std::map<std::string, std::string> headers,
+                         std::uint64_t maximum_response_bytes,
+                         detail::HttpDeadline deadline,
+                         detail::HttpWriteEligibility eligible)
+    -> asio::awaitable<detail::HttpCallResult> {
+  const auto cancellation = co_await asio::this_coro::cancellation_state;
+  if (cancellation.cancelled() != asio::cancellation_type::none) {
+    co_return detail::HttpCallResult{
+        asio::error::operation_aborted, false, 0, {}};
+  }
+  if (!eligible || maximum_response_bytes == 0 ||
+      maximum_response_bytes > std::string{}.max_size() ||
+      maximum_response_bytes > std::numeric_limits<std::int64_t>::max()) {
+    co_return detail::HttpCallResult{
+        asio::error::invalid_argument, false, 0, {}};
+  }
+  if (std::chrono::steady_clock::now() >= deadline) {
+    co_return detail::HttpCallResult{asio::error::timed_out, false, 0, {}};
+  }
+  try {
+    const auto settings = self->settings();
+    auto driver = self->driver();
+    detail::CurlRequest request{
+        .method = method,
+        .url = request_url(settings.config, path),
+        .headers = build_headers(settings.config, body, headers),
+        .body = std::move(body),
+        .connect_timeout = settings.config.connect_timeout,
+        .total_timeout = settings.config.connect_timeout,
+        .maximum_response_bytes = maximum_response_bytes,
+        .maximum_header_bytes = kMaximumResponseHeaderBytes,
+        .ca_bundle = std::nullopt,
+        .proxy = settings.proxy,
+    };
+    co_return co_await driver->perform_until(std::move(request), deadline,
+                                             std::move(eligible));
+  } catch (const boost::system::system_error &error) {
+    co_return detail::HttpCallResult{error.code(), false, 0, {}};
+  } catch (const HttpClientError &) {
+    // settings()/driver() reject a closed client before any transfer exists.
+    co_return detail::HttpCallResult{
+        asio::error::operation_aborted, false, 0, {}};
+  } catch (...) {
+    co_return detail::HttpCallResult{
+        asio::error::invalid_argument, false, 0, {}};
+  }
+}
+
 [[nodiscard]] auto strip_line_end(std::string line) -> std::string {
   while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) {
     line.pop_back();
@@ -197,6 +248,28 @@ HttpClient::HttpClient(asio::any_io_executor executor,
     : pimpl_(std::make_unique<Impl>(std::move(executor), config)) {}
 
 HttpClient::~HttpClient() { pimpl_->state->close(); }
+
+auto detail::HttpCallAccess::get_until(
+    HttpClient &client, std::string path,
+    std::map<std::string, std::string> headers,
+    std::uint64_t maximum_response_bytes, HttpDeadline deadline,
+    HttpWriteEligibility eligible) -> asio::awaitable<HttpCallResult> {
+  return request_until_owned(client.pimpl_->state, CurlHttpMethod::Get,
+                             std::move(path), {}, std::move(headers),
+                             maximum_response_bytes, deadline,
+                             std::move(eligible));
+}
+
+auto detail::HttpCallAccess::post_until(
+    HttpClient &client, std::string path, std::string body,
+    std::map<std::string, std::string> headers,
+    std::uint64_t maximum_response_bytes, HttpDeadline deadline,
+    HttpWriteEligibility eligible) -> asio::awaitable<HttpCallResult> {
+  return request_until_owned(client.pimpl_->state, CurlHttpMethod::Post,
+                             std::move(path), std::move(body),
+                             std::move(headers), maximum_response_bytes,
+                             deadline, std::move(eligible));
+}
 
 auto HttpClient::post(std::string_view path, std::string_view body,
                       const std::map<std::string, std::string> &headers,

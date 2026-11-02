@@ -13,6 +13,10 @@
 
 namespace obcx::network {
 
+namespace detail {
+class HttpCallAccess;
+}
+
 namespace asio = boost::asio;
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -202,6 +206,7 @@ protected:
 
 private:
   friend class ProxyHttpClient;
+  friend class detail::HttpCallAccess;
 
   struct Impl;
   std::unique_ptr<Impl> pimpl_;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/message_type.hpp"
+#include "core/bot/self_identity_cache.hpp"
 #include "network/connection_config.hpp"
 #include "network/http_client.hpp"
 #include "telegram/adapter/protocol_adapter.hpp"
@@ -9,12 +10,17 @@
 #include <atomic>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <exception>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 
 namespace obcx::network {
 namespace asio = boost::asio;
+namespace detail {
+class TelegramMediaReadAccess;
+}
 
 struct TelegramMultipartRequest {
   std::string body;
@@ -40,17 +46,29 @@ struct TelegramMultipartRequest {
     const std::vector<core::TelegramTextEntity> &caption_entities)
     -> TelegramMultipartRequest;
 
+// Process-only originating request ownership; never an actor reference or a
+// mutable latest-origin slot. Routing credentials belong to this client only.
+struct TelegramReceiveOrigin {
+  const std::uint64_t epoch;
+  const std::shared_ptr<HttpClient> client;
+  const core::SelfIdentityOrigin authority;
+  const std::string access_token;
+};
+
 /**
  * @brief Telegram Bot API连接管理器
  *
  * 实现通过HTTP轮询的方式与Telegram Bot API通信。
  * 定期轮询获取更新，通过HTTP POST发送API请求。
  */
-class TelegramConnectionManager {
+class TelegramConnectionManager
+    : public std::enable_shared_from_this<TelegramConnectionManager> {
 public:
-  using EventCallback = std::function<void(const common::Event &)>;
-  TelegramConnectionManager(asio::io_context &ioc,
-                            adapter::telegram::ProtocolAdapter &adapter);
+  using EventCallback = std::function<core::SelfObservationResult(
+      const common::Event &, const core::SelfIdentityOrigin &)>;
+  TelegramConnectionManager(
+      asio::io_context &ioc,
+      std::shared_ptr<adapter::telegram::ProtocolAdapter> adapter);
   TelegramConnectionManager(const TelegramConnectionManager &) = delete;
   auto operator=(const TelegramConnectionManager &)
       -> TelegramConnectionManager & = delete;
@@ -64,8 +82,20 @@ public:
   void connect(const common::ConnectionConfig &config);
   void disconnect();
   [[nodiscard]] auto is_connected() const -> bool;
+  [[nodiscard]] std::uint64_t epoch() const { return epoch_.load(); }
+  void configure_identity(std::shared_ptr<core::SelfIdentityCache> cache);
+  auto capture_receive(const core::SelfIdentityOrigin &)
+      -> std::optional<TelegramReceiveOrigin>;
+  auto fetch_self(TelegramReceiveOrigin)
+      -> asio::awaitable<std::optional<std::string>>;
+  auto publish_self(const TelegramReceiveOrigin &, const obcx::bot::SelfInfo &)
+      -> core::SelfObservationResult;
   auto send_action_and_wait_async(std::string action_payload, uint64_t echo_id)
       -> asio::awaitable<std::string>;
+  auto send_domain_request(
+      nlohmann::json parameters,
+      const std::vector<std::pair<std::string, core::TelegramMediaUpload>>
+          &files) -> asio::awaitable<std::string>;
   void set_event_callback(EventCallback callback);
   [[nodiscard]] auto get_connection_type() const -> std::string;
 
@@ -120,42 +150,39 @@ public:
       -> asio::awaitable<std::string>;
 
 private:
-  /**
-   * @brief 开始更新轮询
-   */
+  friend class detail::TelegramMediaReadAccess;
+  struct Poll;
+  // All helpers below run under event_mutex_, except the coroutine itself.
+  bool receive_current(const TelegramReceiveOrigin &);
+  void retire_account() noexcept;
   void start_polling();
-
-  /**
-   * @brief 停止更新轮询
-   */
+  void launch_pending_poll();
   void stop_polling();
-
-  /**
-   * @brief 轮询更新的协程
-   */
-  auto poll_updates() -> asio::awaitable<void>;
-
-  /**
-   * @brief 处理轮询到的更新
-   * @param updates_json 更新JSON数组
-   */
-  void process_updates(std::string_view updates_json);
+  void cancel_poll();
+  void poll_finished(const std::shared_ptr<Poll> &, std::exception_ptr);
+  auto poll_updates(std::shared_ptr<Poll>) -> asio::awaitable<void>;
+  void process_updates(std::string_view, const std::shared_ptr<Poll> &);
   void shutdown();
 
   asio::io_context &ioc_;
-  adapter::telegram::ProtocolAdapter &adapter_;
+  std::shared_ptr<adapter::telegram::ProtocolAdapter> adapter_;
   EventCallback event_callback_;
+  std::recursive_mutex event_mutex_;
 
-  std::unique_ptr<HttpClient> http_client_;
+  std::shared_ptr<HttpClient> http_client_;
+  std::shared_ptr<core::SelfIdentityCache> identity_;
+  std::shared_ptr<Poll> active_poll_;
+  std::shared_ptr<Poll> pending_poll_;
   common::ConnectionConfig config_;
 
   // 轮询控制
+  std::atomic_uint64_t epoch_{0};
   std::atomic<bool> is_polling_{false};
   std::atomic<bool> is_connected_{false};
-  asio::steady_timer poll_timer_;
+  asio::any_io_executor poll_executor_;
 
   // 更新偏移量
-  int update_offset_{0};
+  std::int64_t update_offset_{0};
 };
 
 } // namespace obcx::network

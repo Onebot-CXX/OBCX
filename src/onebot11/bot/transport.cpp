@@ -1,6 +1,7 @@
 #include "onebot11/bot/transport.hpp"
 #include "onebot11/network/http/connection_manager.hpp"
 #include "onebot11/network/websocket/connection_manager.hpp"
+#include "standard_transport_access.hpp"
 
 #include <stdexcept>
 #include <type_traits>
@@ -61,6 +62,9 @@ public:
   std::shared_ptr<adapter::onebot11::ProtocolAdapter> protocol;
   Manager manager;
   EventCallback event_callback;
+  std::shared_ptr<obcx::onebot11::bot::standard::StandardEventCapabilityV1>
+      standard_events;
+  network::onebot11::OriginCapture origin_capture;
   std::function<void(bool)> connection_callback;
   bool running{};
 };
@@ -93,6 +97,10 @@ void OneBot11TransportCapability::configure(
     manager->set_poll_interval(http.poll_interval);
     impl_->manager = std::move(manager);
   }
+  if (impl_->standard_events)
+    set_standard_events(impl_->standard_events);
+  if (impl_->origin_capture)
+    set_origin_capture(impl_->origin_capture);
   if (impl_->event_callback) {
     set_event_callback(impl_->event_callback);
   }
@@ -120,10 +128,6 @@ void OneBot11TransportCapability::start() {
     throw BotComponentRuntimeError("OneBot transport is not configured");
   }
   impl_->running = true;
-  if (std::holds_alternative<obcx::onebot11::configuration::HttpConnection>(
-          impl_->config) &&
-      impl_->connection_callback)
-    impl_->connection_callback(true);
 }
 
 void OneBot11TransportCapability::stop() noexcept {
@@ -140,11 +144,6 @@ void OneBot11TransportCapability::stop() noexcept {
   } catch (...) { // NOLINT(bugprone-empty-catch)
   }
   impl_->running = false;
-  try {
-    if (impl_->connection_callback)
-      impl_->connection_callback(false);
-  } catch (...) { // Teardown cannot propagate observer scheduling errors.
-  }
 }
 
 void OneBot11TransportCapability::set_connection_callback(
@@ -154,6 +153,55 @@ void OneBot11TransportCapability::set_connection_callback(
           std::get_if<std::unique_ptr<network::WebSocketConnectionManager>>(
               &impl_->manager))
     (*manager)->set_connection_callback(impl_->connection_callback);
+  else if (auto *manager =
+               std::get_if<std::unique_ptr<network::HttpConnectionManager>>(
+                   &impl_->manager))
+    (*manager)->set_connection_callback(impl_->connection_callback);
+}
+
+void OneBot11TransportCapability::set_standard_events(
+    std::shared_ptr<obcx::onebot11::bot::standard::StandardEventCapabilityV1>
+        events) {
+  impl_->standard_events = std::move(events);
+  std::visit(
+      [&](auto &manager) {
+        if constexpr (!std::same_as<std::decay_t<decltype(manager)>,
+                                    std::monostate>)
+          manager->set_standard_events(impl_->standard_events);
+      },
+      impl_->manager);
+}
+
+void OneBot11TransportCapability::set_origin_capture(
+    network::onebot11::OriginCapture capture) {
+  impl_->origin_capture = std::move(capture);
+  std::visit(
+      [&](auto &manager) {
+        if constexpr (!std::same_as<std::decay_t<decltype(manager)>,
+                                    std::monostate>)
+          manager->set_origin_capture(impl_->origin_capture);
+      },
+      impl_->manager);
+}
+
+auto OneBot11TransportCapability::send_profile_action(
+    std::string payload, std::uint64_t echo, SelfIdentityOrigin origin,
+    network::onebot11::OriginValidation validate,
+    network::onebot11::ProfilePublication publish)
+    -> boost::asio::awaitable<SelfIdentityCache::Result> {
+  if (auto *manager =
+          std::get_if<std::unique_ptr<network::WebSocketConnectionManager>>(
+              &impl_->manager))
+    co_return co_await (*manager)->send_profile_action(
+        std::move(payload), echo, std::move(origin), std::move(validate),
+        std::move(publish));
+  if (auto *manager =
+          std::get_if<std::unique_ptr<network::HttpConnectionManager>>(
+              &impl_->manager))
+    co_return co_await (*manager)->send_profile_action(
+        std::move(payload), echo, std::move(origin), std::move(validate),
+        std::move(publish));
+  co_return network::onebot11::retired_profile();
 }
 
 void OneBot11TransportCapability::set_event_callback(EventCallback callback) {
@@ -261,3 +309,68 @@ void OneBot11HttpTransportComponent::start() { transport_->start(); }
 void OneBot11HttpTransportComponent::stop() { transport_->stop(); }
 
 } // namespace obcx::core
+
+namespace obcx::onebot11::bot::standard::detail {
+
+auto StandardTransportAccess::send(
+    core::OneBot11TransportCapability &transport, NativeAction action,
+    ExecutionMode mode, std::string parameters, std::uint64_t echo,
+    std::shared_ptr<StandardCallState> call,
+    std::shared_ptr<core::SelfIdentityCache> identity,
+    core::SelfIdentityOrigin origin) -> CapturedStandardSend {
+  if (auto *manager =
+          std::get_if<std::unique_ptr<network::WebSocketConnectionManager>>(
+              &transport.impl_->manager)) {
+    if (*manager) {
+      auto operation = (*manager)->send_standard_action(
+          action, mode, std::move(parameters), echo, std::move(call),
+          std::move(identity), std::move(origin));
+      return {StandardWireTransport::WebSocket, std::move(operation)};
+    }
+  } else if (auto *manager =
+                 std::get_if<std::unique_ptr<network::HttpConnectionManager>>(
+                     &transport.impl_->manager)) {
+    if (*manager) {
+      auto operation = (*manager)->send_standard_action(
+          action, mode, std::move(parameters), std::move(call),
+          std::move(identity), std::move(origin));
+      return {StandardWireTransport::Http, std::move(operation)};
+    }
+  }
+  throw core::BotComponentRuntimeError("OneBot transport is not configured");
+}
+
+} // namespace obcx::onebot11::bot::standard::detail
+
+namespace obcx::onebot11::bot::detail {
+auto FileTransportAccess::send(
+    core::OneBot11TransportCapability &transport, FileQueryKind kind,
+    std::string parameters, std::uint64_t echo,
+    std::shared_ptr<standard::detail::StandardCallState> call,
+    std::shared_ptr<core::SelfIdentityCache> identity,
+    core::SelfIdentityOrigin origin) -> standard::detail::CapturedStandardSend {
+  (void)file_query_name(kind);
+  if (auto *manager =
+          std::get_if<std::unique_ptr<network::WebSocketConnectionManager>>(
+              &transport.impl_->manager)) {
+    if (*manager) {
+      auto operation = (*manager)->send_file_query(
+          kind, std::move(parameters), echo, std::move(call),
+          std::move(identity), std::move(origin));
+      return {standard::detail::StandardWireTransport::WebSocket,
+              std::move(operation)};
+    }
+  } else if (auto *manager =
+                 std::get_if<std::unique_ptr<network::HttpConnectionManager>>(
+                     &transport.impl_->manager)) {
+    if (*manager) {
+      auto operation = (*manager)->send_file_query(
+          kind, std::move(parameters), std::move(call), std::move(identity),
+          std::move(origin));
+      return {standard::detail::StandardWireTransport::Http,
+              std::move(operation)};
+    }
+  }
+  throw core::BotComponentRuntimeError("QQ file transport is not configured");
+}
+} // namespace obcx::onebot11::bot::detail

@@ -1,9 +1,11 @@
 #include "telegram/bot/recipe.hpp"
 #include "core/bot/configuration_fingerprint.hpp"
+#include "telegram/bot/actions.hpp"
 #include "telegram/bot/capability_ids.hpp"
 #include "telegram/bot/command_adapter.hpp"
 #include "telegram/bot/command_catalog_component.hpp"
 #include "telegram/bot/configuration.hpp"
+#include "telegram/bot/domain_binding.hpp"
 #include "telegram/bot/event_ingress.hpp"
 #include "telegram/bot/operation_component.hpp"
 #include "telegram/bot/operation_definitions.hpp"
@@ -63,12 +65,9 @@ void register_recipes(core::BotPlatformCatalog &catalog) {
           const toml::table &connection, std::string_view path) {
          const auto typed = configuration::parse_http(connection, path);
          return std::make_shared<core::BotInstallationPlan>(
-             common::BotInstallationMetadata{
-                 input.installation_id, input.enabled, input.surface,
-                 input.transport, "telegram", typed.bot_username},
-             telegram_http_recipe(), core::configuration_digest(connection),
-             [typed,
-              id = input.installation_id](boost::asio::io_context &executor) {
+             [typed, id = input.installation_id](
+                 boost::asio::io_context &executor,
+                 std::shared_ptr<core::BoundedFileReader> file_reader) {
                std::vector<std::unique_ptr<core::BotComponent>> components;
                components.push_back(
                    std::make_unique<core::TelegramProtocolComponent>());
@@ -83,13 +82,19 @@ void register_recipes(core::BotPlatformCatalog &catalog) {
                components.push_back(
                    std::make_unique<core::TelegramOperationsComponent>(
                        id, true, executor.get_executor(),
-                       typed.self_identity_refresh_interval));
+                       typed.self_identity_refresh_interval,
+                       typed.action_timeout, std::move(file_reader)));
                components.push_back(
                    std::make_unique<core::TelegramCommandCatalogComponent>());
                return components;
              },
+             common::BotInstallationMetadata{
+                 input.installation_id, input.enabled, input.surface,
+                 input.transport, "telegram", typed.bot_username},
+             telegram_http_recipe(), core::configuration_digest(connection),
              make_command_adapter(typed.bot_username));
-       }});
+       },
+       domain_binding()});
 }
 
 } // namespace obcx::telegram::bot
