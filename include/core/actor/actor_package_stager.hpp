@@ -74,9 +74,30 @@ struct ActorPackageStageResult {
   explicit operator bool() const noexcept { return package != nullptr; }
 };
 
+// One sequential generation-build attempt owns this context. Never retain it
+// in a published generation or share it across concurrent builds.
+class ActorPackageStagingContext {
+public:
+  ActorPackageStagingContext();
+  ~ActorPackageStagingContext();
+
+  ActorPackageStagingContext(const ActorPackageStagingContext &) = delete;
+  auto operator=(const ActorPackageStagingContext &)
+      -> ActorPackageStagingContext & = delete;
+
+private:
+  friend class ActorPackageStager;
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
 class ActorPackageStager {
 public:
+  // Standalone staging uses a fresh context.
   [[nodiscard]] auto stage(const ActorPackageStageRequest &request) const
+      -> ActorPackageStageResult;
+  [[nodiscard]] auto stage(const ActorPackageStageRequest &request,
+                           ActorPackageStagingContext &context) const
       -> ActorPackageStageResult;
 };
 

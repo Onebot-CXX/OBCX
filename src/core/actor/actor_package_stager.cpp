@@ -17,6 +17,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <unordered_map>
@@ -198,6 +199,32 @@ auto file_digest(const fs::path &path) -> std::optional<std::string> {
   return result;
 }
 
+struct FileStamp {
+  dev_t device;
+  ino_t inode;
+  off_t size;
+  time_t modified_seconds;
+  long modified_nanoseconds;
+  time_t changed_seconds;
+  long changed_nanoseconds;
+
+  auto operator==(const FileStamp &) const -> bool = default;
+};
+
+auto file_stamp(const fs::path &path) -> std::optional<FileStamp> {
+  struct stat metadata{};
+  if (stat(path.c_str(), &metadata) != 0 || !S_ISREG(metadata.st_mode)) {
+    return std::nullopt;
+  }
+  return FileStamp{.device = metadata.st_dev,
+                   .inode = metadata.st_ino,
+                   .size = metadata.st_size,
+                   .modified_seconds = metadata.st_mtim.tv_sec,
+                   .modified_nanoseconds = metadata.st_mtim.tv_nsec,
+                   .changed_seconds = metadata.st_ctim.tv_sec,
+                   .changed_nanoseconds = metadata.st_ctim.tv_nsec};
+}
+
 auto print_needed(const fs::path &path)
     -> std::optional<std::vector<std::string>> {
   auto result = patchelf({"--print-needed", path.string()});
@@ -233,16 +260,7 @@ auto replace_all(std::string value, std::string_view needle,
   return value;
 }
 
-auto resolve_needed(const fs::path &consumer, std::string_view needed)
-    -> std::optional<fs::path> {
-  if (needed.empty()) {
-    return std::nullopt;
-  }
-  const fs::path needed_path{needed};
-  if (needed_path.is_absolute()) {
-    return canonical_existing(needed_path);
-  }
-
+auto dependency_directories(const fs::path &consumer) -> std::vector<fs::path> {
   std::vector<fs::path> directories{consumer.parent_path()};
   if (auto rpath = print_rpath(consumer)) {
     std::istringstream stream(*rpath);
@@ -256,7 +274,23 @@ auto resolve_needed(const fs::path &consumer, std::string_view needed)
       }
     }
   }
-  for (const auto &directory : directories) {
+  return directories;
+}
+
+auto resolve_needed(const fs::path &consumer, std::string_view needed,
+                    std::optional<std::vector<fs::path>> &directories)
+    -> std::optional<fs::path> {
+  if (needed.empty()) {
+    return std::nullopt;
+  }
+  const fs::path needed_path{needed};
+  if (needed_path.is_absolute()) {
+    return canonical_existing(needed_path);
+  }
+  if (!directories) {
+    directories = dependency_directories(consumer);
+  }
+  for (const auto &directory : *directories) {
     if (auto resolved = canonical_existing(directory / needed_path)) {
       return resolved;
     }
@@ -313,6 +347,41 @@ auto failure(std::string message) -> ActorPackageStageResult {
 }
 
 } // namespace
+
+struct ActorPackageStagingContext::Impl {
+  struct CachedDigest {
+    FileStamp stamp;
+    std::string digest;
+  };
+  std::unordered_map<std::string, CachedDigest> process_owned_digests;
+
+  auto digest(const fs::path &path) -> std::optional<std::string> {
+    const auto canonical = canonical_existing(path);
+    if (!canonical) {
+      process_owned_digests.erase(path.string());
+      return file_digest(path);
+    }
+    const auto key = canonical->string();
+    const auto before = file_stamp(*canonical);
+    const auto cached = process_owned_digests.find(key);
+    if (before && cached != process_owned_digests.end() &&
+        cached->second.stamp == *before) {
+      return cached->second.digest;
+    }
+    // Evict stale entries even if this observation cannot be cached.
+    process_owned_digests.erase(key);
+    auto result = file_digest(*canonical);
+    if (before && result && file_stamp(*canonical) == before) {
+      process_owned_digests.emplace(key, CachedDigest{*before, *result});
+    }
+    return result;
+  }
+};
+
+ActorPackageStagingContext::ActorPackageStagingContext()
+    : impl_(std::make_unique<Impl>()) {}
+
+ActorPackageStagingContext::~ActorPackageStagingContext() = default;
 
 StagedActorPackage::StagedActorPackage(
     fs::path root, fs::path actor_library,
@@ -380,6 +449,13 @@ void StagedActorPackage::cleanup() noexcept {
 
 auto ActorPackageStager::stage(const ActorPackageStageRequest &request) const
     -> ActorPackageStageResult {
+  ActorPackageStagingContext context;
+  return stage(request, context);
+}
+
+auto ActorPackageStager::stage(const ActorPackageStageRequest &request,
+                               ActorPackageStagingContext &context) const
+    -> ActorPackageStageResult {
   const auto actor_library = canonical_existing(request.actor_library);
   if (!actor_library) {
     return failure("actor library is not a regular file");
@@ -421,9 +497,11 @@ auto ActorPackageStager::stage(const ActorPackageStageRequest &request) const
       cleanup_failed_stage();
       return failure("cannot inspect actor dependency closure");
     }
+    // Local storage remains valid when discovering edges grows objects.
+    std::optional<std::vector<fs::path>> directories;
     for (const auto &needed : *needed_entries) {
       const auto resolved =
-          resolve_needed(objects[object_index].source, needed);
+          resolve_needed(objects[object_index].source, needed, directories);
       const auto private_candidate = resolved.has_value() &&
                                      is_within(package_root, *resolved) &&
                                      !is_intrinsically_process_owned(needed);
@@ -445,7 +523,7 @@ auto ActorPackageStager::stage(const ActorPackageStageRequest &request) const
       ProcessOwnedDependencyIdentity identity;
       if (identity_path) {
         identity.path = identity_path->string();
-        if (auto digest = file_digest(*identity_path)) {
+        if (auto digest = context.impl_->digest(*identity_path)) {
           identity.digest = std::move(*digest);
         }
       }

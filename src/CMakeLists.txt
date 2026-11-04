@@ -171,6 +171,9 @@ foreach(_runtime IN ITEMS obcx_generic_runtime_objects obcx_onebot11_runtime_obj
         re2::re2)
   target_compile_features(${_runtime} PUBLIC cxx_std_26)
   target_compile_options(${_runtime} PUBLIC -freflection)
+  if(OBCX_ENABLE_JEMALLOC_PROFILING)
+    target_compile_options(${_runtime} PRIVATE -fno-omit-frame-pointer)
+  endif()
   target_compile_definitions(${_runtime} PRIVATE
     OBCX_PATCHELF_EXECUTABLE="${OBCX_PATCHELF_EXECUTABLE}")
   set_target_properties(${_runtime} PROPERTIES POSITION_INDEPENDENT_CODE ON)

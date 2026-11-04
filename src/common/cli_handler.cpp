@@ -20,6 +20,7 @@ void CliHandler::register_default_handlers() {
   handlers_["quit"] = handle_exit;
   handlers_["\x03"] = handle_exit; // Ctrl+C
   handlers_["reload"] = handle_reload;
+  handlers_["memory_stats"] = handle_memory_stats;
 }
 
 auto CliHandler::process_command(const std::string &line) -> bool {
@@ -32,6 +33,15 @@ auto CliHandler::process_command(const std::string &line) -> bool {
   if (line.starts_with(loglevel_prefix)) {
     std::string level_str = line.substr(loglevel_prefix.length());
     return handle_log_level(ctx_, level_str);
+  }
+
+  constexpr std::string_view memory_dump_prefix = "memory_dump=";
+  if (line.starts_with(memory_dump_prefix)) {
+    output(ctx_,
+           ctx_.memory_dump_cb
+               ? ctx_.memory_dump_cb(line.substr(memory_dump_prefix.size()))
+               : "memory_profile_unavailable: no memory profiler attached");
+    return true;
   }
 
   // Check for exact command match
@@ -164,6 +174,15 @@ auto CliHandler::handle_reload(Context &ctx,
     output(ctx, "reload_unavailable: actor runtime reload is unavailable");
     break;
   }
+  return true;
+}
+
+auto CliHandler::handle_memory_stats(Context &ctx,
+                                     [[maybe_unused]] const std::string &args)
+    -> bool {
+  output(ctx, ctx.memory_stats_cb
+                  ? ctx.memory_stats_cb()
+                  : "memory_profile_unavailable: no memory profiler attached");
   return true;
 }
 

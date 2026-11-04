@@ -945,6 +945,7 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
       std::move(request.blocking_executor), staging_root});
 
   ActorPackageStager stager;
+  ActorPackageStagingContext staging_context;
   std::unordered_map<std::string, std::unordered_set<std::string>> actor_inputs;
   std::unordered_map<std::string, ActorInputContract> actor_contracts;
   for (const auto &actor : *ordered) {
@@ -962,7 +963,8 @@ auto RuntimeGenerationBuilder::build(RuntimeGenerationBuildRequest request)
                                 .actor_name = actor.name,
                                 .generation_id = request.generation_id,
                                 .expected_process_owned_dependencies =
-                                    request.active_process_owned_dependencies});
+                                    request.active_process_owned_dependencies},
+                               staging_context);
     if (!staged) {
       return failed(staged.code, std::move(staged.message));
     }

@@ -70,50 +70,11 @@ std::string media_type(const d::MessageBlock &b) {
     return a->kind == d::AudioKind::Voice ? "voice" : "audio";
   return "document";
 }
-std::vector<std::string> mimes(std::string_view type) {
-  if (type == "photo")
-    return {"image/jpeg", "image/png"};
-  if (type == "animation")
-    return {"image/gif", "video/mp4"};
-  if (type == "video")
-    return {"video/mp4"};
-  if (type == "audio")
-    return {"audio/mpeg", "audio/mp4"};
-  if (type == "voice")
-    return {"audio/ogg", "audio/mpeg", "audio/mp4"};
-  return {};
-}
-bool encoding_matches(std::string_view data, const d::MediaMetadata &metadata,
-                      std::string_view type) {
-  if (type == "document")
-    return true;
-  const auto byte = [&](std::size_t i) {
-    return static_cast<unsigned char>(data[i]);
-  };
-  const auto &mime = *metadata.mime_type;
-  if (mime == "image/png")
-    return data.starts_with(std::string_view{"\x89PNG\r\n\x1a\n", 8}) &&
-           !data.contains("acTL");
-  if (mime == "image/jpeg")
-    return data.size() >= 3 && byte(0) == 0xff && byte(1) == 0xd8 &&
-           byte(2) == 0xff;
-  if (mime == "image/gif")
-    return data.starts_with("GIF87a") || data.starts_with("GIF89a");
-  if (mime == "video/mp4" || mime == "audio/mp4")
-    return data.size() >= 12 && data.substr(4, 4) == "ftyp";
-  if (mime == "audio/ogg")
-    return data.starts_with("OggS") && data.contains("OpusHead");
-  if (mime == "audio/mpeg")
-    return data.starts_with("ID3") ||
-           (data.size() >= 2 && byte(0) == 0xff && (byte(1) & 0xe0) == 0xe0);
-  return false;
-}
-void validate_upload_data(std::string_view data,
-                          const d::MediaMetadata &metadata,
-                          std::string_view type) {
-  if (data.empty() || !encoding_matches(data, metadata, type))
-    throw std::invalid_argument(
-        "Telegram media bytes do not match the declared supported encoding");
+void validate_upload_data(std::string_view data) {
+  // Encoding support is decided by Telegram, not a local MIME/magic allowlist.
+  // Keep transport safety and resource checks independent of file format.
+  if (data.empty())
+    throw std::invalid_argument("empty Telegram media");
   if (data.contains("----OBCXBoundary7MA4YWxk"))
     throw std::invalid_argument("multipart delimiter collision");
 }
@@ -198,15 +159,6 @@ Plan plan(const d::SendMessageRequest &r, bool upload, bool file_read) {
                                 d::BotOperationErrorCode::UnsupportedAction,
                                 "Telegram LocalFile reader unavailable");
                         }
-                        auto allowed = mimes(type);
-                        if (!allowed.empty() &&
-                            (!source.metadata.mime_type ||
-                             std::ranges::find(allowed,
-                                               *source.metadata.mime_type) ==
-                                 allowed.end()))
-                          throw PreflightError(
-                              d::BotOperationErrorCode::UnsupportedAction,
-                              "Telegram media encoding unsupported or unknown");
                         if (type == "photo")
                           photo_dimensions(source.metadata);
                         const auto size =
@@ -248,7 +200,7 @@ Plan plan(const d::SendMessageRequest &r, bool upload, bool file_read) {
                               reinterpret_cast<const char *>(
                                   source.bytes.data()),
                               source.bytes.size()};
-                          validate_upload_data(bytes, source.metadata, type);
+                          validate_upload_data(bytes);
                           data.assign(bytes);
                         } else {
                           p.acquisitions.push_back(
@@ -529,7 +481,7 @@ asio::awaitable<void> run(const d::SendMessageRequest &r,
           throw std::invalid_argument(
               "Telegram local media size declaration mismatch");
       }
-      validate_upload_data(data, metadata, file.type);
+      validate_upload_data(data);
       p.bytes = retained_bytes + data.size();
       file.data = std::move(data);
     }
@@ -820,11 +772,9 @@ d::ConversationCapabilities domain_capabilities(const d::ConversationRef &c,
         continue;
       if (source == d::MediaSourceKind::Reference && kind == d::MediaKind::File)
         continue;
-      auto allowed = mimes(type);
-      out.media.push_back(
-          {kind, source,
-           allowed.empty() ? std::nullopt : std::optional{allowed}, true,
-           item_bound(type), std::nullopt, std::nullopt});
+      // No SDK-imposed encoding list; provider acceptance remains dynamic.
+      out.media.push_back({kind, source, std::nullopt, true, item_bound(type),
+                           std::nullopt, std::nullopt});
     }
   }
   const std::vector<d::MediaKind> kinds{

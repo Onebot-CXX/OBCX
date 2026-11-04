@@ -49,6 +49,8 @@ public:
     OutputCallback output_cb = nullptr;
     std::function<void()> shutdown_cb = nullptr;
     ReloadCallback reload_cb = nullptr;
+    std::function<std::string()> memory_stats_cb = nullptr;
+    std::function<std::string(const std::string &)> memory_dump_cb = nullptr;
   };
 
   /**
@@ -138,6 +140,8 @@ private:
    */
   static auto handle_log_level(Context &ctx, const std::string &args) -> bool;
   static auto handle_reload(Context &ctx, const std::string &args) -> bool;
+  static auto handle_memory_stats(Context &ctx, const std::string &args)
+      -> bool;
 
   Context ctx_;
   std::unordered_map<std::string, CommandHandler> handlers_;

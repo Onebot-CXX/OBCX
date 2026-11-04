@@ -40,6 +40,13 @@ io_uring reactor，可用 `-DOBCX_ENABLE_IO_URING=OFF` 关闭。
 cmake --install build/actor-dev --prefix "$HOME/.local/obcx"
 ```
 
+### 可选堆内存 profiling
+
+可用默认关闭的 `-DOBCX_ENABLE_JEMALLOC_PROFILING=ON` 构建 jemalloc 诊断应用，
+通过 `memory_stats` 查看分配器统计、`memory_dump=./obcx`
+导出采样调用栈。需要独立构建和批准后的进程重启，不向在线进程注入 profiler。
+构建、启动及 core/actor 归属分析见 [jemalloc 内存诊断](packaging/jemalloc-profiling.md)。
+
 ## 选择 actor package
 
 根构建在 CMake configure 内离线解析 v2 `packages.toml`；包内

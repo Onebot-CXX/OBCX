@@ -1,3 +1,7 @@
+add_executable(actor_package_staging_probe actor_package_staging_probe.cpp)
+target_link_libraries(actor_package_staging_probe PRIVATE obcx_core)
+target_compile_features(actor_package_staging_probe PRIVATE cxx_std_26)
+
 add_executable(actor_scheduler_v2_stress actor_scheduler_v2_stress.cpp)
 target_link_libraries(actor_scheduler_v2_stress PRIVATE obcx_core)
 target_compile_features(actor_scheduler_v2_stress PRIVATE cxx_std_26)

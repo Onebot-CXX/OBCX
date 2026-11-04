@@ -17,11 +17,6 @@
 - Use at least 6 parallel workers for compilation and test execution.
 - When system load is low, use all available CPU cores to reduce build and test
   time.
-- For hot-reloadable actor builds, use `scripts/actor_build.py` with a frozen
-  installed SDK; see `packaging/actors/README.md`. Do not build actor targets in
-  the live core's workspace: their transitive dependencies can rebuild and
-  replace `libobcx_core.so`. Core/SDK updates and process restarts are separate,
-  explicit operations.
 
 ## Commit Checks
 

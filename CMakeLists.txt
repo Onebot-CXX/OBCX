@@ -210,6 +210,38 @@ endif()
 
 option(OBCX_BUILD_BENCHMARKS "Build repeatable benchmark executables" OFF)
 
+# Operator-approved default: ordinary builds keep the system allocator.
+option(OBCX_ENABLE_JEMALLOC_PROFILING
+       "Link the application with profiling-capable jemalloc" OFF)
+if(OBCX_ENABLE_JEMALLOC_PROFILING)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(OBCX_JEMALLOC REQUIRED IMPORTED_TARGET jemalloc)
+  include(CheckCXXSourceRuns)
+  if(NOT CMAKE_CROSSCOMPILING)
+    set(_OBCX_SAVED_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}")
+    set(CMAKE_REQUIRED_LIBRARIES PkgConfig::OBCX_JEMALLOC)
+    # Recheck if an operator changes the selected jemalloc installation.
+    unset(OBCX_JEMALLOC_PROFILING_SUPPORTED CACHE)
+    check_cxx_source_runs([[
+#include <jemalloc/jemalloc.h>
+int main() {
+  bool prof = false, stats = false;
+  size_t size = sizeof(bool);
+  if (mallctl("config.prof", &prof, &size, nullptr, 0) != 0) return 1;
+  size = sizeof(bool);
+  if (mallctl("config.stats", &stats, &size, nullptr, 0) != 0) return 1;
+  return prof && stats ? 0 : 1;
+}
+]] OBCX_JEMALLOC_PROFILING_SUPPORTED)
+    set(CMAKE_REQUIRED_LIBRARIES "${_OBCX_SAVED_REQUIRED_LIBRARIES}")
+    unset(_OBCX_SAVED_REQUIRED_LIBRARIES)
+    if(NOT OBCX_JEMALLOC_PROFILING_SUPPORTED)
+      message(FATAL_ERROR
+        "OBCX_ENABLE_JEMALLOC_PROFILING requires jemalloc built with profiling and statistics support")
+    endif()
+  endif()
+endif()
+
 add_subdirectory(src)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")

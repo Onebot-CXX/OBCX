@@ -158,6 +158,9 @@
                   re2
                   zstd
                   liburing
+                  # Optional diagnostic builds need jemalloc.pc and jeprof.
+                  # CMake links it only when profiling is explicitly enabled.
+                  jemalloc
                   stdenv.cc.cc.lib
                 ];
               in

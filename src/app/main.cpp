@@ -1,4 +1,5 @@
 #include "app/builtin_bot_platforms.hpp"
+#include "app/memory_profiler.hpp"
 #include "common/cli_handler.hpp"
 #include "common/config_snapshot.hpp"
 #include "common/logger.hpp"
@@ -253,6 +254,12 @@ public:
                     boost::posix_time::to_iso_extended_string(
                         boost::posix_time::second_clock::local_time())),
         use_tui);
+
+    if (obcx::app::memory_profiling_enabled()) {
+      OBCX_INFO("Jemalloc diagnostic build enabled. Commands: memory_stats, "
+                "memory_dump=./obcx");
+      OBCX_INFO("{}", obcx::app::memory_profile_stats());
+    }
 
     const auto platform_catalog =
         obcx::app::make_builtin_bot_platform_catalog();
@@ -670,6 +677,8 @@ public:
       common::CliHandler::Context ctx{
           .should_stop = g_should_stop,
           .stop_cv = g_stop_cv,
+          .memory_stats_cb = obcx::app::memory_profile_stats,
+          .memory_dump_cb = obcx::app::memory_profile_dump,
       };
 
       if (reload_controller) {
