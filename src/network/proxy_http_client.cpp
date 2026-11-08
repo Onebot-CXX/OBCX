@@ -40,7 +40,7 @@ ProxyHttpClient::ProxyHttpClient(asio::any_io_executor executor,
       .password = std::move(proxy_config.password),
       .ca_bundle = std::nullopt,
   };
-  OBCX_INFO("HTTP proxy client configured");
+  OBCX_TRACE("HTTP proxy client configured");
 }
 
 auto ProxyHttpClient::post(

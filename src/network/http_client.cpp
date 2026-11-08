@@ -229,11 +229,12 @@ auto request_until_owned(std::shared_ptr<HttpClientState> self,
   } else {
     message.append(" request failed");
   }
-  const auto kind = error == asio::error::timed_out
-                        ? HttpClientErrorKind::Timeout
-                    : error == asio::error::operation_aborted
-                        ? HttpClientErrorKind::Cancelled
-                        : HttpClientErrorKind::TransportFailure;
+  const auto kind =
+      error == asio::error::timed_out           ? HttpClientErrorKind::Timeout
+      : error == asio::error::operation_aborted ? HttpClientErrorKind::Cancelled
+      : detail::curl_error_transient_transport(error)
+          ? HttpClientErrorKind::TransientTransportFailure
+          : HttpClientErrorKind::TransportFailure;
   throw HttpClientError(message, submission_state, kind);
 }
 

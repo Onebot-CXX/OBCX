@@ -64,6 +64,8 @@ void TuiApp::run() {
   ts::Selection selection;
   ftxui::CapturedMouse selection_capture;
   ftxui::CapturedMouse scrollbar_capture;
+  ftxui::Box jump_to_newest_box;
+  bool show_jump_to_newest = false;
   std::optional<ts::Position> console_pin;
   bool divider_dragging = false;
   bool interrupt_requested = false;
@@ -249,10 +251,30 @@ void TuiApp::run() {
                                                   : ftxui::Color::GrayDark));
     }
 
-    return ftxui::hbox({ftxui::vbox(std::move(log_elements)) |
-                            ftxui::yflex_grow | ftxui::xflex,
-                        ftxui::vbox(std::move(scrollbar)) |
-                            ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 1)}) |
+    auto log_content =
+        ftxui::vbox(std::move(log_elements)) | ftxui::yflex_grow | ftxui::xflex;
+    show_jump_to_newest = !log_viewport_.following_tail() &&
+                          layout_.log_content_width > 0 &&
+                          layout_.log_content_height > 0;
+    if (show_jump_to_newest) {
+      auto jump_bar =
+          ftxui::text(" ↓ Jump to newest log · End ") |
+          ftxui::size(ftxui::WIDTH, ftxui::LESS_THAN, content_width) |
+          ftxui::color(ftxui::Color::White) |
+          ftxui::bgcolor(ftxui::Color::Blue) | ftxui::bold |
+          ftxui::reflect(jump_to_newest_box);
+      // Overlay the last content row, like Pi's jump-to-latest indicator.
+      // Keep viewport, scrollbar and source-selection geometry unchanged.
+      log_content = ftxui::dbox({
+          log_content,
+          ftxui::vbox({ftxui::filler(), ftxui::hbox({ftxui::filler(), jump_bar,
+                                                     ftxui::filler()})}),
+      });
+    }
+
+    return ftxui::hbox(
+               {log_content, ftxui::vbox(std::move(scrollbar)) |
+                                 ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 1)}) |
            ftxui::yflex_grow;
   });
 
@@ -540,6 +562,14 @@ void TuiApp::run() {
 
     if (mouse.button == ftxui::Mouse::Left &&
         mouse.motion == ftxui::Mouse::Pressed) {
+      if (show_jump_to_newest && in_log_pane && mouse.x >= 1 &&
+          mouse.x <= layout_.log_content_width &&
+          mouse.y >= layout_.log_content_top &&
+          mouse.y < layout_.log_content_top + layout_.log_content_height &&
+          jump_to_newest_box.Contain(mouse.x, mouse.y)) {
+        scroll_log_to(0);
+        return true;
+      }
       clear_selection();
       if (mouse.y == layout_.separator_y) {
         divider_dragging = true;

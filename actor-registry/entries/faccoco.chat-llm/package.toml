@@ -1,8 +1,0 @@
-schema_version = 2
-package = { "id" = "faccoco.chat-llm", "name" = "chat_llm", "version" = "0.2.0", "kind" = "actor" }
-actor = { "name" = "chat_llm", "abi" = 2, "entrypoint" = "obcx_create_actor_v2", "input_contract_schema" = 3 }
-artifact = { "kind" = "shared-library", "name" = "chat_llm", "target" = "chat_llm_actor", "export_target" = "obcx::chat_llm_actor", "platforms" = ["linux-x86_64", "linux-arm64"] }
-dependencies = { "libraries" = [], "actors" = [{ "id" = "onebot-cxx.message-store", "version" = ">=0.2.1,<0.3.0" }], "system" = [{ "id" = "obcx-sdk", "version" = ">=2.7.0,<3.0.0", "targets" = ["obcx::obcx_core"], "visibility" = "private" }, { "id" = "nlohmann-json", "version" = ">=3.0.0,<4.0.0", "targets" = ["nlohmann_json::nlohmann_json"], "visibility" = "private" }, { "id" = "tomlplusplus", "version" = ">=3.4.0,<4.0.0", "targets" = ["tomlplusplus::tomlplusplus"], "visibility" = "private" }, { "id" = "icu", "version" = ">=76.1.0,<77.0.0", "targets" = ["ICU::i18n", "ICU::uc"], "visibility" = "private" }, { "id" = "openssl", "version" = ">=3.0.0,<4.0.0", "targets" = ["OpenSSL::Crypto"], "visibility" = "private" }] }
-test_dependencies = { "libraries" = [], "system" = [] }
-compatibility = { "cpp_standard" = 26, "compiler" = { "id" = "GNU", "version" = ">=16.1.0" }, "stdlib" = "libstdc++", "cxx11_abi" = 1, "pic" = true, "obcx" = ">=2.7.0,<3.0.0", "actor_abi_min" = 2, "actor_abi_max" = 2, "reflection_macro" = 202506 }
-publication = { "repository" = "https://github.com/faccoco/chat_llm", "homepage" = "https://github.com/faccoco/chat_llm", "license" = "MIT", "description" = "Durable token-budgeted LLM sessions and lazy vision for OBCX" }

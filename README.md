@@ -297,6 +297,9 @@ drain_timeout_ms = 5000 # 100..300000
   日志被原有保留策略淘汰后，选区失效并提示重新选择，不会复制过期缓存。
   **Esc** 取消选区且不自动跳至末尾；滚轮、PageUp/PageDown、Home/End、
   分隔条调整和滚动条拖动先清除选区，再执行原导航。**End** 恢复日志尾随。
+- 日志尾随暂停时，日志面板底部显示 **↓ Jump to newest log · End** 跳转条；
+  点击它或按 **End** 会清除选区、跳到最新日志并恢复自动尾随，跳转条随即隐藏。
+  跳转条不占用额外布局行，也不会更改正在编辑的命令。
 
 复制使用写入型 **OSC 52**（剪贴板 `c`，Base64 编码的纯 UTF-8 文本），目标是
 运行终端客户端机器的剪贴板。通过 SSH 使用时不需要服务器上的图形剪贴板，
@@ -387,16 +390,13 @@ message type，配置再按 platform/bot scope 激活路由；平台适配器不
 
 ## Package registry
 
-`actor-registry/` 是独立 registry 的开发期检查快照，actor/library 均读取同一份
-v2 元数据规则。当前只登记元数据，不根据版本号猜测下载地址：
+Registry 元数据与索引只在独立 `obcx-actor-registry` 仓库维护；core 不保存副本，
+core CI 也不依赖 registry checkout。该独立仓库可放在本地开发目录
+`local_actor/actor-registry/`，但不属于 core 源码。
 
-```bash
-python3 cmake/package_tool.py registry-validate --entries actor-registry/entries
-python3 cmake/package_tool.py registry-index --entries actor-registry/entries \
-  --output actor-registry/index/packages.json --check
-```
-
-经验证的发行物、发布工具的正式版本固定和远程发布仍后置。
+Core 保留通用 `cmake/package_tool.py` 校验和索引生成工具，供独立仓库的
+本地检查与 CI 显式调用。actor/library 使用同一份 v2 元数据规则；元数据
+不等于经验证的发行物，也不根据版本号猜测下载地址。
 
 ## 文档
 
@@ -412,7 +412,6 @@ python3 scripts/generate_api_docs.py
 - [Actor operations](docs/architecture/actor-runtime-v2-operations.md)
 - [Current-only runtime and schemas](docs/architecture/current-schema-only.md)
 - [Actor author guide](docs/architecture/actor-v2-migration.md)
-- [Actor package registry](actor-registry/README.md)
 
 本次不兼容边界与升级后的唯一受支持配置见
 [actor-only breaking change](docs/actor-only-breaking-change.md)。历史基准与路线图

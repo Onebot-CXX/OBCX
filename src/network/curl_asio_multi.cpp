@@ -118,6 +118,26 @@ auto curl_error_code(const int native_code) -> boost::system::error_code {
   return {native_code, kCurlErrorCategory};
 }
 
+auto curl_error_transient_transport(
+    const boost::system::error_code &error) noexcept -> bool {
+  if (&error.category() != &kCurlErrorCategory)
+    return false;
+  switch (static_cast<CURLcode>(error.value())) {
+  case CURLE_COULDNT_RESOLVE_PROXY:
+  case CURLE_COULDNT_RESOLVE_HOST:
+  case CURLE_COULDNT_CONNECT:
+  case CURLE_SEND_ERROR:
+  case CURLE_RECV_ERROR:
+  case CURLE_GOT_NOTHING:
+  case CURLE_PARTIAL_FILE:
+  case CURLE_HTTP2:
+  case CURLE_HTTP2_STREAM:
+    return true;
+  default:
+    return false;
+  }
+}
+
 auto curl_error_definitely_not_submitted(
     const boost::system::error_code &error) noexcept -> bool {
   if (&error.category() != &kCurlErrorCategory) {

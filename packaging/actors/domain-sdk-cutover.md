@@ -21,10 +21,12 @@ manifest schema 2 are independent and unchanged.
 | vollate.qq-forward-probe | 0.3.0 |
 
 Bridge and Chat require Store `>=0.2.1,<0.3.0`. Path-mapping remains an independent
-library, not a media authorization service. The authoritative registry is
-`local_actor/actor-registry`; root `actor-registry/` mirrors its development
-metadata only. No verified downloads, source revision pins or release assets
-are implied by metadata changes.
+library, not a media authorization service. The authoritative registry is the
+independent `obcx-actor-registry` repository, checked out locally at
+`local_actor/actor-registry`. Core keeps no registry metadata/index mirror;
+registry validation belongs to that repository and uses the shared tooling.
+No verified downloads, source revision pins or release assets are implied by
+metadata changes.
 
 ## Current contracts
 

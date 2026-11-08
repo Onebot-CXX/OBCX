@@ -46,6 +46,9 @@ enum class HttpClientErrorKind : std::uint8_t {
   TransportFailure,
   Timeout,
   Cancelled,
+  // Connection/DNS/interrupted-transfer failures, not TLS/config/body limits.
+  // This category does not grant permission to replay a side-effecting call.
+  TransientTransportFailure,
 };
 
 /**

@@ -1,8 +1,0 @@
-schema_version = 2
-package = { "id" = "onebot-cxx.example", "name" = "example", "version" = "0.2.0", "kind" = "actor" }
-actor = { "name" = "example", "abi" = 2, "entrypoint" = "obcx_create_actor_v2", "input_contract_schema" = 3 }
-artifact = { "kind" = "shared-library", "name" = "example", "target" = "example_actor", "export_target" = "obcx::example_actor", "platforms" = ["linux-x86_64", "linux-arm64"] }
-dependencies = { "libraries" = [], "actors" = [], "system" = [{ "id" = "obcx-sdk", "version" = ">=2.7.0,<3.0.0", "targets" = ["obcx::obcx_core"], "visibility" = "private" }] }
-test_dependencies = { "libraries" = [], "system" = [] }
-compatibility = { "cpp_standard" = 26, "compiler" = { "id" = "GNU", "version" = ">=16.1.0" }, "stdlib" = "libstdc++", "cxx11_abi" = 1, "pic" = true, "obcx" = ">=2.7.0,<3.0.0", "actor_abi_min" = 2, "actor_abi_max" = 2, "reflection_macro" = 202506 }
-publication = { "repository" = "https://github.com/Onebot-CXX/obcx-actor-template", "homepage" = "https://github.com/Onebot-CXX/obcx-actor-template", "license" = "MIT", "description" = "Template native V2 actor package for OBCX" }

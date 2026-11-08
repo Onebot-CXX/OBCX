@@ -63,6 +63,8 @@ struct CurlRuntimeCapabilities {
     -> boost::system::error_code;
 [[nodiscard]] auto curl_error_definitely_not_submitted(
     const boost::system::error_code &error) noexcept -> bool;
+[[nodiscard]] auto curl_error_transient_transport(
+    const boost::system::error_code &error) noexcept -> bool;
 
 class CurlAsioMulti final : public std::enable_shared_from_this<CurlAsioMulti> {
 public:
