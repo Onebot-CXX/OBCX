@@ -272,6 +272,11 @@ void TuiApp::run() {
       });
     }
 
+    // Use terminal geometry, not the longest visible row, even when the
+    // jump-to-newest overlay wraps the content in a dbox.
+    log_content = log_content | ftxui::size(ftxui::WIDTH, ftxui::EQUAL,
+                                            layout_.log_content_width);
+
     return ftxui::hbox(
                {log_content, ftxui::vbox(std::move(scrollbar)) |
                                  ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 1)}) |
