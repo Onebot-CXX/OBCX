@@ -68,7 +68,7 @@ auto parse_telegram_operation_response(const std::string_view response,
                                        const bool side_effecting)
     -> obcx::bot::BotOperationResult<obcx::bot::Json> {
   if (response.empty() ||
-      response.size() > obcx::bot::detail::domain_maximum_bytes) {
+      response.size() > obcx::bot::detail::bot_maximum_bytes) {
     return malformed("Telegram", side_effecting);
   }
   const auto document = Json::parse(response, nullptr, false);

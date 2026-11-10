@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_messaging.hpp"
+#include "core/bot/bot_messaging.hpp"
 
 namespace obcx::bot {
 // Named receive-only content facts. None is an event archive, a send intent,
@@ -36,7 +36,7 @@ struct ReceivedCard {
   void validate() const {
     if (kind > ReceivedCardKind::Share || !metadata.is_object())
       throw std::invalid_argument("invalid received card");
-    detail::validate_domain_wire(metadata);
+    detail::validate_bot_wire(metadata);
   }
 };
 struct ReceivedForward {
@@ -99,17 +99,15 @@ struct ReceivedObservation {
     std::visit([](const auto &v) { v.validate(); }, value);
   }
 };
-OBCX_DOMAIN_FIELDS(ReceivedFace, OBCX_DOMAIN_FIELD(id),
-                   OBCX_DOMAIN_FIELD(description));
-OBCX_DOMAIN_FIELDS(ReceivedMarketFace, OBCX_DOMAIN_FIELD(description));
-OBCX_DOMAIN_FIELDS(ReceivedCard, OBCX_DOMAIN_FIELD(kind),
-                   OBCX_DOMAIN_FIELD(metadata));
-OBCX_DOMAIN_FIELDS(ReceivedForward, OBCX_DOMAIN_FIELD(token));
-OBCX_DOMAIN_FIELDS(ReceivedMusic, OBCX_DOMAIN_FIELD(title));
-OBCX_DOMAIN_FIELDS(ReceivedNodeKind, OBCX_DOMAIN_FIELD(native_kind));
-OBCX_DOMAIN_FIELDS(ReceivedNodeText, OBCX_DOMAIN_FIELD(content));
-OBCX_DOMAIN_FIELDS(ReceivedInlineNode, OBCX_DOMAIN_FIELD(display_name),
-                   OBCX_DOMAIN_FIELD(form), OBCX_DOMAIN_FIELD(parts));
-OBCX_DOMAIN_FIELDS(ReceivedObservation, OBCX_DOMAIN_FIELD(block_index),
-                   OBCX_DOMAIN_FIELD(value));
+OBCX_BOT_FIELDS(ReceivedFace, OBCX_BOT_FIELD(id), OBCX_BOT_FIELD(description));
+OBCX_BOT_FIELDS(ReceivedMarketFace, OBCX_BOT_FIELD(description));
+OBCX_BOT_FIELDS(ReceivedCard, OBCX_BOT_FIELD(kind), OBCX_BOT_FIELD(metadata));
+OBCX_BOT_FIELDS(ReceivedForward, OBCX_BOT_FIELD(token));
+OBCX_BOT_FIELDS(ReceivedMusic, OBCX_BOT_FIELD(title));
+OBCX_BOT_FIELDS(ReceivedNodeKind, OBCX_BOT_FIELD(native_kind));
+OBCX_BOT_FIELDS(ReceivedNodeText, OBCX_BOT_FIELD(content));
+OBCX_BOT_FIELDS(ReceivedInlineNode, OBCX_BOT_FIELD(display_name),
+                OBCX_BOT_FIELD(form), OBCX_BOT_FIELD(parts));
+OBCX_BOT_FIELDS(ReceivedObservation, OBCX_BOT_FIELD(block_index),
+                OBCX_BOT_FIELD(value));
 } // namespace obcx::bot

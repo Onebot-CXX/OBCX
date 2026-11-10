@@ -153,14 +153,14 @@ auto TelegramTransportCapability::send_action(std::string payload,
       std::move(payload), echo);
 }
 
-auto TelegramTransportCapability::send_domain_request(
+auto TelegramTransportCapability::send_bot_request(
     nlohmann::json parameters,
     const std::vector<std::pair<std::string, TelegramMediaUpload>> &files)
     -> boost::asio::awaitable<std::string> {
   if (!impl_->manager)
     throw BotComponentRuntimeError("Telegram transport not prepared");
-  co_return co_await impl_->manager->send_domain_request(std::move(parameters),
-                                                         files);
+  co_return co_await impl_->manager->send_bot_request(std::move(parameters),
+                                                      files);
 }
 
 auto TelegramTransportCapability::download_file(std::string file_id)

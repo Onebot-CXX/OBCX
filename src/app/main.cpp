@@ -544,7 +544,8 @@ public:
           auto operations =
               installation->capability<core::BotOperationEndpoint>(
                   core::CapabilityId{"bot.operations"});
-          const auto binding = platform_catalog->domain_binding(config.surface);
+          const auto binding =
+              platform_catalog->platform_adapter(config.surface);
           events->set_origin_capture_handler(
               [operations] { return operations->capture_origin(); });
           events->set_message_admission_handler(
@@ -605,7 +606,7 @@ public:
                     "message",
                     core::message_envelope_from_event(
                         context, event,
-                        *platform_catalog->domain_binding(context.surface),
+                        *platform_catalog->platform_adapter(context.surface),
                         *process_bot_operation_dispatcher));
               });
           events->subscribe_notices([process_actor_event, platform_catalog](
@@ -616,7 +617,7 @@ public:
                 "notice",
                 core::notice_envelope_from_event(
                     context, event,
-                    *platform_catalog->domain_binding(context.surface)));
+                    *platform_catalog->platform_adapter(context.surface)));
           });
           events->subscribe_heartbeats(
               [process_actor_event](const core::BotEventContext &context,

@@ -3,7 +3,7 @@
 // Process-only infrastructure. Never installed as an Actor SDK header.
 #include "core/bot/message_operation_binding.hpp"
 #include "core/bot/owned_structured_operation_gateway.hpp"
-#include "core/bot/platform_domain_binding.hpp"
+#include "core/bot/platform_adapter.hpp"
 #include "core/bot/reply_evidence_store.hpp"
 #include "core/bot/self_identity_cache.hpp"
 #include "core/bot/send_gateway_codec.hpp"
@@ -293,9 +293,8 @@ public:
       const bot::BotInstallationRef &, const common::MessageEvent &,
       bot::TimePoint, std::string_view, const SelfIdentityOrigin &)>;
 
-  OperationRegistry(
-      bot::BotInstallationRef installation,
-      std::shared_ptr<const PlatformDomainBinding> domain_binding);
+  OperationRegistry(bot::BotInstallationRef installation,
+                    std::shared_ptr<const PlatformAdapter> platform_adapter);
   [[nodiscard]] auto reply_evidence() const
       -> std::shared_ptr<ReplyEvidenceStore>;
   [[nodiscard]] auto admit_message(const bot::MessageReceived &message,

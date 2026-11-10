@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_events.hpp"
+#include "core/bot/bot_events.hpp"
 #include "onebot11/bot/group_forward.hpp"
 namespace obcx::onebot11::bot {
 struct FaceView {
@@ -53,7 +53,7 @@ struct RawCardView {
     }
     // This bounds the original data without parsing embedded JSON strings,
     // extracting fields, rewriting URLs, or granting a send/read capability.
-    obcx::bot::detail::validate_domain_wire(metadata);
+    obcx::bot::detail::validate_bot_wire(metadata);
   }
 };
 struct SpecialContentView {
@@ -68,35 +68,32 @@ auto special_content(const obcx::bot::MessageReceived &)
     -> std::vector<SpecialContentView>;
 } // namespace obcx::onebot11::bot
 namespace obcx::bot {
-template <> struct detail::DomainRecordPreflight<onebot11::bot::FaceView> {
+template <> struct detail::BotRecordPreflight<onebot11::bot::FaceView> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_text(d, "id", 20, false);
     detail::preflight_optional_identifier(d, "description", "QQ face", 2048);
   }
 };
-template <>
-struct detail::DomainRecordPreflight<onebot11::bot::MarketFaceView> {
+template <> struct detail::BotRecordPreflight<onebot11::bot::MarketFaceView> {
   static void validate(const Json &d) {
     detail::preflight_optional_identifier(d, "description", "QQ market face",
                                           2048);
   }
 };
-OBCX_DOMAIN_FIELDS(onebot11::bot::FaceView, OBCX_DOMAIN_FIELD(id),
-                   OBCX_DOMAIN_FIELD(description));
-OBCX_DOMAIN_FIELDS(onebot11::bot::MarketFaceView,
-                   OBCX_DOMAIN_FIELD(description), OBCX_DOMAIN_FIELD(media),
-                   OBCX_DOMAIN_FIELD(animated));
-template <> struct detail::DomainRecordPreflight<onebot11::bot::RawCardView> {
+OBCX_BOT_FIELDS(onebot11::bot::FaceView, OBCX_BOT_FIELD(id),
+                OBCX_BOT_FIELD(description));
+OBCX_BOT_FIELDS(onebot11::bot::MarketFaceView, OBCX_BOT_FIELD(description),
+                OBCX_BOT_FIELD(media), OBCX_BOT_FIELD(animated));
+template <> struct detail::BotRecordPreflight<onebot11::bot::RawCardView> {
   static void validate(const Json &d) {
-    detail::validate_domain_wire(d);
+    detail::validate_bot_wire(d);
     (void)detail::bounded_unsigned(
         d.at("kind"), static_cast<unsigned>(onebot11::bot::CardKind::Share));
   }
 };
-OBCX_DOMAIN_FIELDS(onebot11::bot::RawCardView, OBCX_DOMAIN_FIELD(kind),
-                   OBCX_DOMAIN_FIELD(metadata));
-OBCX_DOMAIN_FIELDS(onebot11::bot::SpecialContentView, OBCX_DOMAIN_FIELD(source),
-                   OBCX_DOMAIN_FIELD(native_segment_index),
-                   OBCX_DOMAIN_FIELD(normalized_block_index),
-                   OBCX_DOMAIN_FIELD(value));
+OBCX_BOT_FIELDS(onebot11::bot::RawCardView, OBCX_BOT_FIELD(kind),
+                OBCX_BOT_FIELD(metadata));
+OBCX_BOT_FIELDS(onebot11::bot::SpecialContentView, OBCX_BOT_FIELD(source),
+                OBCX_BOT_FIELD(native_segment_index),
+                OBCX_BOT_FIELD(normalized_block_index), OBCX_BOT_FIELD(value));
 } // namespace obcx::bot

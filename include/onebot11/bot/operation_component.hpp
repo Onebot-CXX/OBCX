@@ -8,11 +8,11 @@ namespace obcx::core {
 
 class OneBot11OperationsComponent final : public BotComponent {
 public:
-  OneBot11OperationsComponent(
-      std::string installation_id, boost::asio::any_io_executor executor,
-      std::chrono::milliseconds self_refresh_interval,
-      std::shared_ptr<const PlatformDomainBinding> binding,
-      std::chrono::milliseconds action_timeout);
+  OneBot11OperationsComponent(std::string installation_id,
+                              boost::asio::any_io_executor executor,
+                              std::chrono::milliseconds self_refresh_interval,
+                              std::shared_ptr<const PlatformAdapter> binding,
+                              std::chrono::milliseconds action_timeout);
 
   [[nodiscard]] auto descriptor() const -> ComponentDescriptor override;
   void install_capabilities(CapabilityRegistry &registry) override;

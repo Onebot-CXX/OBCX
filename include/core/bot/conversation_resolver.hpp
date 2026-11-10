@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/bot/domain_codec.hpp"
+#include "core/bot/bot_codec.hpp"
 #include "core/bot/operation_result.hpp"
 #include "core/bot/references.hpp"
 
@@ -35,15 +35,15 @@ struct ConfiguredConversation {
   }
 };
 
-template <> struct detail::DomainRecordPreflight<ConfiguredConversation> {
+template <> struct detail::BotRecordPreflight<ConfiguredConversation> {
   static void validate(const Json &value) {
     (void)detail::bounded_unsigned(value.at("kind"), 2);
     (void)detail::require_identifier(value, "native_id",
                                      "configured conversation", 1024);
   }
 };
-OBCX_DOMAIN_FIELDS(ConfiguredConversation, OBCX_DOMAIN_FIELD(kind),
-                   OBCX_DOMAIN_FIELD(native_id), OBCX_DOMAIN_FIELD(topic));
+OBCX_BOT_FIELDS(ConfiguredConversation, OBCX_BOT_FIELD(kind),
+                OBCX_BOT_FIELD(native_id), OBCX_BOT_FIELD(topic));
 
 // Resolves explicit current configuration for one enabled installation. No
 // archive input, identity extraction, historical ID import or provider I/O.

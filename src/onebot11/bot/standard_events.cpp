@@ -21,9 +21,9 @@ class NoticeBudget {
 public:
   explicit NoticeBudget(const ValueLimits &limits)
       : bytes_left_(std::min(limits.maximum_bytes,
-                             obcx::bot::detail::domain_maximum_bytes)),
+                             obcx::bot::detail::bot_maximum_bytes)),
         nodes_left_(std::min(limits.maximum_nodes,
-                             obcx::bot::detail::domain_maximum_items)),
+                             obcx::bot::detail::bot_maximum_items)),
         maximum_text_bytes_(limits.maximum_text_bytes),
         maximum_depth_(std::min(limits.maximum_depth, std::size_t{32})) {}
 

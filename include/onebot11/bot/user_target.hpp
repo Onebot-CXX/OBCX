@@ -39,6 +39,6 @@ auto user_target_matches(const UserTarget &, const UserRef &) -> bool;
 } // namespace obcx::onebot11::bot
 
 namespace obcx::bot {
-OBCX_DOMAIN_FIELDS(onebot11::bot::NativeUserTarget,
-                   OBCX_DOMAIN_FIELD(installation), OBCX_DOMAIN_FIELD(user_id));
+OBCX_BOT_FIELDS(onebot11::bot::NativeUserTarget, OBCX_BOT_FIELD(installation),
+                OBCX_BOT_FIELD(user_id));
 } // namespace obcx::bot

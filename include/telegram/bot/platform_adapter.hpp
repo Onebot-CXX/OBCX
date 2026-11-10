@@ -1,9 +1,9 @@
 #pragma once
-#include "core/bot/platform_domain_binding.hpp"
+#include "core/bot/platform_adapter.hpp"
 
 namespace obcx::telegram::bot {
 // Process-only codec and native projection. Actor extensions are in
-// domain_views.hpp.
+// bot_views.hpp.
 class TelegramReferenceCodec final
     : public obcx::bot::binding::NativeReferenceCodec {
 public:
@@ -13,7 +13,7 @@ public:
   std::string normalize_username(std::string_view username) const override;
 };
 const TelegramReferenceCodec &reference_codec();
-std::shared_ptr<const core::PlatformDomainBinding> domain_binding();
+std::shared_ptr<const core::PlatformAdapter> platform_adapter();
 obcx::bot::ConversationRef native_conversation(
     const obcx::bot::BotInstallationRef &, const obcx::bot::Json &message);
 obcx::bot::MessageRef native_message_reference(

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/bot/domain_codec.hpp"
+#include "core/bot/bot_codec.hpp"
 #include <string>
 #include <string_view>
 

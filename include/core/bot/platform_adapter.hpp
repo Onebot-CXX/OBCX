@@ -7,9 +7,9 @@
 #include <optional>
 
 namespace obcx::core {
-class PlatformDomainBinding {
+class PlatformAdapter {
 public:
-  virtual ~PlatformDomainBinding() = default;
+  virtual ~PlatformAdapter() = default;
   [[nodiscard]] virtual auto codec() const
       -> const bot::binding::NativeReferenceCodec & = 0;
   [[nodiscard]] virtual auto normalize_message(const bot::BotInstallationRef &,

@@ -1,10 +1,10 @@
 #pragma once
 
 // Process-only capability of the actual registered command adapter. It does not
-// extend either existing adapter or platform-domain-binding virtual layout.
+// extend either existing adapter or platform-adapter virtual layout.
 #include "core/actor/actor.hpp"
 #include "core/actor/command_availability.hpp"
-#include "core/bot/domain_events.hpp"
+#include "core/bot/bot_events.hpp"
 #include "core/bot/operation_result.hpp"
 
 namespace obcx::core {

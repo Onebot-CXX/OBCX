@@ -1,9 +1,9 @@
-# Domain identity persistence, encoding version 1
+# Bot identity persistence, encoding version 1
 
 > SDK 2.7.0 removes generic historical conversion/import services. Whole
 > current typed references remain the persistence contract. Bridge schema 5
 > preserves actual topic facts separately where canonical scope is insufficient.
-> See domain-sdk-cutover.md for operator-only offline conversion and matching
+> See bot-sdk-cutover.md for operator-only offline conversion and matching
 > products; runtime constructors perform no automatic data migration.
 
 Ordinary actors persist and restore **whole SDK references**. Obtain references
@@ -16,11 +16,11 @@ constructing destinations or proof that any example account/chat exists.
 
 Implementation authority:
 
-- `include/core/bot/domain_ids.hpp`: structural encoding, decoding and tags.
+- `include/core/bot/bot_ids.hpp`: structural encoding, decoding and tags.
 - `include/core/bot/ids.hpp`, `validation.hpp`: identifiers and field bounds.
 - `include/core/bot/references.hpp`: outer installation and complete references.
-- `src/onebot11/bot/domain_binding.cpp`: QQ native vocabulary and validation.
-- `src/telegram/bot/domain_binding.cpp`: Telegram vocabulary and topic rules.
+- `src/onebot11/bot/platform_adapter.cpp`: QQ native vocabulary and validation.
+- `src/telegram/bot/platform_adapter.cpp`: Telegram vocabulary and topic rules.
 
 The exact wire spelling is `obcx1:<tag>:<lowercase hexadecimal payload>`.
 `tag` is one of `conversation`, `user`, `message`, `media`, `media_identity`,
@@ -189,7 +189,7 @@ restoration after restart does not manufacture URL or local-file access.
 Explicit native sensitive views remain separate from ordinary media reads;
 there is no historical URL/file-import fallback.
 
-Actor input schema 3, domain DTO wire schema 1, MessageStored wire schema 2 and
+Actor input schema 3, bot DTO wire schema 1, MessageStored wire schema 2 and
 Store database schema 5 are independent. The scheduler ABI remains V2. A matching label is not complete C++ ABI proof or
 a substitute for using the matching installed SDK and core. Any future opaque
 encoding version needs an explicit migration decision rather than silently

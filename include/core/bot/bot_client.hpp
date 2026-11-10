@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_queries.hpp"
+#include "core/bot/bot_queries.hpp"
 #include "core/bot/send_gateway_codec.hpp"
 
 namespace obcx::bot {

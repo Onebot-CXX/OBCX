@@ -2,7 +2,7 @@
 
 #include "core/bot/operation_registry.hpp"
 #include "core/bot/self_info.hpp"
-#include "telegram/bot/domain_operations.hpp"
+#include "telegram/bot/bot_operations.hpp"
 
 #include <set>
 

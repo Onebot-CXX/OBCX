@@ -26,7 +26,7 @@ struct ForwardNode {
     author.validate();
     detail::require_onebot(author.installation, "QQ forward author");
     detail::validate_identifier(display_name, "QQ forward display name", 1024);
-    if (body.empty() || body.size() > obcx::bot::detail::domain_maximum_items)
+    if (body.empty() || body.size() > obcx::bot::detail::bot_maximum_items)
       throw std::invalid_argument("empty/oversized QQ forward body");
   }
 };
@@ -37,7 +37,7 @@ struct ForwardNode {
 struct AuthorlessForwardNode {
   obcx::bot::MessageBody body;
   void validate() const {
-    if (body.empty() || body.size() > obcx::bot::detail::domain_maximum_items)
+    if (body.empty() || body.size() > obcx::bot::detail::bot_maximum_items)
       throw std::invalid_argument("empty/oversized QQ forward body");
   }
 };
@@ -64,7 +64,7 @@ struct SendOneBotGroupForwardMessageRequest {
     detail::require_onebot(target.installation, "QQ forward target");
     limits.validate();
     if (nodes.empty() || nodes.size() > 99 || !maximum_envelope_bytes ||
-        maximum_envelope_bytes > obcx::bot::detail::domain_maximum_bytes)
+        maximum_envelope_bytes > obcx::bot::detail::bot_maximum_bytes)
       throw std::invalid_argument("QQ forward node/envelope limit exceeded");
     detail::ForwardPreflight envelope(target, limits, maximum_envelope_bytes,
                                       detail::ForwardBudgetScope::WholeSend);
@@ -184,75 +184,73 @@ struct OneBotForwardMessage {
 };
 } // namespace obcx::onebot11::bot
 namespace obcx::bot {
-template <> struct detail::DomainRecordPreflight<onebot11::bot::QqForwardRef> {
+template <> struct detail::BotRecordPreflight<onebot11::bot::QqForwardRef> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_text(d, "token", 512, false);
   }
 };
-template <> struct detail::DomainRecordPreflight<onebot11::bot::ForwardNode> {
+template <> struct detail::BotRecordPreflight<onebot11::bot::ForwardNode> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_text(d, "display_name", 1024, false);
-    onebot11::bot::detail::preflight_array(d, "body",
-                                           detail::domain_maximum_items, false);
+    onebot11::bot::detail::preflight_array(d, "body", detail::bot_maximum_items,
+                                           false);
   }
 };
 template <>
-struct detail::DomainRecordPreflight<onebot11::bot::AuthorlessForwardNode> {
+struct detail::BotRecordPreflight<onebot11::bot::AuthorlessForwardNode> {
   static void validate(const Json &d) {
-    onebot11::bot::detail::preflight_array(d, "body",
-                                           detail::domain_maximum_items, false);
+    onebot11::bot::detail::preflight_array(d, "body", detail::bot_maximum_items,
+                                           false);
   }
 };
 template <>
-struct detail::DomainRecordPreflight<onebot11::bot::ForwardOutputDetails> {
+struct detail::BotRecordPreflight<onebot11::bot::ForwardOutputDetails> {
   static void validate(const Json &d) {
     if (!d.at("node_indices").is_null())
       onebot11::bot::detail::preflight_array(d, "node_indices", 99, false);
   }
 };
 template <>
-struct detail::DomainRecordPreflight<onebot11::bot::ReceivedForwardNode> {
+struct detail::BotRecordPreflight<onebot11::bot::ReceivedForwardNode> {
   static void validate(const Json &d) {
     if (!d.at("display_name").is_null())
       onebot11::bot::detail::preflight_text(d, "display_name", 2048, true);
   }
 };
 template <>
-struct detail::DomainRecordPreflight<onebot11::bot::OneBotForwardMessage> {
+struct detail::BotRecordPreflight<onebot11::bot::OneBotForwardMessage> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_array(d, "nodes", 99, true);
   }
 };
-OBCX_DOMAIN_FIELDS(onebot11::bot::QqForwardRef, OBCX_DOMAIN_FIELD(source),
-                   OBCX_DOMAIN_FIELD(token));
-OBCX_DOMAIN_FIELDS(onebot11::bot::ForwardNode, OBCX_DOMAIN_FIELD(author),
-                   OBCX_DOMAIN_FIELD(display_name), OBCX_DOMAIN_FIELD(body));
-OBCX_DOMAIN_FIELDS(onebot11::bot::AuthorlessForwardNode,
-                   OBCX_DOMAIN_FIELD(body));
-OBCX_DOMAIN_FIELDS(onebot11::bot::SendOneBotGroupForwardMessageRequest,
-                   OBCX_DOMAIN_FIELD(target), OBCX_DOMAIN_FIELD(nodes),
-                   OBCX_DOMAIN_FIELD(maximum_envelope_bytes),
-                   OBCX_DOMAIN_FIELD(limits));
-OBCX_DOMAIN_FIELDS(onebot11::bot::ForwardOutputDetails,
-                   OBCX_DOMAIN_FIELD(message), OBCX_DOMAIN_FIELD(node_indices));
-OBCX_DOMAIN_FIELDS(onebot11::bot::OneBotGroupForwardMessageResult,
-                   OBCX_DOMAIN_FIELD(outcome), OBCX_DOMAIN_FIELD(forward),
-                   OBCX_DOMAIN_FIELD(output_details));
-OBCX_DOMAIN_FIELDS(onebot11::bot::ReceivedForwardNode,
-                   OBCX_DOMAIN_FIELD(sender), OBCX_DOMAIN_FIELD(display_name),
-                   OBCX_DOMAIN_FIELD(sent_at), OBCX_DOMAIN_FIELD(body));
-OBCX_DOMAIN_FIELDS(onebot11::bot::GetOneBotForwardMessageRequest,
-                   OBCX_DOMAIN_FIELD(forward));
-OBCX_DOMAIN_FIELDS(onebot11::bot::OneBotForwardMessage,
-                   OBCX_DOMAIN_FIELD(forward), OBCX_DOMAIN_FIELD(nodes));
+OBCX_BOT_FIELDS(onebot11::bot::QqForwardRef, OBCX_BOT_FIELD(source),
+                OBCX_BOT_FIELD(token));
+OBCX_BOT_FIELDS(onebot11::bot::ForwardNode, OBCX_BOT_FIELD(author),
+                OBCX_BOT_FIELD(display_name), OBCX_BOT_FIELD(body));
+OBCX_BOT_FIELDS(onebot11::bot::AuthorlessForwardNode, OBCX_BOT_FIELD(body));
+OBCX_BOT_FIELDS(onebot11::bot::SendOneBotGroupForwardMessageRequest,
+                OBCX_BOT_FIELD(target), OBCX_BOT_FIELD(nodes),
+                OBCX_BOT_FIELD(maximum_envelope_bytes), OBCX_BOT_FIELD(limits));
+OBCX_BOT_FIELDS(onebot11::bot::ForwardOutputDetails, OBCX_BOT_FIELD(message),
+                OBCX_BOT_FIELD(node_indices));
+OBCX_BOT_FIELDS(onebot11::bot::OneBotGroupForwardMessageResult,
+                OBCX_BOT_FIELD(outcome), OBCX_BOT_FIELD(forward),
+                OBCX_BOT_FIELD(output_details));
+OBCX_BOT_FIELDS(onebot11::bot::ReceivedForwardNode, OBCX_BOT_FIELD(sender),
+                OBCX_BOT_FIELD(display_name), OBCX_BOT_FIELD(sent_at),
+                OBCX_BOT_FIELD(body));
+OBCX_BOT_FIELDS(onebot11::bot::GetOneBotForwardMessageRequest,
+                OBCX_BOT_FIELD(forward));
+OBCX_BOT_FIELDS(onebot11::bot::OneBotForwardMessage, OBCX_BOT_FIELD(forward),
+                OBCX_BOT_FIELD(nodes));
 template <>
-struct detail::DomainRecordPreflight<
+struct detail::BotRecordPreflight<
     onebot11::bot::SendOneBotGroupForwardMessageRequest> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_array(d, "nodes", 99, false);
-    const auto limits = detail::domain_decode<SendLimits>(d.at("limits"));
+    const auto limits = detail::bot_decode<SendLimits>(d.at("limits"));
     const auto maximum = detail::bounded_unsigned(
-        d.at("maximum_envelope_bytes"), detail::domain_maximum_bytes);
+        d.at("maximum_envelope_bytes"), detail::bot_maximum_bytes);
     const auto target = d.at("target").get<ConversationRef>();
     onebot11::bot::detail::ForwardPreflight preflight(
         target, limits, maximum,
@@ -265,11 +263,10 @@ struct detail::DomainRecordPreflight<
             "QQ opaque forward nodes have no bounded recipe");
       const auto &value = node.at("value");
       if (alternative == 0) {
-        detail::DomainRecordPreflight<onebot11::bot::ForwardNode>::validate(
-            value);
+        detail::BotRecordPreflight<onebot11::bot::ForwardNode>::validate(value);
         preflight.node(value);
       } else {
-        detail::DomainRecordPreflight<
+        detail::BotRecordPreflight<
             onebot11::bot::AuthorlessForwardNode>::validate(value);
         preflight.authorless_node(value);
       }

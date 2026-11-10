@@ -30,7 +30,7 @@ public:
       if (!configured)
         throw std::invalid_argument("installation is not configured");
       const auto binding = ProcessConfigAccess::catalog(*snapshot_)
-                               ->domain_binding(installation.surface);
+                               ->platform_adapter(installation.surface);
       if (!binding)
         throw std::invalid_argument("platform binding is unavailable");
       auto value = binding->configured_conversation(installation, target);

@@ -1,5 +1,5 @@
 #include "onebot11/bot/user_target.hpp"
-#include "onebot11/bot/domain_binding.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 
 namespace obcx::onebot11::bot {
 auto user_identity_view(const UserRef &user) -> UserIdentityView {

@@ -83,7 +83,7 @@ auto event_raw_json(const common::NoticeEvent &event) -> common::json {
 
 auto message_envelope_from_event(const BotEventContext &context,
                                  const common::MessageEvent &event,
-                                 const PlatformDomainBinding &binding,
+                                 const PlatformAdapter &binding,
                                  BotOperationDispatcher &dispatcher)
     -> MessageEnvelope {
   static std::atomic_uint64_t sequence{0};
@@ -168,14 +168,14 @@ auto raw_message_envelope_from_event(const std::string &source_platform,
 
 auto notice_envelope_from_event(const BotEventContext &context,
                                 const common::NoticeEvent &event,
-                                const PlatformDomainBinding &binding)
+                                const PlatformAdapter &binding)
     -> MessageEnvelope {
   const bot::BotInstallationRef installation{context.installation_id,
                                              context.surface};
   binding.codec().validate(installation);
   if (!context.notice_received_at)
     throw std::invalid_argument("notice has no pre-queue observation time");
-  bot::detail::validate_domain_wire(event.data);
+  bot::detail::validate_bot_wire(event.data);
   auto deleted = binding.normalize_deleted_notice(installation, event,
                                                   *context.notice_received_at);
   if (deleted) {
@@ -189,7 +189,7 @@ auto notice_envelope_from_event(const BotEventContext &context,
       context.platform, context.installation_id, event);
   if (deleted)
     envelope.payload["message_deleted"] = *deleted;
-  bot::detail::validate_domain_wire(envelope.payload);
+  bot::detail::validate_bot_wire(envelope.payload);
   // Keep the same single envelope, identity, raw archive and correlation.
   // Unlike a message, this observation does not enter reply/media admission.
   return envelope;

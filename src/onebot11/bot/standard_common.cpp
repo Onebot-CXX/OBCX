@@ -3,7 +3,7 @@
 namespace obcx::onebot11::bot::standard {
 namespace {
 void validate_byte_limit(std::size_t value) {
-  if (value == 0 || value > obcx::bot::detail::domain_maximum_bytes)
+  if (value == 0 || value > obcx::bot::detail::bot_maximum_bytes)
     throw std::invalid_argument("standard byte limit is outside hard bounds");
 }
 } // namespace
@@ -18,9 +18,9 @@ void CallLimits::validate() const {
 void ValueLimits::validate() const {
   validate_byte_limit(maximum_bytes);
   if (maximum_nodes == 0 ||
-      maximum_nodes > obcx::bot::detail::domain_maximum_items ||
+      maximum_nodes > obcx::bot::detail::bot_maximum_items ||
       maximum_depth > 32 ||
-      maximum_text_bytes > obcx::bot::detail::domain_maximum_bytes)
+      maximum_text_bytes > obcx::bot::detail::bot_maximum_bytes)
     throw std::invalid_argument("standard value limits exceed hard bounds");
 }
 

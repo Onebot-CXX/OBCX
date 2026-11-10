@@ -111,7 +111,7 @@ ResolveReplyRequest SHALL contain a genuine observed ReplyRef identifying source
 - **THEN** the runtime rejects the lookup and issues no get_msg call
 
 #### Scenario: Installation omits unapproved relationship-cache options
-- **WHEN** an otherwise valid installation omits reply_evidence_max_entries, reply_evidence_ttl_ms and their domain table
+- **WHEN** an otherwise valid installation omits reply_evidence_max_entries, reply_evidence_ttl_ms and their containing configuration table
 - **THEN** their absence does not fail configuration validation or cause a replacement default to be supplied
 - **AND** reply resolution still requires genuine admitted evidence and the explicit lookup policy
 

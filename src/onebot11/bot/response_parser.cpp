@@ -45,7 +45,7 @@ auto parse_onebot11_operation_response(const std::string_view response,
                                        const bool side_effecting)
     -> obcx::bot::BotOperationResult<obcx::bot::Json> {
   if (response.empty() ||
-      response.size() > obcx::bot::detail::domain_maximum_bytes) {
+      response.size() > obcx::bot::detail::bot_maximum_bytes) {
     return malformed("OneBot", side_effecting);
   }
   const auto document = Json::parse(response, nullptr, false);

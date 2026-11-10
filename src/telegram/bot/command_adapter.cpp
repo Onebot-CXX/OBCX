@@ -1,9 +1,9 @@
 #include "telegram/bot/command_adapter.hpp"
-#include "core/bot/domain_events.hpp"
+#include "core/bot/bot_events.hpp"
 #include "core/bot/gateway_codec.hpp"
 #include "core/command/command_detection.hpp"
 #include "core/command/command_source_projector.hpp"
-#include "telegram/bot/domain_binding.hpp"
+#include "telegram/bot/platform_adapter.hpp"
 #include <algorithm>
 #include <charconv>
 #include <cstdint>
@@ -86,7 +86,7 @@ public:
       const MessageEnvelope &event,
       const obcx::bot::BotInstallationRef &installation) const
       -> obcx::bot::BotOperationResult<core::CommandSourceProjection> override {
-    namespace domain = obcx::bot;
+    namespace bot_model = obcx::bot;
     try {
       if (event.source_platform != platform() ||
           event.source_bot != installation.installation_id ||
@@ -112,17 +112,18 @@ public:
       const auto message_id = field("message_id");
       if (sender.empty() || field("conversation_id") != event.conversation_id)
         throw std::invalid_argument("command source identity mismatch");
-      auto source = event.payload.at("message").get<domain::MessageReceived>();
-      domain::detail::validate_domain_wire(event.raw);
-      domain::detail::validate_domain_wire(event.payload.at("payload"));
+      auto source =
+          event.payload.at("message").get<bot_model::MessageReceived>();
+      bot_model::detail::validate_bot_wire(event.raw);
+      bot_model::detail::validate_bot_wire(event.payload.at("payload"));
       if (!event.raw.is_object() || event.payload.at("payload") != event.raw ||
           event.raw.at("message_type") != kind ||
           event.raw.at("user_id") != sender ||
           event.raw.at("message_id") != message_id)
         throw std::invalid_argument("command archive identity mismatch");
-      const auto binding = domain_binding();
+      const auto binding = platform_adapter();
       binding->codec().validate(installation);
-      domain::binding::validate_native_event(binding->codec(), source);
+      bot_model::binding::validate_native_event(binding->codec(), source);
       std::optional<std::int64_t> topic;
       if (event.payload.contains("topic_id")) {
         const auto &value = event.payload.at("topic_id");
@@ -154,19 +155,19 @@ public:
         throw std::invalid_argument("Telegram command lacks forum topic");
       const auto conversation = binding->configured_conversation(
           installation,
-          {kind == "group" ? domain::ConfiguredConversationKind::Group
-                           : domain::ConfiguredConversationKind::Private,
+          {kind == "group" ? bot_model::ConfiguredConversationKind::Group
+                           : bot_model::ConfiguredConversationKind::Private,
            kind == "group" ? group : sender, topic});
-      const domain::MessageRef expected{
+      const bot_model::MessageRef expected{
           conversation,
-          binding->codec().make<domain::MessageId>("message", {message_id})};
+          binding->codec().make<bot_model::MessageId>("message", {message_id})};
       if (native_conversation(installation, event.raw) != conversation ||
           source.message != expected ||
           (kind == "group" && event.raw.at("group_id") != group) ||
           (kind == "private" && event.raw.contains("group_id") &&
            !event.raw.at("group_id").is_null()))
         throw std::invalid_argument("Telegram typed command source mismatch");
-      const auto native_id = [](const domain::Json &value) {
+      const auto native_id = [](const bot_model::Json &value) {
         if (!value.is_number_integer() ||
             (value.is_number_unsigned() &&
              value.get<std::uint64_t>() > INT64_MAX))
@@ -182,28 +183,29 @@ public:
         throw std::invalid_argument("Telegram compatibility sender mismatch");
       if (event.raw.contains("sender_chat")) {
         const auto *actual =
-            std::get_if<domain::ConversationSender>(&source.sender);
+            std::get_if<bot_model::ConversationSender>(&source.sender);
         const auto expected = native_conversation(
-            installation, domain::Json{{"chat", event.raw.at("sender_chat")}});
+            installation,
+            bot_model::Json{{"chat", event.raw.at("sender_chat")}});
         if (!actual || actual->conversation != expected)
           throw std::invalid_argument("Telegram conversation sender mismatch");
       } else if (event.raw.contains("from")) {
-        const auto *actual = std::get_if<domain::KnownUser>(&source.sender);
+        const auto *actual = std::get_if<bot_model::KnownUser>(&source.sender);
         if (!actual || actual->user != native_user(installation, sender))
           throw std::invalid_argument("Telegram user sender mismatch");
-      } else if (!std::holds_alternative<domain::UnknownSender>(
+      } else if (!std::holds_alternative<bot_model::UnknownSender>(
                      source.sender)) {
         throw std::invalid_argument("Telegram unknown sender mismatch");
       }
-      return domain::BotOperationResult<core::CommandSourceProjection>::success(
-          {std::move(source),
-           {std::string{platform()}, event.source_bot,
-            kind == "group" ? command::ConversationKind::Group
-                            : command::ConversationKind::Private,
-            group, sender, topic}});
+      return bot_model::BotOperationResult<core::CommandSourceProjection>::
+          success({std::move(source),
+                   {std::string{platform()}, event.source_bot,
+                    kind == "group" ? command::ConversationKind::Group
+                                    : command::ConversationKind::Private,
+                    group, sender, topic}});
     } catch (...) {
-      return domain::failed_operation<core::CommandSourceProjection>(
-          domain::BotOperationErrorCode::InvalidRequest,
+      return bot_model::failed_operation<core::CommandSourceProjection>(
+          bot_model::BotOperationErrorCode::InvalidRequest,
           "command source has missing, inconsistent or unsupported evidence");
     }
   }
@@ -286,7 +288,7 @@ public:
         topic.reset();
       else if (!topic)
         return failure("command_reply_topic_invalid");
-      const auto expected = domain_binding()->configured_conversation(
+      const auto expected = platform_adapter()->configured_conversation(
           installation,
           {kind == "group" ? obcx::bot::ConfiguredConversationKind::Group
                            : obcx::bot::ConfiguredConversationKind::Private,

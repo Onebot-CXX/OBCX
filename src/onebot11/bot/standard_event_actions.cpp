@@ -1,4 +1,4 @@
-#include "onebot11/bot/domain_binding.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 #include "standard_composition_codec.hpp"
 #include "standard_content_budget.hpp"
 #include "standard_event_action_codec.hpp"
@@ -49,7 +49,7 @@ auto source_target(const EventActionHandle &h) -> obcx::bot::ConversationRef {
   require(group || c.source == EventActionSource::PrivateMessage);
   auto id = source_number(h, group ? "group_id" : "user_id");
   require(id > 0);
-  QqDomainBinding binding;
+  QqPlatformAdapter binding;
   binding.codec().validate(c.installation);
   return {c.installation,
           binding.codec().make<obcx::bot::ConversationId>(
@@ -93,7 +93,7 @@ void quick_reply(Json *out, const Operation &op, const EventActionHandle &h,
   if (!op.reply)
     return;
   const auto target = source_target(h);
-  QqDomainBinding binding;
+  QqPlatformAdapter binding;
   // operation.reply is at depth two, unlike ordinary message parameters.
   // Both paths use the same ledger and authoritative composition preflight.
   b.string("reply");

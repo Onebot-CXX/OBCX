@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_messaging.hpp"
+#include "core/bot/bot_messaging.hpp"
 #include "onebot11/bot/standard_operations.hpp"
 #include "standard_event_context.hpp"
 namespace obcx::onebot11::bot::standard::detail {

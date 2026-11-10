@@ -54,22 +54,22 @@ inline void preflight_presentation_text_v1(const Json &field) {
   if (!field.is_string())
     throw std::invalid_argument("invalid QQ presentation text");
   const auto &text = field.get_ref<const std::string &>();
-  if (text.size() > domain_maximum_bytes)
+  if (text.size() > bot_maximum_bytes)
     throw std::invalid_argument("QQ presentation text exceeds bound");
   validate_utf8(text);
 }
-template <> struct DomainRecordPreflight<onebot11::bot::MusicObservation> {
+template <> struct BotRecordPreflight<onebot11::bot::MusicObservation> {
   static void validate(const Json &d) {
     if (!d.at("title").is_null())
       preflight_presentation_text_v1(d.at("title"));
   }
 };
-template <> struct DomainRecordPreflight<onebot11::bot::InlineNodeText> {
+template <> struct BotRecordPreflight<onebot11::bot::InlineNodeText> {
   static void validate(const Json &d) {
     preflight_presentation_text_v1(d.at("content"));
   }
 };
-template <> struct DomainRecordPreflight<onebot11::bot::InlineNodeKind> {
+template <> struct BotRecordPreflight<onebot11::bot::InlineNodeKind> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_text(d, "native_kind", 80, false);
     const auto &kind = d.at("native_kind").get_ref<const std::string &>();
@@ -80,13 +80,12 @@ template <> struct DomainRecordPreflight<onebot11::bot::InlineNodeKind> {
       throw std::invalid_argument("invalid QQ node kind");
   }
 };
-template <> struct DomainRecordPreflight<onebot11::bot::InlineNodeObservation> {
+template <> struct BotRecordPreflight<onebot11::bot::InlineNodeObservation> {
   static void validate(const Json &d) {
     if (!d.at("display_name").is_null())
       preflight_presentation_text_v1(d.at("display_name"));
     const auto form = bounded_unsigned(d.at("form"), 3);
-    onebot11::bot::detail::preflight_array(d, "parts", domain_maximum_items,
-                                           true);
+    onebot11::bot::detail::preflight_array(d, "parts", bot_maximum_items, true);
     const auto &parts = d.at("parts");
     if ((form == 0 || form == 3) && !parts.empty())
       throw std::invalid_argument("QQ node content form mismatch");
@@ -99,11 +98,11 @@ template <> struct DomainRecordPreflight<onebot11::bot::InlineNodeObservation> {
         throw std::invalid_argument("QQ node literal form mismatch");
       const auto &value = part.at("value");
       if (kind == 0)
-        DomainRecordPreflight<onebot11::bot::InlineNodeText>::validate(value);
+        BotRecordPreflight<onebot11::bot::InlineNodeText>::validate(value);
       else if (kind == 2)
-        DomainRecordPreflight<onebot11::bot::InlineNodeKind>::validate(value);
+        BotRecordPreflight<onebot11::bot::InlineNodeKind>::validate(value);
       else {
-        DomainRecordPreflight<onebot11::bot::FaceView>::validate(value);
+        BotRecordPreflight<onebot11::bot::FaceView>::validate(value);
         const auto &id = value.at("id").get_ref<const std::string &>();
         if (!std::ranges::all_of(id,
                                  [](char c) { return c >= '0' && c <= '9'; }))
@@ -112,35 +111,31 @@ template <> struct DomainRecordPreflight<onebot11::bot::InlineNodeObservation> {
     }
   }
 };
-template <>
-struct DomainRecordPreflight<onebot11::bot::PresentationObservation> {
+template <> struct BotRecordPreflight<onebot11::bot::PresentationObservation> {
   static void validate(const Json &d) {
-    (void)bounded_unsigned(d.at("native_segment_index"),
-                           domain_maximum_items - 1);
+    (void)bounded_unsigned(d.at("native_segment_index"), bot_maximum_items - 1);
     (void)bounded_unsigned(d.at("normalized_block_index"),
-                           domain_maximum_items - 1);
+                           bot_maximum_items - 1);
     const auto &value = d.at("value");
     require_only_keys(value, "QQ presentation value", {"alternative", "value"});
     const auto kind = bounded_unsigned(value.at("alternative"), 1);
     if (kind == 0)
-      DomainRecordPreflight<onebot11::bot::MusicObservation>::validate(
+      BotRecordPreflight<onebot11::bot::MusicObservation>::validate(
           value.at("value"));
     else
-      DomainRecordPreflight<onebot11::bot::InlineNodeObservation>::validate(
+      BotRecordPreflight<onebot11::bot::InlineNodeObservation>::validate(
           value.at("value"));
   }
 };
 } // namespace detail
-OBCX_DOMAIN_FIELDS(onebot11::bot::MusicObservation, OBCX_DOMAIN_FIELD(title));
-OBCX_DOMAIN_FIELDS(onebot11::bot::InlineNodeText, OBCX_DOMAIN_FIELD(content));
-OBCX_DOMAIN_FIELDS(onebot11::bot::InlineNodeKind,
-                   OBCX_DOMAIN_FIELD(native_kind));
-OBCX_DOMAIN_FIELDS(onebot11::bot::InlineNodeObservation,
-                   OBCX_DOMAIN_FIELD(display_name), OBCX_DOMAIN_FIELD(form),
-                   OBCX_DOMAIN_FIELD(parts));
-OBCX_DOMAIN_FIELDS(onebot11::bot::PresentationObservation,
-                   OBCX_DOMAIN_FIELD(source), OBCX_DOMAIN_FIELD(received_at),
-                   OBCX_DOMAIN_FIELD(native_segment_index),
-                   OBCX_DOMAIN_FIELD(normalized_block_index),
-                   OBCX_DOMAIN_FIELD(value));
+OBCX_BOT_FIELDS(onebot11::bot::MusicObservation, OBCX_BOT_FIELD(title));
+OBCX_BOT_FIELDS(onebot11::bot::InlineNodeText, OBCX_BOT_FIELD(content));
+OBCX_BOT_FIELDS(onebot11::bot::InlineNodeKind, OBCX_BOT_FIELD(native_kind));
+OBCX_BOT_FIELDS(onebot11::bot::InlineNodeObservation,
+                OBCX_BOT_FIELD(display_name), OBCX_BOT_FIELD(form),
+                OBCX_BOT_FIELD(parts));
+OBCX_BOT_FIELDS(onebot11::bot::PresentationObservation, OBCX_BOT_FIELD(source),
+                OBCX_BOT_FIELD(received_at),
+                OBCX_BOT_FIELD(native_segment_index),
+                OBCX_BOT_FIELD(normalized_block_index), OBCX_BOT_FIELD(value));
 } // namespace obcx::bot

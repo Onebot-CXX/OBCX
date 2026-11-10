@@ -58,7 +58,7 @@ set(OBCX_ONEBOT11_RUNTIME_SOURCES
     onebot11/adapter/message_converter.cpp
     onebot11/adapter/event_converter.cpp
     onebot11/bot/operations.cpp
-    onebot11/bot/domain_binding.cpp
+    onebot11/bot/platform_adapter.cpp
     onebot11/bot/received_media.cpp
     onebot11/bot/special_content.cpp
     onebot11/bot/content_observations.cpp
@@ -100,8 +100,8 @@ set(OBCX_TELEGRAM_RUNTIME_SOURCES
     telegram/adapter/protocol_adapter.cpp
     telegram/network/http/connection_manager.cpp
     telegram/bot/operations.cpp
-    telegram/bot/domain_binding.cpp
-    telegram/bot/domain_send.cpp
+    telegram/bot/platform_adapter.cpp
+    telegram/bot/bot_send.cpp
     telegram/bot/sticker_send.cpp
     telegram/bot/response_parser.cpp
     telegram/bot/configuration.cpp
@@ -283,13 +283,13 @@ install(FILES
 
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/core/bot/ids.hpp
-    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_ids.hpp
-    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_codec.hpp
-    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_media.hpp
-    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_messaging.hpp
-    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_events.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/bot_ids.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/bot_codec.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/bot_media.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/bot_messaging.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/bot_events.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/received_observations.hpp
-    ${CMAKE_SOURCE_DIR}/include/core/bot/domain_queries.hpp
+    ${CMAKE_SOURCE_DIR}/include/core/bot/bot_queries.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/send_gateway_codec.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/bot_client.hpp
     ${CMAKE_SOURCE_DIR}/include/core/bot/conversation_resolver.hpp
@@ -344,8 +344,8 @@ install(FILES
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/telegram/bot/actions.hpp
     ${CMAKE_SOURCE_DIR}/include/telegram/bot/client.hpp
-    ${CMAKE_SOURCE_DIR}/include/telegram/bot/domain_operations.hpp
-    ${CMAKE_SOURCE_DIR}/include/telegram/bot/domain_views.hpp
+    ${CMAKE_SOURCE_DIR}/include/telegram/bot/bot_operations.hpp
+    ${CMAKE_SOURCE_DIR}/include/telegram/bot/bot_views.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obcx/telegram/bot)
 
 install(FILES

@@ -191,7 +191,7 @@ inline void to_json(Json &document, const SubmissionSafety safety) {
 }
 
 inline void from_json(const Json &document, SubmissionSafety &safety) {
-  detail::validate_domain_wire(document);
+  detail::validate_bot_wire(document);
   if (!document.is_string()) {
     throw std::invalid_argument("SubmissionSafety must be a string");
   }
@@ -203,7 +203,7 @@ inline void to_json(Json &document, const BotOperationErrorCode code) {
 }
 
 inline void from_json(const Json &document, BotOperationErrorCode &code) {
-  detail::validate_domain_wire(document);
+  detail::validate_bot_wire(document);
   if (!document.is_string()) {
     throw std::invalid_argument("BotOperationErrorCode must be a string");
   }
@@ -225,7 +225,7 @@ inline void to_json(Json &document, const BotOperationError &error) {
 }
 
 inline void from_json(const Json &document, BotOperationError &error) {
-  detail::validate_domain_wire(document);
+  detail::validate_bot_wire(document);
   detail::require_object(document, "BotOperationError");
   if (!document.contains("code") || !document.contains("submission_safety")) {
     throw std::invalid_argument(

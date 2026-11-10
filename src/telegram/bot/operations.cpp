@@ -11,8 +11,8 @@
 #include <boost/asio/this_coro.hpp>
 
 #include "core/bot/reply_evidence_store.hpp"
-#include "telegram/bot/domain_binding.hpp"
-#include "telegram/bot/domain_send.hpp"
+#include "telegram/bot/bot_send.hpp"
+#include "telegram/bot/platform_adapter.hpp"
 #include <atomic>
 #include <type_traits>
 
@@ -132,7 +132,7 @@ auto finish_formatted_edit(std::shared_ptr<const FormattedEditWork> work)
       headers["Authorization"] = "Bearer " + work->origin.access_token;
     const auto limit =
         std::min<std::uint64_t>(work->origin.client->response_body_limit(),
-                                bot::detail::domain_maximum_bytes);
+                                bot::detail::bot_maximum_bytes);
     invoked = true;
     auto response = co_await network::detail::HttpCallAccess::post_until(
         *work->origin.client,
@@ -150,10 +150,10 @@ auto finish_formatted_edit(std::shared_ptr<const FormattedEditWork> work)
       const auto document = bot::Json::parse(
           response.body, [](int depth, bot::Json::parse_event_t, bot::Json &) {
             if (depth > 32)
-              throw bot::detail::DomainBudgetExceeded{};
+              throw bot::detail::BotBudgetExceeded{};
             return true;
           });
-      bot::detail::validate_domain_wire(document);
+      bot::detail::validate_bot_wire(document);
       if (!document.is_object() || !document.at("ok").is_boolean())
         throw std::invalid_argument("invalid Telegram edit status");
       const bool ok = document.at("ok").get<bool>();
@@ -224,8 +224,8 @@ public:
       -> boost::asio::awaitable<std::string> override {
     if (!transport_)
       throw BotComponentRuntimeError("Telegram uploader not prepared");
-    co_return co_await transport_->send_domain_request(std::move(parameters),
-                                                       files);
+    co_return co_await transport_->send_bot_request(std::move(parameters),
+                                                    files);
   }
 
 private:
@@ -306,7 +306,7 @@ public:
                ConfirmedAuthorEvidenceCollector &authors)
       -> boost::asio::awaitable<bot::BotOperationResult<bot::SendOutcome>> {
     co_return bot::BotOperationResult<bot::SendOutcome>::success(
-        co_await obcx::telegram::bot::send_domain(
+        co_await obcx::telegram::bot::send_bot_message(
             r, *transport_, uploader_.get(), file_reader_, budget_, &authors));
   }
   auto execute(const obcx::telegram::bot::SendStickerRequest &r,
@@ -395,7 +395,7 @@ public:
   }
   auto execute(const bot::GetCapabilitiesRequest &r) -> boost::asio::awaitable<
       bot::BotOperationResult<bot::ConversationCapabilities>> {
-    auto out = obcx::telegram::bot::domain_capabilities(
+    auto out = obcx::telegram::bot::bot_capabilities(
         r.conversation, upload_, static_cast<bool>(file_reader_));
     if (codec().unpack(r.conversation.id).kind == "private")
       std::erase(out.operations, bot::CommonOperation::GetMember);
@@ -594,7 +594,7 @@ TelegramOperationsComponent::TelegramOperationsComponent(
                                            include_upload, action_timeout,
                                            std::move(file_reader))),
       operations_(std::make_shared<OperationRegistry>(
-          endpoint_->installation(), obcx::telegram::bot::domain_binding())),
+          endpoint_->installation(), obcx::telegram::bot::platform_adapter())),
       self_identity_(std::make_shared<SelfIdentityCache>(
           std::move(executor), endpoint_->installation(),
           self_refresh_interval)),

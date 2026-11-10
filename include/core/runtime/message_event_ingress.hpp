@@ -4,7 +4,7 @@
 #include "core/actor/actor.hpp"
 #include "core/bot/bot_event_components.hpp"
 #include "core/bot/ids.hpp"
-#include "core/bot/platform_domain_binding.hpp"
+#include "core/bot/platform_adapter.hpp"
 
 #include <string>
 
@@ -20,7 +20,7 @@ auto bot_send_succeeded_envelope(const std::string &source_platform,
     -> MessageEnvelope;
 auto message_envelope_from_event(const BotEventContext &context,
                                  const common::MessageEvent &event,
-                                 const PlatformDomainBinding &binding,
+                                 const PlatformAdapter &binding,
                                  BotOperationDispatcher &dispatcher)
     -> MessageEnvelope;
 
@@ -31,7 +31,7 @@ auto raw_message_envelope_from_event(const std::string &source_platform,
 
 auto notice_envelope_from_event(const BotEventContext &context,
                                 const common::NoticeEvent &event,
-                                const PlatformDomainBinding &binding)
+                                const PlatformAdapter &binding)
     -> MessageEnvelope;
 
 auto raw_notice_envelope_from_event(const std::string &source_platform,

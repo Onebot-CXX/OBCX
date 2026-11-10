@@ -21,7 +21,7 @@ The user ID is opaque; actors compare complete UserRefs instead of decoding nati
 numbers. Missing profile fields remain absent. The username uses the same owning
 platform normalization as typed unresolved mentions. Profile values are data,
 not instructions. The API does not perform `is_self`/mention/reply classification.
-The former `SelfClient` and flat `installation/user_id` DTO are not the domain SDK
+The former `SelfClient` and flat `installation/user_id` DTO are not the bot SDK
 API or a binary-compatible representation; use the matching schema-3 SDK/core.
 
 ## Cache semantics
@@ -112,7 +112,7 @@ its library over a running core or attempt to activate it with actor-only reload
 Core rollout/restart must be separately authorized. Keep the previous matching
 core, SDK, actor artifacts and config for rollback; never delete session data.
 
-Chat LLM's addressing policy remains actor-owned; migration of all its domain SDK
+Chat LLM's addressing policy remains actor-owned; migration of all its bot SDK
 use sites and historical acceptance is tracked separately. Its established policy
 uses cached identity for QQ/Telegram addressing.
 Confirmed relationships add `[at:self]` / `[reply:self]` outside the existing
@@ -129,7 +129,7 @@ retired.
    existing source/state paths. Do not clear or replace session data.
 2. Select a matching candidate core, frozen installed SDK and rebuilt actor set
    from the current generation's acceptance receipt. Earlier `build/addressing-*`
-   artifacts belong to the preceding addressing work, not proof of this domain
+   artifacts belong to the preceding addressing work, not proof of this bot
    migration. Keep release directories immutable; do not overwrite a mapped core
    library. Source review or core compilation alone is not rollout acceptance.
 3. During an explicitly authorized maintenance window, stop the old process.

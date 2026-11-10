@@ -1,7 +1,7 @@
 # qq-telegram-bot-contract Specification
 
 ## Purpose
-Define current scoped, data-only domain requests, complete outcomes and reviewed
+Define current scoped, data-only bot requests, complete outcomes and reviewed
 OneBot/Telegram extensions supplied by the matching installed SDK/core.
 
 ## Requirements

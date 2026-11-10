@@ -8,84 +8,74 @@
 // These field tables are private SDK parameter framing, never native JSON or
 // a public arbitrary-message importer. All decode paths are bounded first.
 namespace obcx::bot {
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Text, OBCX_DOMAIN_FIELD(text));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Face, OBCX_DOMAIN_FIELD(id));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::AtUser, OBCX_DOMAIN_FIELD(user));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::AtAll);
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Rps);
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Dice);
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Shake);
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Poke, OBCX_DOMAIN_FIELD(type),
-                   OBCX_DOMAIN_FIELD(id));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Anonymous,
-                   OBCX_DOMAIN_FIELD(ignore));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Share, OBCX_DOMAIN_FIELD(url),
-                   OBCX_DOMAIN_FIELD(title), OBCX_DOMAIN_FIELD(content),
-                   OBCX_DOMAIN_FIELD(image_url));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::UserContact,
-                   OBCX_DOMAIN_FIELD(user));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::GroupContact,
-                   OBCX_DOMAIN_FIELD(group));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::DecimalCoordinate,
-                   OBCX_DOMAIN_FIELD(decimal));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Location,
-                   OBCX_DOMAIN_FIELD(latitude), OBCX_DOMAIN_FIELD(longitude),
-                   OBCX_DOMAIN_FIELD(title), OBCX_DOMAIN_FIELD(content));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Music, OBCX_DOMAIN_FIELD(provider),
-                   OBCX_DOMAIN_FIELD(id));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::CustomMusic, OBCX_DOMAIN_FIELD(url),
-                   OBCX_DOMAIN_FIELD(audio_url), OBCX_DOMAIN_FIELD(title),
-                   OBCX_DOMAIN_FIELD(content), OBCX_DOMAIN_FIELD(image_url));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::XmlContent,
-                   OBCX_DOMAIN_FIELD(document));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::JsonContent,
-                   OBCX_DOMAIN_FIELD(document));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::ProviderFileName,
-                   OBCX_DOMAIN_FIELD(installation), OBCX_DOMAIN_FIELD(name),
-                   OBCX_DOMAIN_FIELD(work));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::InlineBase64,
-                   OBCX_DOMAIN_FIELD(data));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::RemoteMediaUrl,
-                   OBCX_DOMAIN_FIELD(url), OBCX_DOMAIN_FIELD(cache),
-                   OBCX_DOMAIN_FIELD(proxy), OBCX_DOMAIN_FIELD(timeout_seconds),
-                   OBCX_DOMAIN_FIELD(work));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Image, OBCX_DOMAIN_FIELD(source),
-                   OBCX_DOMAIN_FIELD(flash));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Record, OBCX_DOMAIN_FIELD(source),
-                   OBCX_DOMAIN_FIELD(magic));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Video, OBCX_DOMAIN_FIELD(source));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Reply, OBCX_DOMAIN_FIELD(target));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::ScopedReferenceNode,
-                   OBCX_DOMAIN_FIELD(message), OBCX_DOMAIN_FIELD(work));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::IdSelectedNode,
-                   OBCX_DOMAIN_FIELD(message), OBCX_DOMAIN_FIELD(work));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::SequenceIndex,
-                   OBCX_DOMAIN_FIELD(value));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::AuthoredNode,
-                   OBCX_DOMAIN_FIELD(author), OBCX_DOMAIN_FIELD(nickname),
-                   OBCX_DOMAIN_FIELD(content));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Sequence,
-                   OBCX_DOMAIN_FIELD(encoding), OBCX_DOMAIN_FIELD(segments));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::Composition,
-                   OBCX_DOMAIN_FIELD(sequences));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::LiteralText,
-                   OBCX_DOMAIN_FIELD(text));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::SendPrivateMsgParameters,
-                   OBCX_DOMAIN_FIELD(target), OBCX_DOMAIN_FIELD(message),
-                   OBCX_DOMAIN_FIELD(auto_escape));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::SendGroupMsgParameters,
-                   OBCX_DOMAIN_FIELD(target), OBCX_DOMAIN_FIELD(message),
-                   OBCX_DOMAIN_FIELD(auto_escape));
-OBCX_DOMAIN_FIELDS(onebot11::bot::standard::SendMsgParameters,
-                   OBCX_DOMAIN_FIELD(target), OBCX_DOMAIN_FIELD(message_type),
-                   OBCX_DOMAIN_FIELD(message), OBCX_DOMAIN_FIELD(auto_escape));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Text, OBCX_BOT_FIELD(text));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Face, OBCX_BOT_FIELD(id));
+OBCX_BOT_FIELDS(onebot11::bot::standard::AtUser, OBCX_BOT_FIELD(user));
+OBCX_BOT_FIELDS(onebot11::bot::standard::AtAll);
+OBCX_BOT_FIELDS(onebot11::bot::standard::Rps);
+OBCX_BOT_FIELDS(onebot11::bot::standard::Dice);
+OBCX_BOT_FIELDS(onebot11::bot::standard::Shake);
+OBCX_BOT_FIELDS(onebot11::bot::standard::Poke, OBCX_BOT_FIELD(type),
+                OBCX_BOT_FIELD(id));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Anonymous, OBCX_BOT_FIELD(ignore));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Share, OBCX_BOT_FIELD(url),
+                OBCX_BOT_FIELD(title), OBCX_BOT_FIELD(content),
+                OBCX_BOT_FIELD(image_url));
+OBCX_BOT_FIELDS(onebot11::bot::standard::UserContact, OBCX_BOT_FIELD(user));
+OBCX_BOT_FIELDS(onebot11::bot::standard::GroupContact, OBCX_BOT_FIELD(group));
+OBCX_BOT_FIELDS(onebot11::bot::standard::DecimalCoordinate,
+                OBCX_BOT_FIELD(decimal));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Location, OBCX_BOT_FIELD(latitude),
+                OBCX_BOT_FIELD(longitude), OBCX_BOT_FIELD(title),
+                OBCX_BOT_FIELD(content));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Music, OBCX_BOT_FIELD(provider),
+                OBCX_BOT_FIELD(id));
+OBCX_BOT_FIELDS(onebot11::bot::standard::CustomMusic, OBCX_BOT_FIELD(url),
+                OBCX_BOT_FIELD(audio_url), OBCX_BOT_FIELD(title),
+                OBCX_BOT_FIELD(content), OBCX_BOT_FIELD(image_url));
+OBCX_BOT_FIELDS(onebot11::bot::standard::XmlContent, OBCX_BOT_FIELD(document));
+OBCX_BOT_FIELDS(onebot11::bot::standard::JsonContent, OBCX_BOT_FIELD(document));
+OBCX_BOT_FIELDS(onebot11::bot::standard::ProviderFileName,
+                OBCX_BOT_FIELD(installation), OBCX_BOT_FIELD(name),
+                OBCX_BOT_FIELD(work));
+OBCX_BOT_FIELDS(onebot11::bot::standard::InlineBase64, OBCX_BOT_FIELD(data));
+OBCX_BOT_FIELDS(onebot11::bot::standard::RemoteMediaUrl, OBCX_BOT_FIELD(url),
+                OBCX_BOT_FIELD(cache), OBCX_BOT_FIELD(proxy),
+                OBCX_BOT_FIELD(timeout_seconds), OBCX_BOT_FIELD(work));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Image, OBCX_BOT_FIELD(source),
+                OBCX_BOT_FIELD(flash));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Record, OBCX_BOT_FIELD(source),
+                OBCX_BOT_FIELD(magic));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Video, OBCX_BOT_FIELD(source));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Reply, OBCX_BOT_FIELD(target));
+OBCX_BOT_FIELDS(onebot11::bot::standard::ScopedReferenceNode,
+                OBCX_BOT_FIELD(message), OBCX_BOT_FIELD(work));
+OBCX_BOT_FIELDS(onebot11::bot::standard::IdSelectedNode,
+                OBCX_BOT_FIELD(message), OBCX_BOT_FIELD(work));
+OBCX_BOT_FIELDS(onebot11::bot::standard::SequenceIndex, OBCX_BOT_FIELD(value));
+OBCX_BOT_FIELDS(onebot11::bot::standard::AuthoredNode, OBCX_BOT_FIELD(author),
+                OBCX_BOT_FIELD(nickname), OBCX_BOT_FIELD(content));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Sequence, OBCX_BOT_FIELD(encoding),
+                OBCX_BOT_FIELD(segments));
+OBCX_BOT_FIELDS(onebot11::bot::standard::Composition,
+                OBCX_BOT_FIELD(sequences));
+OBCX_BOT_FIELDS(onebot11::bot::standard::LiteralText, OBCX_BOT_FIELD(text));
+OBCX_BOT_FIELDS(onebot11::bot::standard::SendPrivateMsgParameters,
+                OBCX_BOT_FIELD(target), OBCX_BOT_FIELD(message),
+                OBCX_BOT_FIELD(auto_escape));
+OBCX_BOT_FIELDS(onebot11::bot::standard::SendGroupMsgParameters,
+                OBCX_BOT_FIELD(target), OBCX_BOT_FIELD(message),
+                OBCX_BOT_FIELD(auto_escape));
+OBCX_BOT_FIELDS(onebot11::bot::standard::SendMsgParameters,
+                OBCX_BOT_FIELD(target), OBCX_BOT_FIELD(message_type),
+                OBCX_BOT_FIELD(message), OBCX_BOT_FIELD(auto_escape));
 } // namespace obcx::bot
 
 namespace obcx::onebot11::bot::standard::detail {
 namespace {
-namespace domain = obcx::bot;
+namespace bot_model = obcx::bot;
 namespace dd = obcx::bot::detail;
-using Json = domain::Json;
+using Json = bot_model::Json;
 
 void send_wire_inspect(ContentBudget &budget, const Json &value,
                        std::size_t depth) {
@@ -118,30 +108,30 @@ void send_sdk_inspect(ContentBudget &budget, const T &value,
   } else if constexpr (std::same_as<T, CallerFileUri>) {
     budget.string("uri");
     budget.string_value(value.uri, depth + 1);
-  } else if constexpr (std::same_as<T, domain::BotInstallationRef>) {
+  } else if constexpr (std::same_as<T, bot_model::BotInstallationRef>) {
     budget.string("installation_id");
     budget.string_value(value.installation_id, depth + 1);
     budget.string("surface");
     budget.string_value(value.surface.value(), depth + 1);
-  } else if constexpr (std::same_as<T, domain::UserRef> ||
-                       std::same_as<T, domain::ConversationRef>) {
+  } else if constexpr (std::same_as<T, bot_model::UserRef> ||
+                       std::same_as<T, bot_model::ConversationRef>) {
     budget.string("installation");
     send_sdk_inspect(budget, value.installation, depth + 1);
     budget.string("id");
     budget.string_value(value.id.serialized(), depth + 1);
-  } else if constexpr (std::same_as<T, domain::MessageRef>) {
+  } else if constexpr (std::same_as<T, bot_model::MessageRef>) {
     budget.string("conversation");
     send_sdk_inspect(budget, value.conversation, depth + 1);
     budget.string("id");
     budget.string_value(value.id.serialized(), depth + 1);
-  } else if constexpr (dd::DomainRecord<T>) {
+  } else if constexpr (dd::BotRecord<T>) {
     std::apply(
         [&](auto... field) {
           ((budget.string(field.first),
             send_sdk_inspect(budget, value.*field.second, depth + 1)),
            ...);
         },
-        domain::DomainFields<T>::fields());
+        bot_model::BotFields<T>::fields());
   } else if constexpr (dd::IsVariant<T>::value) {
     budget.string("alternative");
     budget.node(depth + 1);
@@ -167,18 +157,18 @@ auto send_sdk_pack(const T &value, const ValueLimits &limits) -> Json {
             {"message_id", QuerySelectors::export_message(value, limits)}};
   } else if constexpr (std::same_as<T, CallerFileUri>)
     return {{"uri", value.uri}};
-  else if constexpr (std::same_as<T, domain::UserRef> ||
-                     std::same_as<T, domain::ConversationRef> ||
-                     std::same_as<T, domain::MessageRef>)
+  else if constexpr (std::same_as<T, bot_model::UserRef> ||
+                     std::same_as<T, bot_model::ConversationRef> ||
+                     std::same_as<T, bot_model::MessageRef>)
     return Json(value);
-  else if constexpr (dd::DomainRecord<T>) {
+  else if constexpr (dd::BotRecord<T>) {
     Json out = Json::object();
     std::apply(
         [&](auto... field) {
           ((out[field.first] = send_sdk_pack(value.*field.second, limits)),
            ...);
         },
-        domain::DomainFields<T>::fields());
+        bot_model::BotFields<T>::fields());
     return out;
   } else if constexpr (dd::IsVariant<T>::value) {
     return {{"alternative", value.index()},
@@ -193,7 +183,7 @@ auto send_sdk_pack(const T &value, const ValueLimits &limits) -> Json {
   } else if constexpr (dd::IsOptional<T>::value) {
     return value ? send_sdk_pack(*value, limits) : Json(nullptr);
   } else
-    return dd::domain_encode(value);
+    return dd::bot_encode(value);
 }
 
 template <class T> auto send_sdk_unpack(const Json &, const ValueLimits &) -> T;
@@ -216,17 +206,17 @@ auto send_sdk_unpack(const Json &value, const ValueLimits &limits) -> T {
     dd::require_only_keys(value, "standard selector",
                           {"installation", "message_id"});
     return QuerySelectors::import_message(
-        value.at("installation").get<domain::BotInstallationRef>(),
-        dd::domain_decode<std::int32_t>(value.at("message_id")), limits);
+        value.at("installation").get<bot_model::BotInstallationRef>(),
+        dd::bot_decode<std::int32_t>(value.at("message_id")), limits);
   } else if constexpr (std::same_as<T, CallerFileUri>) {
     dd::require_only_keys(value, "standard file", {"uri"});
-    return {dd::domain_decode<std::string>(value.at("uri")), {}};
-  } else if constexpr (std::same_as<T, domain::UserRef> ||
-                       std::same_as<T, domain::ConversationRef> ||
-                       std::same_as<T, domain::MessageRef>)
+    return {dd::bot_decode<std::string>(value.at("uri")), {}};
+  } else if constexpr (std::same_as<T, bot_model::UserRef> ||
+                       std::same_as<T, bot_model::ConversationRef> ||
+                       std::same_as<T, bot_model::MessageRef>)
     return value.get<T>();
-  else if constexpr (dd::DomainRecord<T>) {
-    const auto fields = domain::DomainFields<T>::fields();
+  else if constexpr (dd::BotRecord<T>) {
+    const auto fields = bot_model::BotFields<T>::fields();
     if (!value.is_object() ||
         value.size() != std::tuple_size_v<decltype(fields)>)
       invalid_content();
@@ -259,7 +249,7 @@ auto send_sdk_unpack(const Json &value, const ValueLimits &limits) -> T {
     return send_sdk_unpack<typename dd::IsOptional<T>::value_type>(value,
                                                                    limits);
   } else
-    return dd::domain_decode<T>(value);
+    return dd::bot_decode<T>(value);
 }
 
 template <class Parameters>
@@ -375,7 +365,8 @@ auto send_encode_parameters(const Parameters &parameters,
   return out;
 }
 
-auto send_decode_data(const Json &data, const domain::ConversationRef &target,
+auto send_decode_data(const Json &data,
+                      const bot_model::ConversationRef &target,
                       const SendCodec &codec, const ValueLimits &limits)
     -> SendMessageData {
   limits.validate();
@@ -383,7 +374,7 @@ auto send_decode_data(const Json &data, const domain::ConversationRef &target,
   send_wire_inspect(budget, data, 0);
   if (!data.is_object())
     invalid_content();
-  const auto id = dd::domain_decode<std::int32_t>(data.at("message_id"));
+  const auto id = dd::bot_decode<std::int32_t>(data.at("message_id"));
   // Reserve the exact genuine opaque spelling before its retained copy.
   // NativeReferenceCodec uses three length-prefixed fields, hex encoded.
   char digits[12];
@@ -404,7 +395,7 @@ auto send_decode_data(const Json &data, const domain::ConversationRef &target,
                               number.size()));
   codec.validate(target);
   SendMessageData result{id,
-                         {target, codec.make<domain::MessageId>(
+                         {target, codec.make<bot_model::MessageId>(
                                       "message", {std::string(number)})}};
   validate_send_result(result, target, codec, limits);
   return result;
@@ -412,7 +403,7 @@ auto send_decode_data(const Json &data, const domain::ConversationRef &target,
 } // namespace
 
 void validate_send_result(const SendMessageData &result,
-                          const domain::ConversationRef &target,
+                          const bot_model::ConversationRef &target,
                           const SendCodec &codec, const ValueLimits &limits) {
   limits.validate();
   ContentBudget budget(limits);

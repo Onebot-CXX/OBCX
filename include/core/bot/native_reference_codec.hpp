@@ -2,7 +2,7 @@
 
 // Process/platform binding seam; not an actor service. No singleton or provider
 // dependency. Construct the registry once from the installed platform codecs.
-#include "core/bot/domain_queries.hpp"
+#include "core/bot/bot_queries.hpp"
 #include <map>
 #include <memory>
 #include <span>

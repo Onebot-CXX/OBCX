@@ -1,8 +1,8 @@
 #pragma once
 
 #include "common/json_utils.hpp"
-#include "core/bot/domain_events.hpp"
-#include "core/bot/domain_messaging.hpp"
+#include "core/bot/bot_events.hpp"
+#include "core/bot/bot_messaging.hpp"
 
 #include <initializer_list>
 #include <stdexcept>
@@ -21,7 +21,7 @@ inline void validate_archive_output(
   if (!payload.is_object() && !payload.is_null())
     throw std::invalid_argument(
         "event archival payload must be an object or null");
-  bot::detail::DomainWireBudget budget;
+  bot::detail::BotWireBudget budget;
   budget.nodes();
   if (payload.is_object()) {
     for (auto field = payload.begin(); field != payload.end(); ++field) {
@@ -52,7 +52,7 @@ struct RawMessageEvent {
   common::json payload;
   using obcx_bot_json_factory = void;
   static auto from_json(const common::json &document) -> RawMessageEvent {
-    bot::detail::validate_domain_wire(document);
+    bot::detail::validate_bot_wire(document);
     if (!document.is_object())
       throw std::invalid_argument("RawMessageEvent payload must be an object");
     return {document.at("message").get<bot::MessageReceived>(), document};
@@ -60,12 +60,12 @@ struct RawMessageEvent {
 };
 
 inline void to_json(common::json &document, const RawMessageEvent &message) {
-  bot::detail::validate_domain_wire(message.payload);
+  bot::detail::validate_bot_wire(message.payload);
   common::json typed_message = message.message;
   detail::validate_archive_output(message.payload, typed_message, {});
   auto encoded = message.payload;
   encoded["message"] = std::move(typed_message);
-  bot::detail::validate_domain_wire(encoded);
+  bot::detail::validate_bot_wire(encoded);
   document = std::move(encoded);
 }
 
@@ -76,7 +76,7 @@ struct RawNoticeEvent {
   // Absence is not proof that a message still exists; this grants no authority.
   [[nodiscard]] auto message_deleted() const
       -> std::optional<bot::MessageDeleted> {
-    bot::detail::validate_domain_wire(payload);
+    bot::detail::validate_bot_wire(payload);
     bot::detail::require_object(payload, "RawNoticeEvent");
     const auto value = payload.find("message_deleted");
     if (value == payload.end())
@@ -86,7 +86,7 @@ struct RawNoticeEvent {
 };
 
 inline void from_json(const common::json &document, RawNoticeEvent &notice) {
-  bot::detail::validate_domain_wire(document);
+  bot::detail::validate_bot_wire(document);
   if (!document.is_object()) {
     throw std::invalid_argument("RawNoticeEvent payload must be an object");
   }
@@ -123,7 +123,7 @@ struct BotSendConfirmedEvent {
   bot::SendConfirmation confirmation;
   using obcx_bot_json_factory = void;
   static auto from_json(const common::json &document) -> BotSendConfirmedEvent {
-    bot::detail::validate_domain_wire(document);
+    bot::detail::validate_bot_wire(document);
     return {document.at("confirmation").get<bot::SendConfirmation>()};
   }
 };
@@ -131,13 +131,13 @@ struct BotSendConfirmedEvent {
 inline void to_json(common::json &document,
                     const BotSendConfirmedEvent &event) {
   common::json confirmation = event.confirmation;
-  bot::detail::DomainWireBudget budget;
+  bot::detail::BotWireBudget budget;
   budget.nodes();
   budget.bytes(std::string_view{"confirmation"}.size());
   budget.inspect(confirmation, 1);
   auto encoded = common::json::object();
   encoded["confirmation"] = std::move(confirmation);
-  bot::detail::validate_domain_wire(encoded);
+  bot::detail::validate_bot_wire(encoded);
   document = std::move(encoded);
 }
 
@@ -184,7 +184,7 @@ struct MessageStored {
 
   using obcx_bot_json_factory = void;
   static auto from_json(const common::json &document) -> MessageStored {
-    bot::detail::validate_domain_wire(document);
+    bot::detail::validate_bot_wire(document);
     bot::detail::require_only_keys(document, "MessageStored",
                                    {"schema", "source_platform", "source_bot",
                                     "conversation_id", "message_id",
@@ -227,7 +227,7 @@ inline void to_json(common::json &document, const MessageStored &message) {
                           {"conversation_id", message.source.conversation_id},
                           {"message_id", message.source.message_id},
                           {"message", message.message}};
-  bot::detail::validate_domain_wire(encoded);
+  bot::detail::validate_bot_wire(encoded);
   document = std::move(encoded);
 }
 

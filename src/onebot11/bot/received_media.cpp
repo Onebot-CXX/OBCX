@@ -12,9 +12,9 @@
 
 namespace obcx::onebot11::bot::detail {
 namespace {
-namespace domain = obcx::bot;
-using Result = domain::BotOperationResult<domain::MediaBlob>;
-using Code = domain::BotOperationErrorCode;
+namespace bot_model = obcx::bot;
+using Result = bot_model::BotOperationResult<bot_model::MediaBlob>;
+using Code = bot_model::BotOperationErrorCode;
 
 auto fresh_uuid() -> std::string {
   return boost::uuids::to_string(boost::uuids::random_generator_pure{}());
@@ -58,22 +58,23 @@ auto failure(Code code) -> Result {
       {.code = code,
        .message = message,
        .retryable = false,
-       .submission_safety = domain::SubmissionSafety::DefinitelyNotSubmitted});
+       .submission_safety =
+           bot_model::SubmissionSafety::DefinitelyNotSubmitted});
 }
 auto is_forward_query_kind(std::string_view kind) -> bool {
   return kind == "queried-forward-image" || kind == "queried-forward-record" ||
          kind == "queried-forward-video" || kind == "queried-forward-file";
 }
-auto kind_of(std::string_view kind) -> domain::MediaKind {
+auto kind_of(std::string_view kind) -> bot_model::MediaKind {
   if (kind == "received-image" || kind == "received-mface" ||
       kind == "queried-forward-image")
-    return domain::MediaKind::Image;
+    return bot_model::MediaKind::Image;
   if (kind == "received-record" || kind == "queried-forward-record")
-    return domain::MediaKind::Voice;
+    return bot_model::MediaKind::Voice;
   if (kind == "received-video" || kind == "queried-forward-video")
-    return domain::MediaKind::Video;
+    return bot_model::MediaKind::Video;
   if (kind == "received-file" || kind == "queried-forward-file")
-    return domain::MediaKind::File;
+    return bot_model::MediaKind::File;
   throw std::invalid_argument("invalid received media kind");
 }
 } // namespace
@@ -104,17 +105,17 @@ struct ReceivedMediaStore::Receipt {
   const std::string token;
   // Distinguish image-family capabilities that share a public MediaKind.
   const std::string reference_kind;
-  const domain::MediaKind kind;
+  const bot_model::MediaKind kind;
   const std::string url;
   const core::SelfIdentityOrigin origin;
-  const std::optional<domain::UserRef> observed_user;
-  const domain::MessageRef source;
+  const std::optional<bot_model::UserRef> observed_user;
+  const bot_model::MessageRef source;
   const std::size_t ordinal;
   const std::size_t text_bytes;
   const std::optional<std::uint64_t> declared_size;
   // Query-only provenance: source is the wrapper selector and these are
   // returned array positions, not invented node message IDs or source groups.
-  const std::optional<domain::MediaMetadata> query_metadata;
+  const std::optional<bot_model::MediaMetadata> query_metadata;
   const std::optional<std::size_t> query_node;
   auto eligible(core::SelfIdentityCache &identity) const -> bool {
     if (query_metadata && query_node && is_forward_query_kind(reference_kind))
@@ -127,11 +128,11 @@ struct ReceivedMediaStore::Receipt {
 };
 
 ReceivedMediaStore::ReceivedMediaStore(
-    domain::BotInstallationRef installation,
+    bot_model::BotInstallationRef installation,
     std::shared_ptr<core::SelfIdentityCache> identity,
     std::weak_ptr<core::BotEventCapability> ingress,
-    std::shared_ptr<const QqDomainBinding> binding, std::size_t maximum_entries,
-    std::size_t maximum_retained_text_bytes)
+    std::shared_ptr<const QqPlatformAdapter> binding,
+    std::size_t maximum_entries, std::size_t maximum_retained_text_bytes)
     : installation_(std::move(installation)), identity_(std::move(identity)),
       ingress_(std::move(ingress)), binding_(std::move(binding)),
       maximum_entries_(maximum_entries),
@@ -157,10 +158,10 @@ void ReceivedMediaStore::evict_oldest() {
 auto ReceivedMediaStore::capture(
     std::string_view kind, std::string_view url,
     const core::SelfIdentityOrigin &origin,
-    const std::optional<domain::UserRef> &observed_user,
-    const domain::MessageRef &source, std::size_t ordinal,
+    const std::optional<bot_model::UserRef> &observed_user,
+    const bot_model::MessageRef &source, std::size_t ordinal,
     std::optional<std::uint64_t> declared_size,
-    std::optional<domain::MediaMetadata> query_metadata,
+    std::optional<bot_model::MediaMetadata> query_metadata,
     std::optional<std::size_t> query_node) -> std::string {
   const bool query = is_forward_query_kind(kind);
   if (query != query_metadata.has_value() || query != query_node.has_value() ||
@@ -190,7 +191,7 @@ auto ReceivedMediaStore::capture(
   // Account for current receipt provenance within the existing ceiling.
   std::size_t charge = 0;
   if (query_metadata)
-    charge += sizeof(domain::MediaMetadata) + sizeof(std::size_t);
+    charge += sizeof(bot_model::MediaMetadata) + sizeof(std::size_t);
   if (charge >= maximum_retained_text_bytes_)
     return token;
   const auto add = [&](std::string_view text) {
@@ -235,13 +236,13 @@ auto ReceivedMediaStore::capture(
 }
 
 auto ReceivedMediaStore::retain_forward_media(
-    const domain::MessageRef &selector, std::size_t node_index,
+    const bot_model::MessageRef &selector, std::size_t node_index,
     std::size_t segment_ordinal, std::string_view native_type,
-    std::string_view actual_url, domain::MediaMetadata metadata,
-    const core::SelfIdentityOrigin &origin) -> domain::ReceivedMedia {
+    std::string_view actual_url, bot_model::MediaMetadata metadata,
+    const core::SelfIdentityOrigin &origin) -> bot_model::ReceivedMedia {
   binding_->codec().validate(selector);
   if (selector.conversation.installation != installation_ ||
-      segment_ordinal >= domain::detail::domain_maximum_items)
+      segment_ordinal >= bot_model::detail::bot_maximum_items)
     throw std::invalid_argument("queried media selector or position mismatch");
   metadata.validate();
   const auto kind = "queried-forward-" + std::string(native_type);
@@ -250,20 +251,20 @@ auto ReceivedMediaStore::retain_forward_media(
   const auto token =
       capture(kind, actual_url, origin, std::nullopt, selector, segment_ordinal,
               metadata.size_bytes, metadata, node_index);
-  return {
-      {installation_, binding_->codec().make<domain::MediaId>(kind, {token})},
-      kind_of(kind),
-      std::move(metadata),
-      std::nullopt,
-      {}};
+  return {{installation_,
+           binding_->codec().make<bot_model::MediaId>(kind, {token})},
+          kind_of(kind),
+          std::move(metadata),
+          std::nullopt,
+          {}};
 }
 
 auto ReceivedMediaStore::normalize(
-    const QqDomainBinding &binding,
-    const domain::BotInstallationRef &installation,
-    const common::MessageEvent &event, domain::TimePoint received_at,
+    const QqPlatformAdapter &binding,
+    const bot_model::BotInstallationRef &installation,
+    const common::MessageEvent &event, bot_model::TimePoint received_at,
     std::string_view observation_id, const core::SelfIdentityOrigin &origin)
-    -> domain::MessageReceived {
+    -> bot_model::MessageReceived {
   if (installation != installation_)
     throw std::invalid_argument("received media installation mismatch");
   std::vector<std::size_t> positions;
@@ -287,9 +288,9 @@ auto ReceivedMediaStore::normalize(
     if (segment.type == "file") {
       // Preserve direct-URL priority even when file_id is missing/malformed.
       // Only this live origin may mint the receipt, never archive restoration.
-      domain::MediaMetadata metadata;
+      bot_model::MediaMetadata metadata;
       try {
-        metadata = QqDomainBinding::file_metadata(segment.data);
+        metadata = QqPlatformAdapter::file_metadata(segment.data);
       } catch (const std::invalid_argument &) {
         // The pure normalizer used the same validation and retained this
         // malformed file as UnsupportedContent. Keep its position, not a read.
@@ -300,31 +301,31 @@ auto ReceivedMediaStore::normalize(
                   ordinal, metadata.size_bytes, std::nullopt, std::nullopt);
       // Capture failure propagates: never fall back to a file-ID query under
       // another authority when the selected live URL recipe cannot be retained.
-      result.body[positions[ordinal]] = domain::ReceivedMedia{
+      result.body[positions[ordinal]] = bot_model::ReceivedMedia{
           {installation,
-           binding.codec().make<domain::MediaId>("received-file", {token})},
-          domain::MediaKind::File,
+           binding.codec().make<bot_model::MediaId>("received-file", {token})},
+          bot_model::MediaKind::File,
           std::move(metadata),
           std::nullopt,
           {}};
       continue;
     }
     if (segment.type == "mface") {
-      const auto *unsupported = std::get_if<domain::UnsupportedContent>(
+      const auto *unsupported = std::get_if<bot_model::UnsupportedContent>(
           &result.body[positions[ordinal]]);
       if (!unsupported || unsupported->category != "onebot11.mface")
         continue;
       try {
-        domain::ReceivedRichText caption;
+        bot_model::ReceivedRichText caption;
         if (const auto summary = segment.data.find("summary");
             summary != segment.data.end() && !summary->is_null()) {
           if (!summary->is_string())
             continue;
           const auto &value = summary->get_ref<const std::string &>();
           if (!value.empty()) {
-            domain::detail::validate_identifier(value, "QQ market face summary",
-                                                2048);
-            domain::Text label{value, {}};
+            bot_model::detail::validate_identifier(
+                value, "QQ market face summary", 2048);
+            bot_model::Text label{value, {}};
             label.validate();
             caption.emplace_back(std::move(label));
           }
@@ -332,10 +333,10 @@ auto ReceivedMediaStore::normalize(
         const auto token = capture("received-mface", text, origin,
                                    observed_user, result.message, ordinal,
                                    std::nullopt, std::nullopt, std::nullopt);
-        result.body[positions[ordinal]] = domain::ReceivedMedia{
-            {installation,
-             binding.codec().make<domain::MediaId>("received-mface", {token})},
-            domain::MediaKind::Image,
+        result.body[positions[ordinal]] = bot_model::ReceivedMedia{
+            {installation, binding.codec().make<bot_model::MediaId>(
+                               "received-mface", {token})},
+            bot_model::MediaKind::Image,
             {},
             std::nullopt,
             std::move(caption)};
@@ -346,7 +347,7 @@ auto ReceivedMediaStore::normalize(
       continue;
     }
     auto *media =
-        std::get_if<domain::ReceivedMedia>(&result.body[positions[ordinal]]);
+        std::get_if<bot_model::ReceivedMedia>(&result.body[positions[ordinal]]);
     if (!media)
       continue;
     const auto kind = "received-" + segment.type;
@@ -356,13 +357,13 @@ auto ReceivedMediaStore::normalize(
         capture(kind, text, origin, observed_user, result.message, ordinal,
                 std::nullopt, std::nullopt, std::nullopt);
     media->media = {installation,
-                    binding.codec().make<domain::MediaId>(kind, {token})};
+                    binding.codec().make<bot_model::MediaId>(kind, {token})};
   }
   result.validate();
   return result;
 }
 
-auto ReceivedMediaStore::read(const domain::MediaRef &media,
+auto ReceivedMediaStore::read(const bot_model::MediaRef &media,
                               std::uint64_t maximum_bytes,
                               network::detail::HttpDeadline deadline)
     -> boost::asio::awaitable<Result> {
@@ -399,7 +400,7 @@ auto ReceivedMediaStore::read_owned(
   };
   if (!eligible())
     co_return failure(Code::CacheUnavailable);
-  if (!maximum_bytes || maximum_bytes > domain::detail::domain_maximum_bytes)
+  if (!maximum_bytes || maximum_bytes > bot_model::detail::bot_maximum_bytes)
     co_return failure(Code::InvalidRequest);
   if (receipt->declared_size && *receipt->declared_size > maximum_bytes)
     co_return failure(Code::MediaTooLarge);
@@ -423,9 +424,9 @@ auto ReceivedMediaStore::read_owned(
         (receipt->declared_size &&
          *receipt->declared_size != response.body.size()))
       co_return failure(Code::MalformedResponse);
-    domain::BytesSource bytes{
+    bot_model::BytesSource bytes{
         {response.body.begin(), response.body.end()},
-        receipt->query_metadata.value_or(domain::MediaMetadata{})};
+        receipt->query_metadata.value_or(bot_model::MediaMetadata{})};
     bytes.metadata.size_bytes = bytes.bytes.size();
     bytes.validate();
     if (!eligible())

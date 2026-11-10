@@ -99,7 +99,7 @@ public:
 
 private:
   template <class Reference>
-  static void charge_reference(bot::detail::DomainWireBudget &budget,
+  static void charge_reference(bot::detail::BotWireBudget &budget,
                                const Reference &reference) {
     budget.nodes();
     budget.bytes(reference.installation.installation_id.size());
@@ -154,7 +154,7 @@ private:
       // Exhaustion loses only new optional evidence, never existing conflicts.
     }
   }
-  bot::detail::DomainWireBudget budget_;
+  bot::detail::BotWireBudget budget_;
   std::vector<ConfirmedAuthorEvidence> records_;
 };
 
@@ -312,7 +312,7 @@ auto complete_message_operation(
                                                             context.envelope);
     try {
       recovery.outcome(policy.outcome(*original));
-    } catch (const bot::detail::DomainBudgetExceeded &) {
+    } catch (const bot::detail::BotBudgetExceeded &) {
       // A bounded prefix remains known; the remainder is unknown.
     }
     effects = recovery.finish();

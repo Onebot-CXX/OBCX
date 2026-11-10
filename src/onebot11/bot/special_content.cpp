@@ -1,4 +1,4 @@
-#include "onebot11/bot/domain_binding.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 #include "onebot11/bot/presentation_observation.hpp"
 
 namespace obcx::onebot11::bot {
@@ -45,7 +45,7 @@ void InlineNodeObservation::validate() const {
 void PresentationObservation::validate() const {
   source.validate();
   if (source.conversation.installation.surface != surface ||
-      normalized_block_index >= d::detail::domain_maximum_items)
+      normalized_block_index >= d::detail::bot_maximum_items)
     throw std::invalid_argument("invalid QQ presentation observation");
   std::visit([](const auto &v) { v.validate(); }, value);
 }

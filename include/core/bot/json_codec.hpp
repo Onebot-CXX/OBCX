@@ -13,7 +13,7 @@ struct adl_serializer<
     T, std::void_t<typename T::obcx_bot_json_factory,
                    decltype(T::from_json(std::declval<const json &>()))>> {
   static auto from_json(const json &document) -> T {
-    obcx::bot::detail::validate_domain_wire(document);
+    obcx::bot::detail::validate_bot_wire(document);
     return T::from_json(document);
   }
 
@@ -24,7 +24,7 @@ struct adl_serializer<
   static void to_json(json &document, const T &value) {
     json encoded;
     ::nlohmann::to_json(encoded, value);
-    obcx::bot::detail::validate_domain_wire(encoded);
+    obcx::bot::detail::validate_bot_wire(encoded);
     document = std::move(encoded);
   }
 };

@@ -21,7 +21,7 @@ struct ObservedForwardMessage {
 
   void validate() const {
     message.validate();
-    if (faces.size() > obcx::bot::detail::domain_maximum_items)
+    if (faces.size() > obcx::bot::detail::bot_maximum_items)
       throw std::invalid_argument("too many forward face observations");
     std::optional<std::pair<std::size_t, std::size_t>> previous;
     for (const auto &entry : faces) {
@@ -55,28 +55,27 @@ struct ObserveOneBotForwardMessageRequest {
 
 namespace obcx::bot {
 template <>
-struct detail::DomainRecordPreflight<onebot11::bot::ForwardFaceObservation> {
+struct detail::BotRecordPreflight<onebot11::bot::ForwardFaceObservation> {
   static void validate(const Json &d) {
     (void)detail::bounded_unsigned(d.at("node_index"), 98);
     (void)detail::bounded_unsigned(d.at("normalized_block_index"),
-                                   detail::domain_maximum_items - 1);
+                                   detail::bot_maximum_items - 1);
   }
 };
 template <>
-struct detail::DomainRecordPreflight<onebot11::bot::ObservedForwardMessage> {
+struct detail::BotRecordPreflight<onebot11::bot::ObservedForwardMessage> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_array(d, "faces",
-                                           detail::domain_maximum_items, true);
+                                           detail::bot_maximum_items, true);
   }
 };
-OBCX_DOMAIN_FIELDS(onebot11::bot::ForwardFaceObservation,
-                   OBCX_DOMAIN_FIELD(node_index),
-                   OBCX_DOMAIN_FIELD(normalized_block_index),
-                   OBCX_DOMAIN_FIELD(face));
-OBCX_DOMAIN_FIELDS(onebot11::bot::ObservedForwardMessage,
-                   OBCX_DOMAIN_FIELD(message), OBCX_DOMAIN_FIELD(faces));
-OBCX_DOMAIN_FIELDS(onebot11::bot::ObserveOneBotForwardMessageRequest,
-                   OBCX_DOMAIN_FIELD(forward));
+OBCX_BOT_FIELDS(onebot11::bot::ForwardFaceObservation,
+                OBCX_BOT_FIELD(node_index),
+                OBCX_BOT_FIELD(normalized_block_index), OBCX_BOT_FIELD(face));
+OBCX_BOT_FIELDS(onebot11::bot::ObservedForwardMessage, OBCX_BOT_FIELD(message),
+                OBCX_BOT_FIELD(faces));
+OBCX_BOT_FIELDS(onebot11::bot::ObserveOneBotForwardMessageRequest,
+                OBCX_BOT_FIELD(forward));
 template <>
 struct OperationTraits<onebot11::bot::ObserveOneBotForwardMessageRequest>
     : OperationContract<onebot11::bot::ObserveOneBotForwardMessageRequest,

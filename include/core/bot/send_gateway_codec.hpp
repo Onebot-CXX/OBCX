@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_messaging.hpp"
+#include "core/bot/bot_messaging.hpp"
 #include "core/bot/operation_gateway.hpp"
 #include <map>
 #include <memory>
@@ -20,13 +20,13 @@ inline auto encode_send_outcome_value(const SendOutcome &value) -> Json {
       {"schema", 1},
       {"alternative", value.index()},
       {"value",
-       std::visit([](const auto &v) { return domain_encode(v); }, value)}};
-  validate_domain_wire(encoded);
+       std::visit([](const auto &v) { return bot_encode(v); }, value)}};
+  validate_bot_wire(encoded);
   return encoded;
 }
 // Account in bounded fragments, before copying an entire typed outcome. The
 // unknown form uses the same borrowed evidence, not a copied sidecar.
-inline void inspect_send_outcome(DomainWireBudget &budget,
+inline void inspect_send_outcome(BotWireBudget &budget,
                                  const SendOutcome &outcome, unsigned depth,
                                  bool standalone, bool as_unknown) {
   std::visit(
@@ -40,12 +40,12 @@ inline void inspect_send_outcome(DomainWireBudget &budget,
             {"output_details", Json::array()}};
         if (failure) {
           if constexpr (receipt) {
-            record["error"] = domain_encode(unknown_send_error());
+            record["error"] = bot_encode(unknown_send_error());
             record["may_have_unconfirmed_messages"] = true;
           } else {
             value.error.validate();
             record["error"] =
-                domain_encode(as_unknown ? unknown_send_error() : value.error);
+                bot_encode(as_unknown ? unknown_send_error() : value.error);
             record["may_have_unconfirmed_messages"] =
                 as_unknown || value.may_have_unconfirmed_messages;
           }
@@ -75,10 +75,10 @@ inline void inspect_send_outcome(DomainWireBudget &budget,
               depth + 3);
           if (output.content)
             for (const auto &slice : *output.content)
-              budget.inspect(domain_encode(slice), depth + 5);
+              budget.inspect(bot_encode(slice), depth + 5);
           for (const auto &media : output.reusable_media) {
             media.validate();
-            budget.inspect(domain_encode(media), depth + 5);
+            budget.inspect(bot_encode(media), depth + 5);
           }
         }
       },
@@ -124,7 +124,7 @@ public:
     // Only the constant header is constructed; arrays remain borrowed.
     auto fallback = base_budget();
     Json empty = {{"alternative", 1},
-                  {"value", detail::domain_encode(SendFailure{
+                  {"value", detail::bot_encode(SendFailure{
                                 detail::unknown_send_error(), {}, {}, true})}};
     if (wire_format() == SendOutcomeWireFormat::Standalone)
       empty["schema"] = 1;
@@ -146,7 +146,7 @@ public:
     // Inspect the borrowed Result under the precharged real reply shell. No
     // copy of Result is made merely to manufacture an outer root.
     auto budget =
-        structure_ ? structure_->result_base : detail::DomainWireBudget{};
+        structure_ ? structure_->result_base : detail::BotWireBudget{};
     budget.inspect(wire, structure_ ? structure_->result_depth : 0);
     auto check = [&](auto &&self, const Json &base,
                      const Json &actual) -> void {
@@ -187,8 +187,8 @@ private:
     unsigned depth;
     unsigned result_depth;
     SendOutcomeWireFormat format;
-    detail::DomainWireBudget base;
-    detail::DomainWireBudget result_base;
+    detail::BotWireBudget base;
+    detail::BotWireBudget result_base;
     std::map<const Json *, unsigned> optional_slots;
     Structure(const Json &wire, SendOutcomeWireFormat representation)
         : skeleton(wire), outcome_slot(nullptr), result_slot(nullptr), depth(0),
@@ -207,11 +207,11 @@ private:
   auto outcome_depth() const -> unsigned {
     return structure_ ? structure_->depth : 0;
   }
-  auto base_budget() const -> detail::DomainWireBudget {
-    return structure_ ? structure_->base : detail::DomainWireBudget{};
+  auto base_budget() const -> detail::BotWireBudget {
+    return structure_ ? structure_->base : detail::BotWireBudget{};
   }
   auto inspect_primary(const SendOutcome &outcome, bool unknown) const
-      -> detail::DomainWireBudget {
+      -> detail::BotWireBudget {
     auto budget = base_budget();
     detail::inspect_send_outcome(
         budget, outcome, outcome_depth(),
@@ -273,8 +273,8 @@ private:
     throw std::invalid_argument("optional slot is not owned by this envelope");
   }
   SendOutcomeEnvelope envelope_;
-  detail::DomainWireBudget work_;
-  detail::DomainWireBudget output_;
+  detail::BotWireBudget work_;
+  detail::BotWireBudget output_;
   std::set<const Json *> replaced_;
   friend class SendOutcomeEnvelope;
 };
@@ -298,10 +298,10 @@ inline auto SendOutcomeEnvelope::make_skeleton(const Json &required_wrapper,
       (format != SendOutcomeWireFormat::Standalone &&
        format != SendOutcomeWireFormat::NestedVariant))
     throw std::invalid_argument("invalid outcome envelope slot or format");
-  detail::validate_domain_wire(required_wrapper);
+  detail::validate_bot_wire(required_wrapper);
   std::size_t ordinal = 0;
-  std::size_t selected = detail::domain_maximum_items;
-  std::size_t selected_result = detail::domain_maximum_items;
+  std::size_t selected = detail::bot_maximum_items;
+  std::size_t selected_result = detail::bot_maximum_items;
   auto locate = [&](auto &&self, const Json &node) -> void {
     if (&node == &null_outcome_slot)
       selected = ordinal;
@@ -313,8 +313,8 @@ inline auto SendOutcomeEnvelope::make_skeleton(const Json &required_wrapper,
         self(self, child);
   };
   locate(locate, required_wrapper);
-  if (selected == detail::domain_maximum_items ||
-      selected_result == detail::domain_maximum_items)
+  if (selected == detail::bot_maximum_items ||
+      selected_result == detail::bot_maximum_items)
     throw std::invalid_argument(
         "outcome/result slot is not in required wrapper");
   auto structure = std::make_shared<Structure>(required_wrapper, format);
@@ -405,7 +405,7 @@ public:
   template <class F> void attempt(F &&operation) {
     try {
       operation();
-    } catch (const DomainBudgetExceeded &) {
+    } catch (const BotBudgetExceeded &) {
       throw;
     } catch (...) { /* An invalid field cannot erase independent evidence. */
     }
@@ -429,7 +429,7 @@ public:
       attempt([&] {
         std::vector<ContentSlice> content;
         for (const auto &slice : *value.content) {
-          work_.inspect(domain_encode(slice), depth_ + 5);
+          work_.inspect(bot_encode(slice), depth_ + 5);
           validate_slice(slice);
           content.push_back(slice);
         }
@@ -439,12 +439,12 @@ public:
       attempt([&] {
         work_.nodes();
         media.media.validate();
-        work_.inspect(domain_encode(media.media), depth_ + 6);
+        work_.inspect(bot_encode(media.media), depth_ + 6);
         PublishedMedia recovered{media.media, std::nullopt, std::nullopt};
         if (media.identity)
           attempt([&] {
             media.identity->validate();
-            work_.inspect(domain_encode(*media.identity), depth_ + 6);
+            work_.inspect(bot_encode(*media.identity), depth_ + 6);
             validate_identity(*media.identity, recovered.media);
             recovered.identity = media.identity;
           });
@@ -475,7 +475,7 @@ public:
         work_.inspect(field, depth_ + 4);
         if (field.is_null())
           return;
-        auto content = domain_decode<std::vector<ContentSlice>>(field);
+        auto content = bot_decode<std::vector<ContentSlice>>(field);
         for (const auto &slice : content)
           validate_slice(slice);
         retain_content(index, std::move(content));
@@ -496,14 +496,13 @@ public:
           return;
         const auto &source = entry.at("media");
         work_.inspect(source, depth_ + 6);
-        PublishedMedia recovered{domain_decode<MediaRef>(source), std::nullopt,
+        PublishedMedia recovered{bot_decode<MediaRef>(source), std::nullopt,
                                  std::nullopt};
         if (entry.contains("identity"))
           attempt([&] {
             const auto &identity = entry.at("identity");
             work_.inspect(identity, depth_ + 6);
-            auto decoded =
-                domain_decode<std::optional<MediaIdentity>>(identity);
+            auto decoded = bot_decode<std::optional<MediaIdentity>>(identity);
             if (decoded)
               validate_identity(*decoded, recovered.media);
             recovered.identity = std::move(decoded);
@@ -512,7 +511,7 @@ public:
           attempt([&] {
             const auto &block = entry.at("block_index");
             work_.inspect(block, depth_ + 6);
-            auto decoded = domain_decode<std::optional<std::size_t>>(block);
+            auto decoded = bot_decode<std::optional<std::size_t>>(block);
             validate_block(decoded);
             recovered.block_index = decoded;
           });
@@ -567,9 +566,9 @@ private:
                        const SendOutcomeEnvelope &envelope)
       : target_(target), request_(request), depth_(envelope.outcome_depth()),
         work_(envelope.base_budget()), output_(envelope.base_budget()) {
-    Json empty = {{"alternative", 1},
-                  {"value", domain_encode(SendFailure{
-                                unknown_send_error(), {}, {}, true})}};
+    Json empty = {
+        {"alternative", 1},
+        {"value", bot_encode(SendFailure{unknown_send_error(), {}, {}, true})}};
     if (envelope.wire_format() == SendOutcomeWireFormat::Standalone)
       empty["schema"] = 1;
     output_.inspect(empty, depth_);
@@ -583,7 +582,7 @@ private:
       return found->second;
     SendOutputDetails detail{message, std::nullopt, {}};
     output_.inspect(Json(message), depth_ + 3);
-    output_.inspect(domain_encode(detail), depth_ + 3);
+    output_.inspect(bot_encode(detail), depth_ + 3);
     const auto index = retained_.size();
     retained_.push_back(std::move(detail));
     indices_.emplace(message.id, index);
@@ -602,7 +601,7 @@ private:
   void retain_content(std::size_t index, std::vector<ContentSlice> content) {
     if (content.empty())
       return;
-    output_.inspect(domain_encode(content), depth_ + 4);
+    output_.inspect(bot_encode(content), depth_ + 4);
     retained_[index].content = std::move(content);
   }
   void validate_identity(const MediaIdentity &identity,
@@ -619,14 +618,14 @@ private:
     media.validate();
     if (media.media.installation != target_.installation)
       throw std::invalid_argument("published media scope mismatch");
-    output_.inspect(domain_encode(media), depth_ + 5);
+    output_.inspect(bot_encode(media), depth_ + 5);
     retained_[index].reusable_media.push_back(std::move(media));
   }
   const ConversationRef &target_;
   const SendMessageRequest *request_; // null explicitly means no common body
   unsigned depth_;
-  DomainWireBudget work_;
-  DomainWireBudget output_;
+  BotWireBudget work_;
+  BotWireBudget output_;
   std::map<MessageId, std::size_t> indices_;
   std::vector<SendOutputDetails> retained_;
 };
@@ -661,7 +660,7 @@ template <> struct GatewayCodec<SendOutcome> {
     return detail::encode_send_outcome_value(value);
   }
   static auto decode(const Json &payload) -> SendOutcome {
-    detail::validate_domain_wire(payload);
+    detail::validate_bot_wire(payload);
     detail::require_only_keys(payload, "SendOutcome",
                               {"schema", "alternative", "value"});
     if (detail::bounded_unsigned(payload.at("schema"), 1) != 1)
@@ -695,7 +694,7 @@ inline auto normalize_send_outcome(const SendMessageRequest &request,
   detail::SendEvidenceRecovery recovery(request, envelope);
   try {
     recovery.outcome(outcome);
-  } catch (const detail::DomainBudgetExceeded &) {
+  } catch (const detail::BotBudgetExceeded &) {
   }
   return recovery.finish();
 }
@@ -711,7 +710,7 @@ inline auto normalize_single_message_outcome(
   detail::SendEvidenceRecovery recovery(target, envelope);
   try {
     recovery.outcome(outcome);
-  } catch (const detail::DomainBudgetExceeded &) {
+  } catch (const detail::BotBudgetExceeded &) {
   }
   return recovery.finish();
 }
@@ -746,7 +745,7 @@ inline auto decode_send_outcome(const Json &payload,
   detail::SendEvidenceRecovery recovery(request, envelope);
   try {
     recovery.wire(payload);
-  } catch (const detail::DomainBudgetExceeded &) {
+  } catch (const detail::BotBudgetExceeded &) {
   }
   return recovery.finish();
 }
@@ -763,7 +762,7 @@ inline auto decode_single_message_outcome(const Json &payload,
   detail::SendEvidenceRecovery recovery(target, envelope);
   try {
     recovery.wire(payload);
-  } catch (const detail::DomainBudgetExceeded &) {
+  } catch (const detail::BotBudgetExceeded &) {
   }
   return recovery.finish();
 }

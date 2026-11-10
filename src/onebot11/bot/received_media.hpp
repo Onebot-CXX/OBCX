@@ -2,7 +2,7 @@
 
 #include "core/bot/bot_event_components.hpp"
 #include "network/http_call.hpp"
-#include "onebot11/bot/domain_binding.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -26,12 +26,12 @@ public:
   ReceivedMediaStore(obcx::bot::BotInstallationRef installation,
                      std::shared_ptr<core::SelfIdentityCache> identity,
                      std::weak_ptr<core::BotEventCapability> ingress,
-                     std::shared_ptr<const QqDomainBinding> binding,
+                     std::shared_ptr<const QqPlatformAdapter> binding,
                      std::size_t maximum_entries,
                      std::size_t maximum_retained_text_bytes);
   ~ReceivedMediaStore();
 
-  auto normalize(const QqDomainBinding &binding,
+  auto normalize(const QqPlatformAdapter &binding,
                  const obcx::bot::BotInstallationRef &installation,
                  const common::MessageEvent &event,
                  obcx::bot::TimePoint received_at,
@@ -74,7 +74,7 @@ private:
   const obcx::bot::BotInstallationRef installation_;
   const std::shared_ptr<core::SelfIdentityCache> identity_;
   const std::weak_ptr<core::BotEventCapability> ingress_;
-  const std::shared_ptr<const QqDomainBinding> binding_;
+  const std::shared_ptr<const QqPlatformAdapter> binding_;
   const std::size_t maximum_entries_;
   const std::size_t maximum_retained_text_bytes_;
   const std::string store_uuid_;

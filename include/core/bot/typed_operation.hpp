@@ -24,7 +24,7 @@ concept TypedOperation =
       } -> std::same_as<void>;
     };
 
-// Sends carry domain failures with physical evidence; they must use BotClient.
+// Sends carry bot failures with physical evidence; they must use BotClient.
 template <TypedOperation Request>
 requires(!requires { OperationTraits<Request>::requires_outcome_client; })
 [[nodiscard]] auto invoke(BotOperationGateway &gateway, Request request)

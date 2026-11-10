@@ -1,4 +1,4 @@
-#include "onebot11/bot/domain_binding.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 
 namespace obcx::onebot11::bot {
 namespace {
@@ -22,7 +22,7 @@ auto face(const d::Json &data) -> d::ReceivedFace {
   return result;
 }
 } // namespace
-void QqDomainBinding::capture_observations(
+void QqPlatformAdapter::capture_observations(
     const common::MessageEvent &event, obcx::bot::MessageReceived &message,
     const std::vector<std::size_t> &positions) {
   for (std::size_t index = 0; index < event.message.size(); ++index) {
@@ -50,7 +50,7 @@ void QqDomainBinding::capture_observations(
                           : segment.type == "miniapp"
                               ? d::ReceivedCardKind::MiniApp
                               : d::ReceivedCardKind::Share;
-        d::detail::validate_domain_wire(segment.data);
+        d::detail::validate_bot_wire(segment.data);
         emit(d::ReceivedCard{kind, segment.data});
       } else if (segment.type == "music")
         emit(d::ReceivedMusic{text(segment.data, "title", 65536)});

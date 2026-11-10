@@ -20,7 +20,7 @@ struct SelfInfo {
       detail::validate_identifier(*username, "self username", 1024);
   }
   static auto from_json(const Json &document) -> SelfInfo {
-    detail::validate_domain_wire(document);
+    detail::validate_bot_wire(document);
     detail::require_only_keys(document, "SelfInfo",
                               {"schema", "user", "display_name", "username"});
     if (!document.at("schema").is_number_integer() ||
@@ -55,7 +55,7 @@ struct GetSelfRequest {
   BotInstallationRef installation;
   void validate() const { installation.validate(); }
   static auto from_json(const Json &document) -> GetSelfRequest {
-    detail::validate_domain_wire(document);
+    detail::validate_bot_wire(document);
     detail::require_only_keys(document, "GetSelfRequest",
                               {"schema", "action", "installation"});
     if (!document.at("schema").is_number_integer() ||

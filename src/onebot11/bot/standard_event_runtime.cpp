@@ -1,5 +1,5 @@
 #include "onebot11/bot/standard_event_runtime.hpp"
-#include "onebot11/bot/domain_binding.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 #include "standard_event_codec.hpp"
 #include "standard_event_context.hpp"
 #include <algorithm>
@@ -338,7 +338,7 @@ void StandardEventAccess::validate(const EventActionHandle &h) {
   const auto &c = context(h);
   if (!c.active->load())
     throw std::invalid_argument("retired event action handle");
-  QqDomainBinding binding;
+  QqPlatformAdapter binding;
   binding.codec().validate(c.installation);
   const obcx::bot::UserRef self{
       c.installation,

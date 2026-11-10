@@ -1,7 +1,7 @@
 #pragma once
 
 // Process-only definitions shared by recipe manifests and handler installation.
-#include "core/bot/domain_queries.hpp"
+#include "core/bot/bot_queries.hpp"
 #include "core/bot/operation_registry.hpp"
 #include "core/bot/self_info.hpp"
 #include "onebot11/bot/forward_observation.hpp"

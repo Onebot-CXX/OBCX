@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_events.hpp"
+#include "core/bot/bot_events.hpp"
 #include "onebot11/bot/actions.hpp"
 #include <charconv>
 
@@ -127,56 +127,53 @@ struct OneBotGroupPokeResult {
 } // namespace obcx::onebot11::bot
 namespace obcx::bot {
 template <>
-struct detail::DomainRecordPreflight<
-    onebot11::bot::OneBotMessageEmojiLikeResult> {
+struct detail::BotRecordPreflight<onebot11::bot::OneBotMessageEmojiLikeResult> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_text(d, "emoji_id", 20, false);
   }
 };
-template <>
-struct detail::DomainRecordPreflight<onebot11::bot::OneBotUserInfo> {
+template <> struct detail::BotRecordPreflight<onebot11::bot::OneBotUserInfo> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_text(d, "nickname", 1024, true);
     onebot11::bot::detail::preflight_text(d, "sex", 7, false);
-    (void)detail::domain_decode<std::int64_t>(d.at("age"));
+    (void)detail::bot_decode<std::int64_t>(d.at("age"));
   }
 };
 template <>
-struct detail::DomainRecordPreflight<onebot11::bot::OneBotGroupMember> {
+struct detail::BotRecordPreflight<onebot11::bot::OneBotGroupMember> {
   static void validate(const Json &d) {
     for (auto key : {"nickname", "card", "title", "area", "level"})
       onebot11::bot::detail::preflight_text(d, key, 1024, true);
     onebot11::bot::detail::preflight_text(d, "sex", 7, true);
     onebot11::bot::detail::preflight_text(d, "role", 6, true);
     if (!d.at("age").is_null())
-      (void)detail::domain_decode<std::int64_t>(d.at("age"));
+      (void)detail::bot_decode<std::int64_t>(d.at("age"));
   }
 };
 template <>
-struct detail::DomainRecordPreflight<onebot11::bot::ResolvedOneBotGroupFile> {
+struct detail::BotRecordPreflight<onebot11::bot::ResolvedOneBotGroupFile> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_text(d, "url", 8192, false);
   }
 };
 template <>
-struct detail::DomainRecordPreflight<onebot11::bot::ResolvedOneBotPrivateFile>
-    : detail::DomainRecordPreflight<onebot11::bot::ResolvedOneBotGroupFile> {};
-OBCX_DOMAIN_FIELDS(onebot11::bot::OneBotMessageEmojiLikeResult,
-                   OBCX_DOMAIN_FIELD(message), OBCX_DOMAIN_FIELD(emoji_id),
-                   OBCX_DOMAIN_FIELD(set));
-OBCX_DOMAIN_FIELDS(onebot11::bot::OneBotUserInfo, OBCX_DOMAIN_FIELD(user),
-                   OBCX_DOMAIN_FIELD(nickname), OBCX_DOMAIN_FIELD(sex),
-                   OBCX_DOMAIN_FIELD(age));
-OBCX_DOMAIN_FIELDS(onebot11::bot::OneBotGroupMember, OBCX_DOMAIN_FIELD(target),
-                   OBCX_DOMAIN_FIELD(user), OBCX_DOMAIN_FIELD(nickname),
-                   OBCX_DOMAIN_FIELD(card), OBCX_DOMAIN_FIELD(title),
-                   OBCX_DOMAIN_FIELD(role), OBCX_DOMAIN_FIELD(sex),
-                   OBCX_DOMAIN_FIELD(age), OBCX_DOMAIN_FIELD(area),
-                   OBCX_DOMAIN_FIELD(level));
-OBCX_DOMAIN_FIELDS(onebot11::bot::ResolvedOneBotGroupFile,
-                   OBCX_DOMAIN_FIELD(media), OBCX_DOMAIN_FIELD(url));
-OBCX_DOMAIN_FIELDS(onebot11::bot::ResolvedOneBotPrivateFile,
-                   OBCX_DOMAIN_FIELD(media), OBCX_DOMAIN_FIELD(url));
-OBCX_DOMAIN_FIELDS(onebot11::bot::OneBotGroupPokeResult,
-                   OBCX_DOMAIN_FIELD(target), OBCX_DOMAIN_FIELD(user));
+struct detail::BotRecordPreflight<onebot11::bot::ResolvedOneBotPrivateFile>
+    : detail::BotRecordPreflight<onebot11::bot::ResolvedOneBotGroupFile> {};
+OBCX_BOT_FIELDS(onebot11::bot::OneBotMessageEmojiLikeResult,
+                OBCX_BOT_FIELD(message), OBCX_BOT_FIELD(emoji_id),
+                OBCX_BOT_FIELD(set));
+OBCX_BOT_FIELDS(onebot11::bot::OneBotUserInfo, OBCX_BOT_FIELD(user),
+                OBCX_BOT_FIELD(nickname), OBCX_BOT_FIELD(sex),
+                OBCX_BOT_FIELD(age));
+OBCX_BOT_FIELDS(onebot11::bot::OneBotGroupMember, OBCX_BOT_FIELD(target),
+                OBCX_BOT_FIELD(user), OBCX_BOT_FIELD(nickname),
+                OBCX_BOT_FIELD(card), OBCX_BOT_FIELD(title),
+                OBCX_BOT_FIELD(role), OBCX_BOT_FIELD(sex), OBCX_BOT_FIELD(age),
+                OBCX_BOT_FIELD(area), OBCX_BOT_FIELD(level));
+OBCX_BOT_FIELDS(onebot11::bot::ResolvedOneBotGroupFile, OBCX_BOT_FIELD(media),
+                OBCX_BOT_FIELD(url));
+OBCX_BOT_FIELDS(onebot11::bot::ResolvedOneBotPrivateFile, OBCX_BOT_FIELD(media),
+                OBCX_BOT_FIELD(url));
+OBCX_BOT_FIELDS(onebot11::bot::OneBotGroupPokeResult, OBCX_BOT_FIELD(target),
+                OBCX_BOT_FIELD(user));
 } // namespace obcx::bot

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/bot/typed_operation.hpp"
-#include "telegram/bot/domain_operations.hpp"
+#include "telegram/bot/bot_operations.hpp"
 
 namespace obcx::telegram::bot {
 

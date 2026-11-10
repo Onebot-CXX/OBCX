@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_messaging.hpp"
+#include "core/bot/bot_messaging.hpp"
 #include "core/bot/received_observations.hpp"
 
 namespace obcx::bot {
@@ -108,7 +108,7 @@ public:
       throw std::invalid_argument("reply evidence installation mismatch");
   }
   static auto from_json(const Json &d) -> ReplyRef {
-    detail::validate_domain_wire(d);
+    detail::validate_bot_wire(d);
     detail::require_only_keys(d, "ReplyRef",
                               {"schema", "source", "target", "observation_id"});
     if (detail::bounded_unsigned(d.at("schema"), 1) != 1)
@@ -343,68 +343,65 @@ struct SendConfirmation {
     output.validate();
   }
 };
-template <> struct detail::DomainRecordPreflight<UnresolvedMention> {
+template <> struct detail::BotRecordPreflight<UnresolvedMention> {
   static void validate(const Json &d) {
     (void)detail::require_identifier(d, "username", "UnresolvedMention", 1024);
   }
 };
-template <> struct detail::DomainRecordPreflight<UnsupportedContent> {
+template <> struct detail::BotRecordPreflight<UnsupportedContent> {
   static void validate(const Json &d) {
     (void)detail::require_identifier(d, "category", "UnsupportedContent", 128);
     detail::preflight_optional_identifier(d, "description",
                                           "UnsupportedContent", 2048);
   }
 };
-template <> struct detail::DomainRecordPreflight<SendConfirmation> {
+template <> struct detail::BotRecordPreflight<SendConfirmation> {
   static void validate(const Json &d) {
     (void)detail::require_identifier(d, "attempt_id", "SendConfirmation", 1024);
   }
 };
 
-OBCX_DOMAIN_FIELDS(KnownUser, OBCX_DOMAIN_FIELD(user));
-OBCX_DOMAIN_FIELDS(ConversationSender, OBCX_DOMAIN_FIELD(conversation));
-OBCX_DOMAIN_FIELDS(UnknownSender);
-OBCX_DOMAIN_FIELDS(UnresolvedMention, OBCX_DOMAIN_FIELD(username));
-OBCX_DOMAIN_FIELDS(MentionEveryone);
-OBCX_DOMAIN_FIELDS(ReceivedMedia, OBCX_DOMAIN_FIELD(media),
-                   OBCX_DOMAIN_FIELD(kind), OBCX_DOMAIN_FIELD(metadata),
-                   OBCX_DOMAIN_FIELD(identity), OBCX_DOMAIN_FIELD(caption));
-OBCX_DOMAIN_FIELDS(UnsupportedContent, OBCX_DOMAIN_FIELD(category),
-                   OBCX_DOMAIN_FIELD(description));
-OBCX_DOMAIN_FIELDS(MediaGroupRef, OBCX_DOMAIN_FIELD(conversation),
-                   OBCX_DOMAIN_FIELD(id));
-OBCX_DOMAIN_FIELDS(TimePoint, OBCX_DOMAIN_FIELD(unix_milliseconds));
-OBCX_DOMAIN_FIELDS(SenderProfileObservation, OBCX_DOMAIN_FIELD(first_name),
-                   OBCX_DOMAIN_FIELD(last_name), OBCX_DOMAIN_FIELD(username));
-OBCX_DOMAIN_FIELDS(MessageContext, OBCX_DOMAIN_FIELD(kind),
-                   OBCX_DOMAIN_FIELD(group_id), OBCX_DOMAIN_FIELD(topic_id),
-                   OBCX_DOMAIN_FIELD(topic_root_reply),
-                   OBCX_DOMAIN_FIELD(sender_is_bot),
-                   OBCX_DOMAIN_FIELD(observed_self),
-                   OBCX_DOMAIN_FIELD(sender_profile),
-                   OBCX_DOMAIN_FIELD(edited_at));
-OBCX_DOMAIN_FIELDS(MessageReceived, OBCX_DOMAIN_FIELD(message),
-                   OBCX_DOMAIN_FIELD(sender), OBCX_DOMAIN_FIELD(sent_at),
-                   OBCX_DOMAIN_FIELD(received_at), OBCX_DOMAIN_FIELD(body),
-                   OBCX_DOMAIN_FIELD(reply), OBCX_DOMAIN_FIELD(media_group),
-                   OBCX_DOMAIN_FIELD(context), OBCX_DOMAIN_FIELD(observations));
-OBCX_DOMAIN_FIELDS(MessageUpdated, OBCX_DOMAIN_FIELD(message));
-OBCX_DOMAIN_FIELDS(MessageDeleted, OBCX_DOMAIN_FIELD(message),
-                   OBCX_DOMAIN_FIELD(received_at));
-OBCX_DOMAIN_FIELDS(SendConfirmation, OBCX_DOMAIN_FIELD(attempt_id),
-                   OBCX_DOMAIN_FIELD(output));
+OBCX_BOT_FIELDS(KnownUser, OBCX_BOT_FIELD(user));
+OBCX_BOT_FIELDS(ConversationSender, OBCX_BOT_FIELD(conversation));
+OBCX_BOT_FIELDS(UnknownSender);
+OBCX_BOT_FIELDS(UnresolvedMention, OBCX_BOT_FIELD(username));
+OBCX_BOT_FIELDS(MentionEveryone);
+OBCX_BOT_FIELDS(ReceivedMedia, OBCX_BOT_FIELD(media), OBCX_BOT_FIELD(kind),
+                OBCX_BOT_FIELD(metadata), OBCX_BOT_FIELD(identity),
+                OBCX_BOT_FIELD(caption));
+OBCX_BOT_FIELDS(UnsupportedContent, OBCX_BOT_FIELD(category),
+                OBCX_BOT_FIELD(description));
+OBCX_BOT_FIELDS(MediaGroupRef, OBCX_BOT_FIELD(conversation),
+                OBCX_BOT_FIELD(id));
+OBCX_BOT_FIELDS(TimePoint, OBCX_BOT_FIELD(unix_milliseconds));
+OBCX_BOT_FIELDS(SenderProfileObservation, OBCX_BOT_FIELD(first_name),
+                OBCX_BOT_FIELD(last_name), OBCX_BOT_FIELD(username));
+OBCX_BOT_FIELDS(MessageContext, OBCX_BOT_FIELD(kind), OBCX_BOT_FIELD(group_id),
+                OBCX_BOT_FIELD(topic_id), OBCX_BOT_FIELD(topic_root_reply),
+                OBCX_BOT_FIELD(sender_is_bot), OBCX_BOT_FIELD(observed_self),
+                OBCX_BOT_FIELD(sender_profile), OBCX_BOT_FIELD(edited_at));
+OBCX_BOT_FIELDS(MessageReceived, OBCX_BOT_FIELD(message),
+                OBCX_BOT_FIELD(sender), OBCX_BOT_FIELD(sent_at),
+                OBCX_BOT_FIELD(received_at), OBCX_BOT_FIELD(body),
+                OBCX_BOT_FIELD(reply), OBCX_BOT_FIELD(media_group),
+                OBCX_BOT_FIELD(context), OBCX_BOT_FIELD(observations));
+OBCX_BOT_FIELDS(MessageUpdated, OBCX_BOT_FIELD(message));
+OBCX_BOT_FIELDS(MessageDeleted, OBCX_BOT_FIELD(message),
+                OBCX_BOT_FIELD(received_at));
+OBCX_BOT_FIELDS(SendConfirmation, OBCX_BOT_FIELD(attempt_id),
+                OBCX_BOT_FIELD(output));
 inline auto ReplyInfo::from_json(const Json &d) -> ReplyInfo {
-  detail::validate_domain_wire(d);
+  detail::validate_bot_wire(d);
   detail::require_only_keys(
       d, "ReplyInfo",
       {"schema", "source", "reference", "author", "relation", "availability"});
   if (detail::bounded_unsigned(d.at("schema"), 1) != 1)
     throw std::invalid_argument("reply schema mismatch");
   ReplyInfo v{d.at("source").get<MessageRef>(),
-              detail::domain_decode<std::optional<ReplyRef>>(d.at("reference")),
-              detail::domain_decode<std::optional<Sender>>(d.at("author")),
-              detail::domain_decode<ReplyRelation>(d.at("relation")),
-              detail::domain_decode<ReplyAvailability>(d.at("availability"))};
+              detail::bot_decode<std::optional<ReplyRef>>(d.at("reference")),
+              detail::bot_decode<std::optional<Sender>>(d.at("author")),
+              detail::bot_decode<ReplyRelation>(d.at("relation")),
+              detail::bot_decode<ReplyAvailability>(d.at("availability"))};
   v.validate();
   return v;
 }
@@ -412,9 +409,9 @@ inline void to_json(Json &d, const ReplyInfo &v) {
   v.validate();
   d = {{"schema", 1},
        {"source", v.source()},
-       {"reference", detail::domain_encode(v.reference())},
-       {"author", detail::domain_encode(v.author())},
-       {"relation", detail::domain_encode(v.relation())},
-       {"availability", detail::domain_encode(v.availability())}};
+       {"reference", detail::bot_encode(v.reference())},
+       {"author", detail::bot_encode(v.author())},
+       {"relation", detail::bot_encode(v.relation())},
+       {"availability", detail::bot_encode(v.availability())}};
 }
 } // namespace obcx::bot

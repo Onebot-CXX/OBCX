@@ -4,7 +4,7 @@
 #include "standard_send_codec.hpp"
 
 #include "onebot11/bot/actions.hpp"
-#include "onebot11/bot/domain_binding.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 #include "standard_lookup_codec.hpp"
 #include "standard_operation_binding.hpp"
 
@@ -16,7 +16,7 @@
 
 namespace obcx::onebot11::bot::standard {
 namespace {
-namespace domain = obcx::bot;
+namespace bot_model = obcx::bot;
 using Clock = std::chrono::steady_clock;
 
 class RequestBudget {
@@ -39,9 +39,9 @@ public:
     if (text.size() > limits_.maximum_text_bytes)
       throw std::invalid_argument("standard request exceeds text limit");
     bytes(text.size());
-    domain::detail::validate_utf8(text);
+    bot_model::detail::validate_utf8(text);
   }
-  void inspect(const domain::Json &wire, std::size_t depth) {
+  void inspect(const bot_model::Json &wire, std::size_t depth) {
     value(depth);
     if (wire.is_string())
       text(wire.get_ref<const std::string &>());
@@ -155,7 +155,7 @@ void validate_fields(const SendLikeRequest &request) {
   request.parameters.validate();
 }
 
-auto integer(const domain::Json &value) -> std::int64_t {
+auto integer(const bot_model::Json &value) -> std::int64_t {
   if (value.is_number_unsigned()) {
     const auto n = value.get<std::uint64_t>();
     if (n > static_cast<std::uint64_t>(INT64_MAX))
@@ -168,21 +168,21 @@ auto integer(const domain::Json &value) -> std::int64_t {
   return value.get<std::int64_t>();
 }
 
-auto size_value(const domain::Json &value) -> std::size_t {
+auto size_value(const bot_model::Json &value) -> std::size_t {
   const auto n = integer(value);
   if (n < 0 || !std::in_range<std::size_t>(n))
     throw std::invalid_argument("standard size exceeds representation");
   return static_cast<std::size_t>(n);
 }
 
-auto string(const domain::Json &value) -> const std::string & {
+auto string(const bot_model::Json &value) -> const std::string & {
   if (!value.is_string())
     throw std::invalid_argument("standard field requires a string");
   return value.get_ref<const std::string &>();
 }
 
-auto value_limits(const domain::Json &value) -> ValueLimits {
-  domain::detail::require_object(value, "standard value limits");
+auto value_limits(const bot_model::Json &value) -> ValueLimits {
+  bot_model::detail::require_object(value, "standard value limits");
   ValueLimits limits{size_value(value.at("maximum_bytes")),
                      size_value(value.at("maximum_nodes")),
                      size_value(value.at("maximum_depth")),
@@ -191,7 +191,7 @@ auto value_limits(const domain::Json &value) -> ValueLimits {
   return limits;
 }
 
-auto execution_mode(const domain::Json &value) -> ExecutionMode {
+auto execution_mode(const bot_model::Json &value) -> ExecutionMode {
   const auto &name = string(value);
   if (name == "direct")
     return ExecutionMode::Direct;
@@ -259,15 +259,15 @@ struct ReferenceText {
   std::string_view surface;
   std::string_view id;
 };
-auto reference_text(const domain::UserRef &ref) -> ReferenceText {
+auto reference_text(const bot_model::UserRef &ref) -> ReferenceText {
   return {ref.installation.installation_id, ref.installation.surface.value(),
           ref.id.serialized()};
 }
-auto reference_text(const domain::ConversationRef &ref) -> ReferenceText {
+auto reference_text(const bot_model::ConversationRef &ref) -> ReferenceText {
   return {ref.installation.installation_id, ref.installation.surface.value(),
           ref.id.serialized()};
 }
-auto reference_text(const domain::Json &ref) -> ReferenceText {
+auto reference_text(const bot_model::Json &ref) -> ReferenceText {
   const auto &installation = ref.at("installation");
   return {string(installation.at("installation_id")),
           string(installation.at("surface")), string(ref.at("id"))};
@@ -292,12 +292,12 @@ public:
     text("surface", ref.surface, depth + 2);
     text("id", ref.id, depth + 1);
   }
-  void message(const domain::MessageRef &ref) {
+  void message(const bot_model::MessageRef &ref) {
     field("message", 2);
     reference("conversation", reference_text(ref.conversation), 3);
     text("id", ref.id.serialized(), 3);
   }
-  void message(const domain::Json &ref) {
+  void message(const bot_model::Json &ref) {
     field("message", 2);
     reference("conversation", reference_text(ref.at("conversation")), 3);
     text("id", string(ref.at("id")), 3);
@@ -327,20 +327,20 @@ private:
   RequestBudget &budget_;
   bool json_;
 };
-auto boolean(const domain::Json &value) -> bool {
+auto boolean(const bot_model::Json &value) -> bool {
   if (!value.is_boolean())
     throw std::invalid_argument("standard field requires a boolean");
   return value.get<bool>();
 }
-auto duration(const domain::Json &value) -> DurationSeconds {
+auto duration(const bot_model::Json &value) -> DurationSeconds {
   if (value.is_number_integer())
     return {integer(value)};
   if (!value.is_number_float() || !std::isfinite(value.get<double>()))
     throw std::invalid_argument("standard duration requires a finite number");
   return {value.get<double>()};
 }
-auto duration_json(const DurationSeconds &value) -> domain::Json {
-  return std::visit([](auto seconds) -> domain::Json { return seconds; },
+auto duration_json(const DurationSeconds &value) -> bot_model::Json {
+  return std::visit([](auto seconds) -> bot_model::Json { return seconds; },
                     value.value);
 }
 
@@ -351,7 +351,7 @@ void project_parameters(MutationProjection &projection,
 
 void project_parameters(MutationProjection &projection,
                         std::type_identity<DeleteMsgParameters>,
-                        const domain::Json &parameters) {
+                        const bot_model::Json &parameters) {
   projection.message(parameters.at("message"));
 }
 
@@ -364,7 +364,7 @@ void project_parameters(MutationProjection &projection,
 
 void project_parameters(MutationProjection &projection,
                         std::type_identity<SetGroupKickParameters>,
-                        const domain::Json &parameters) {
+                        const bot_model::Json &parameters) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   projection.reference("user", reference_text(parameters.at("user")), 2);
   projection.field("reject_add_request", 2);
@@ -379,7 +379,7 @@ void project_parameters(MutationProjection &projection,
 
 void project_parameters(MutationProjection &projection,
                         std::type_identity<SetGroupBanParameters>,
-                        const domain::Json &parameters) {
+                        const bot_model::Json &parameters) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   projection.reference("user", reference_text(parameters.at("user")), 2);
   projection.field("duration", 2);
@@ -393,7 +393,7 @@ void project_parameters(MutationProjection &projection,
 
 void project_parameters(MutationProjection &projection,
                         std::type_identity<SetGroupWholeBanParameters>,
-                        const domain::Json &parameters) {
+                        const bot_model::Json &parameters) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   projection.field("enable", 2);
 }
@@ -407,7 +407,7 @@ void project_parameters(MutationProjection &projection,
 
 void project_parameters(MutationProjection &projection,
                         std::type_identity<SetGroupAdminParameters>,
-                        const domain::Json &parameters) {
+                        const bot_model::Json &parameters) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   projection.reference("user", reference_text(parameters.at("user")), 2);
   projection.field("enable", 2);
@@ -421,7 +421,7 @@ void project_parameters(MutationProjection &projection,
 
 void project_parameters(MutationProjection &projection,
                         std::type_identity<SetGroupAnonymousParameters>,
-                        const domain::Json &parameters) {
+                        const bot_model::Json &parameters) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   projection.field("enable", 2);
 }
@@ -435,7 +435,7 @@ void project_parameters(MutationProjection &projection,
 
 void project_parameters(MutationProjection &projection,
                         std::type_identity<SetGroupCardParameters>,
-                        const domain::Json &parameters) {
+                        const bot_model::Json &parameters) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   projection.reference("user", reference_text(parameters.at("user")), 2);
   projection.text("card", string(parameters.at("card")), 2);
@@ -449,7 +449,7 @@ void project_parameters(MutationProjection &projection,
 
 void project_parameters(MutationProjection &projection,
                         std::type_identity<SetGroupNameParameters>,
-                        const domain::Json &parameters) {
+                        const bot_model::Json &parameters) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   projection.text("group_name", string(parameters.at("group_name")), 2);
 }
@@ -462,7 +462,7 @@ void project_parameters(MutationProjection &projection,
 
 void project_parameters(MutationProjection &projection,
                         std::type_identity<SetGroupLeaveParameters>,
-                        const domain::Json &parameters) {
+                        const bot_model::Json &parameters) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   projection.field("is_dismiss", 2);
 }
@@ -477,7 +477,7 @@ void project_parameters(MutationProjection &projection,
 
 void project_parameters(MutationProjection &projection,
                         std::type_identity<SetGroupSpecialTitleParameters>,
-                        const domain::Json &parameters) {
+                        const bot_model::Json &parameters) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   projection.reference("user", reference_text(parameters.at("user")), 2);
   projection.text("special_title", string(parameters.at("special_title")), 2);
@@ -521,7 +521,7 @@ auto query_honor_name(HonorKind kind) -> std::string_view {
   }
   throw std::invalid_argument("invalid standard honor kind");
 }
-auto query_honor_kind(const domain::Json &value) -> HonorKind {
+auto query_honor_kind(const bot_model::Json &value) -> HonorKind {
   const auto &name = string(value);
   if (name == "talkative")
     return HonorKind::Talkative;
@@ -544,10 +544,10 @@ void query_scope_projection(MutationProjection &projection,
   projection.text("installation_id", installation, 3);
   projection.text("surface", surface, 3);
 }
-void validate_query_reference(const domain::UserRef &ref) {
+void validate_query_reference(const bot_model::UserRef &ref) {
   QqNativeReferenceCodec{}.validate(ref);
 }
-void validate_query_reference(const domain::ConversationRef &ref) {
+void validate_query_reference(const bot_model::ConversationRef &ref) {
   const QqNativeReferenceCodec codec;
   codec.validate(ref);
   if (codec.unpack(ref.id).kind != "group")
@@ -561,7 +561,7 @@ void project_query_parameters(MutationProjection &projection,
 }
 void project_query_parameters(MutationProjection &projection,
                               std::type_identity<GetStrangerInfoParameters>,
-                              const domain::Json &parameters, bool json) {
+                              const bot_model::Json &parameters, bool json) {
   projection.reference("user", reference_text(parameters.at("user")), 2);
   projection.field("no_cache", 2);
 }
@@ -576,7 +576,7 @@ void project_query_parameters(MutationProjection &projection,
 }
 void project_query_parameters(MutationProjection &projection,
                               std::type_identity<GetLoginInfoParameters>,
-                              const domain::Json &parameters, bool json) {
+                              const bot_model::Json &parameters, bool json) {
   query_scope_projection(
       projection, string(parameters.at("installation").at("installation_id")),
       string(parameters.at("installation").at("surface")));
@@ -592,7 +592,7 @@ void project_query_parameters(MutationProjection &projection,
 }
 void project_query_parameters(MutationProjection &projection,
                               std::type_identity<GetFriendListParameters>,
-                              const domain::Json &parameters, bool json) {
+                              const bot_model::Json &parameters, bool json) {
   query_scope_projection(
       projection, string(parameters.at("installation").at("installation_id")),
       string(parameters.at("installation").at("surface")));
@@ -608,7 +608,7 @@ void project_query_parameters(MutationProjection &projection,
 }
 void project_query_parameters(MutationProjection &projection,
                               std::type_identity<GetGroupInfoParameters>,
-                              const domain::Json &parameters, bool json) {
+                              const bot_model::Json &parameters, bool json) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   projection.field("no_cache", 2);
 }
@@ -623,7 +623,7 @@ void project_query_parameters(MutationProjection &projection,
 }
 void project_query_parameters(MutationProjection &projection,
                               std::type_identity<GetGroupListParameters>,
-                              const domain::Json &parameters, bool json) {
+                              const bot_model::Json &parameters, bool json) {
   query_scope_projection(
       projection, string(parameters.at("installation").at("installation_id")),
       string(parameters.at("installation").at("surface")));
@@ -640,7 +640,7 @@ void project_query_parameters(MutationProjection &projection,
 }
 void project_query_parameters(MutationProjection &projection,
                               std::type_identity<GetGroupMemberInfoParameters>,
-                              const domain::Json &parameters, bool json) {
+                              const bot_model::Json &parameters, bool json) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   projection.reference("user", reference_text(parameters.at("user")), 2);
   projection.field("no_cache", 2);
@@ -658,7 +658,7 @@ void project_query_parameters(MutationProjection &projection,
 }
 void project_query_parameters(MutationProjection &projection,
                               std::type_identity<GetGroupMemberListParameters>,
-                              const domain::Json &parameters, bool json) {
+                              const bot_model::Json &parameters, bool json) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
 }
 void validate_query_parameters(const GetGroupMemberListParameters &p) {
@@ -675,7 +675,7 @@ void project_query_parameters(MutationProjection &projection,
 }
 void project_query_parameters(MutationProjection &projection,
                               std::type_identity<GetGroupHonorInfoParameters>,
-                              const domain::Json &parameters, bool json) {
+                              const bot_model::Json &parameters, bool json) {
   projection.reference("group", reference_text(parameters.at("group")), 2);
   if (json)
     projection.text(
@@ -708,7 +708,7 @@ template <typename Request> void validate_query_fields(const Request &request) {
 // Borrowed typed projections mirror the native query decoder's retained DTO
 // shape: root zero, no field-name bytes, absent optionals remain absent.
 void query_result_scope(RequestBudget &budget,
-                        const domain::BotInstallationRef &scope,
+                        const bot_model::BotInstallationRef &scope,
                         std::size_t depth) {
   budget.value(depth);
   budget.value(depth + 1);
@@ -914,8 +914,8 @@ void project_query_result(RequestBudget &budget, const GroupHonorInfo &value,
       project_query_result(budget, entry, depth + 2);
   }
 }
-void query_result_installation(const domain::BotInstallationRef &actual,
-                               const domain::BotInstallationRef &expected) {
+void query_result_installation(const bot_model::BotInstallationRef &actual,
+                               const bot_model::BotInstallationRef &expected) {
   QqNativeReferenceCodec{}.validate(actual);
   if (actual != expected)
     throw std::invalid_argument("standard query result installation mismatch");
@@ -925,7 +925,7 @@ void query_result_target(const auto &actual, const auto &expected) {
     throw std::invalid_argument("standard query result target mismatch");
 }
 void query_result_scoped_reference(const auto &ref,
-                                   const domain::BotInstallationRef &scope) {
+                                   const bot_model::BotInstallationRef &scope) {
   validate_query_reference(ref);
   query_result_installation(ref.installation, scope);
 }
@@ -1080,13 +1080,13 @@ void service_projection(RequestBudget &budget, const Request &request,
 
 template <ServiceRequest Request>
 void service_borrowed_projection(RequestBudget &budget,
-                                 const domain::Json &payload,
+                                 const bot_model::Json &payload,
                                  ExecutionMode mode,
                                  std::optional<std::string_view> correlation) {
   budget.value(0);
   MutationProjection projection(budget, false);
   const auto &installation = payload.at("installation");
-  domain::detail::require_object(installation, "standard installation");
+  bot_model::detail::require_object(installation, "standard installation");
   projection.field("installation", 1);
   projection.text("installation_id", string(installation.at("installation_id")),
                   2);
@@ -1115,7 +1115,7 @@ void validate_service_delay(const RestartDelayMilliseconds &delay) {
       },
       delay.value());
 }
-auto service_delay(const domain::Json &value)
+auto service_delay(const bot_model::Json &value)
     -> std::optional<RestartDelayMilliseconds> {
   if (value.is_null())
     return std::nullopt;
@@ -1137,20 +1137,20 @@ void validate_service_fields(const Request &request) {
       validate_service_delay(*request.parameters.delay);
 }
 template <ServiceRequest Request>
-auto service_parameters_json(const Request &request) -> domain::Json {
+auto service_parameters_json(const Request &request) -> bot_model::Json {
   if constexpr (std::same_as<Request, GetCookiesRequest> ||
                 std::same_as<Request, GetCredentialsRequest>) {
     return {{"domain", request.parameters.domain
-                           ? domain::Json(*request.parameters.domain)
-                           : domain::Json(nullptr)}};
+                           ? bot_model::Json(*request.parameters.domain)
+                           : bot_model::Json(nullptr)}};
   } else if constexpr (std::same_as<Request, SetRestartRequest>) {
     return {{"delay",
              request.parameters.delay
-                 ? std::visit([](auto value) { return domain::Json(value); },
+                 ? std::visit([](auto value) { return bot_model::Json(value); },
                               request.parameters.delay->value())
-                 : domain::Json(nullptr)}};
+                 : bot_model::Json(nullptr)}};
   } else {
-    return domain::Json::object();
+    return bot_model::Json::object();
   }
 }
 
@@ -1255,20 +1255,20 @@ void project_service_result(RequestBudget &budget, const CanSendRecordData &) {
 void project_service_result(RequestBudget &budget, const ServiceNoData &) {
   budget.value(0);
 }
-auto lookup_message_id(const domain::Json &value) -> std::int32_t {
+auto lookup_message_id(const bot_model::Json &value) -> std::int32_t {
   const auto id = integer(value);
   if (!std::in_range<std::int32_t>(id))
     throw std::invalid_argument("invalid standard lookup message ID");
   return static_cast<std::int32_t>(id);
 }
 void lookup_project_scope(MutationProjection &projection,
-                          const domain::BotInstallationRef &scope) {
+                          const bot_model::BotInstallationRef &scope) {
   projection.field("installation", 2);
   projection.text("installation_id", scope.installation_id, 3);
   projection.text("surface", scope.surface.value(), 3);
 }
 void lookup_project_scope(MutationProjection &projection,
-                          const domain::Json &scope) {
+                          const bot_model::Json &scope) {
   projection.field("installation", 2);
   projection.text("installation_id", string(scope.at("installation_id")), 3);
   projection.text("surface", string(scope.at("surface")), 3);
@@ -1290,14 +1290,14 @@ void lookup_project_parameters(MutationProjection &projection,
 }
 void lookup_project_parameters(MutationProjection &projection,
                                std::type_identity<GetMessageParameters>,
-                               const domain::Json &p) {
+                               const bot_model::Json &p) {
   lookup_project_scope(projection, p.at("installation"));
   (void)lookup_message_id(p.at("message_id"));
   projection.field("message_id", 2);
 }
 void lookup_project_parameters(MutationProjection &projection,
                                std::type_identity<GetForwardMessageParameters>,
-                               const domain::Json &p) {
+                               const bot_model::Json &p) {
   lookup_project_scope(projection, p.at("installation"));
   projection.text("id", string(p.at("id")), 2);
 }
@@ -1320,7 +1320,7 @@ template <typename Request>
 void lookup_validate_fields(const Request &request) {
   request.control.validate();
   QqNativeReferenceCodec{}.validate(
-      domain::OperationTraits<Request>::installation(request));
+      bot_model::OperationTraits<Request>::installation(request));
 }
 
 auto media_format_name(RecordFormat format) -> std::string_view {
@@ -1344,7 +1344,7 @@ auto media_format_name(RecordFormat format) -> std::string_view {
   }
   throw std::invalid_argument("invalid standard media format");
 }
-auto media_format(const domain::Json &value) -> RecordFormat {
+auto media_format(const bot_model::Json &value) -> RecordFormat {
   const auto text = string(value);
   for (const auto format :
        {RecordFormat::Mp3, RecordFormat::Amr, RecordFormat::Wma,
@@ -1417,10 +1417,11 @@ void media_projection(RequestBudget &budget, const Request &request,
 }
 template <typename Request>
 void media_borrowed_projection(RequestBudget &budget,
-                               const domain::Json &payload, ExecutionMode mode,
+                               const bot_model::Json &payload,
+                               ExecutionMode mode,
                                std::optional<std::string_view> correlation) {
   const auto &scope = payload.at("installation");
-  domain::detail::require_object(scope, "standard media installation");
+  bot_model::detail::require_object(scope, "standard media installation");
   const auto &parameters = payload.at("parameters");
   std::optional<RecordFormat> format;
   if constexpr (std::same_as<Request, GetRecordRequest>)
@@ -1436,8 +1437,8 @@ template <typename Request> void media_validate_fields(const Request &request) {
     (void)media_format_name(request.parameters.out_format);
 }
 template <typename Request>
-auto media_parameters_json(const Request &request) -> domain::Json {
-  auto parameters = domain::Json::object();
+auto media_parameters_json(const Request &request) -> bot_model::Json {
+  auto parameters = bot_model::Json::object();
   media_selector(request).with_filename(
       SensitiveUse::ExplicitAccess,
       [&](std::string_view filename) { parameters.emplace("file", filename); });
@@ -1667,7 +1668,7 @@ void GetGroupHonorInfoRequest::validate() const {
   query_projection(budget, *this, false);
   validate_query_fields(*this);
 }
-GetCookiesRequest::GetCookiesRequest(domain::BotInstallationRef installation,
+GetCookiesRequest::GetCookiesRequest(bot_model::BotInstallationRef installation,
                                      GetCookiesParameters parameters,
                                      CallControl control,
                                      ValueLimits value_limits)
@@ -1679,8 +1680,9 @@ void GetCookiesRequest::validate() const {
   validate_service_fields(*this);
 }
 GetCsrfTokenRequest::GetCsrfTokenRequest(
-    domain::BotInstallationRef installation, GetCsrfTokenParameters parameters,
-    CallControl control, ValueLimits value_limits)
+    bot_model::BotInstallationRef installation,
+    GetCsrfTokenParameters parameters, CallControl control,
+    ValueLimits value_limits)
     : installation(std::move(installation)), parameters(std::move(parameters)),
       control(std::move(control)), value_limits(value_limits) {}
 void GetCsrfTokenRequest::validate() const {
@@ -1689,7 +1691,7 @@ void GetCsrfTokenRequest::validate() const {
   validate_service_fields(*this);
 }
 GetCredentialsRequest::GetCredentialsRequest(
-    domain::BotInstallationRef installation,
+    bot_model::BotInstallationRef installation,
     GetCredentialsParameters parameters, CallControl control,
     ValueLimits value_limits)
     : installation(std::move(installation)), parameters(std::move(parameters)),
@@ -1699,7 +1701,7 @@ void GetCredentialsRequest::validate() const {
   service_projection(budget, *this, false);
   validate_service_fields(*this);
 }
-GetStatusRequest::GetStatusRequest(domain::BotInstallationRef installation,
+GetStatusRequest::GetStatusRequest(bot_model::BotInstallationRef installation,
                                    GetStatusParameters parameters,
                                    CallControl control,
                                    ValueLimits value_limits)
@@ -1711,7 +1713,7 @@ void GetStatusRequest::validate() const {
   validate_service_fields(*this);
 }
 GetVersionInfoRequest::GetVersionInfoRequest(
-    domain::BotInstallationRef installation,
+    bot_model::BotInstallationRef installation,
     GetVersionInfoParameters parameters, CallControl control,
     ValueLimits value_limits)
     : installation(std::move(installation)), parameters(std::move(parameters)),
@@ -1722,8 +1724,9 @@ void GetVersionInfoRequest::validate() const {
   validate_service_fields(*this);
 }
 CanSendImageRequest::CanSendImageRequest(
-    domain::BotInstallationRef installation, CanSendImageParameters parameters,
-    CallControl control, ValueLimits value_limits)
+    bot_model::BotInstallationRef installation,
+    CanSendImageParameters parameters, CallControl control,
+    ValueLimits value_limits)
     : installation(std::move(installation)), parameters(std::move(parameters)),
       control(std::move(control)), value_limits(value_limits) {}
 void CanSendImageRequest::validate() const {
@@ -1732,8 +1735,9 @@ void CanSendImageRequest::validate() const {
   validate_service_fields(*this);
 }
 CanSendRecordRequest::CanSendRecordRequest(
-    domain::BotInstallationRef installation, CanSendRecordParameters parameters,
-    CallControl control, ValueLimits value_limits)
+    bot_model::BotInstallationRef installation,
+    CanSendRecordParameters parameters, CallControl control,
+    ValueLimits value_limits)
     : installation(std::move(installation)), parameters(std::move(parameters)),
       control(std::move(control)), value_limits(value_limits) {}
 void CanSendRecordRequest::validate() const {
@@ -1741,7 +1745,7 @@ void CanSendRecordRequest::validate() const {
   service_projection(budget, *this, false);
   validate_service_fields(*this);
 }
-SetRestartRequest::SetRestartRequest(domain::BotInstallationRef installation,
+SetRestartRequest::SetRestartRequest(bot_model::BotInstallationRef installation,
                                      SetRestartParameters parameters,
                                      CallControl control,
                                      ValueLimits value_limits)
@@ -1752,7 +1756,7 @@ void SetRestartRequest::validate() const {
   service_projection(budget, *this, false);
   validate_service_fields(*this);
 }
-CleanCacheRequest::CleanCacheRequest(domain::BotInstallationRef installation,
+CleanCacheRequest::CleanCacheRequest(bot_model::BotInstallationRef installation,
                                      CleanCacheParameters parameters,
                                      CallControl control,
                                      ValueLimits value_limits)

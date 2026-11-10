@@ -5,12 +5,12 @@
 #include "onebot11/bot/response_parser.hpp"
 
 namespace obcx::onebot11::bot::standard::detail {
-namespace domain = obcx::bot;
+namespace bot_model = obcx::bot;
 
 LoginCoordinator::LoginCoordinator(
     std::shared_ptr<core::SelfIdentityCache> identity,
-    std::shared_ptr<const core::PlatformDomainBinding> binding,
-    domain::BotInstallationRef installation)
+    std::shared_ptr<const core::PlatformAdapter> binding,
+    bot_model::BotInstallationRef installation)
     : identity_(std::move(identity)), binding_(std::move(binding)),
       installation_(std::move(installation)) {
   if (!identity_ || !binding_)
@@ -34,10 +34,10 @@ auto LoginCoordinator::send(core::OneBot11TransportCapability &transport,
       std::move(call), identity_, std::move(origin));
 }
 auto LoginCoordinator::publish(const core::SelfIdentityOrigin &origin,
-                               const domain::SelfInfo &info)
+                               const bot_model::SelfInfo &info)
     -> core::SelfObservationResult {
   try {
-    domain::binding::validate_native_self(binding_->codec(), info);
+    bot_model::binding::validate_native_self(binding_->codec(), info);
     if (info.user.installation != installation_)
       return {core::SelfObservationStatus::InvalidIdentity, std::nullopt};
   } catch (...) {
@@ -50,9 +50,9 @@ auto LoginCoordinator::publish_completed(const core::SelfIdentityOrigin &origin,
     -> core::SelfObservationResult {
   if (value.installation != installation_ || value.user_id <= 0)
     return {core::SelfObservationStatus::InvalidIdentity, std::nullopt};
-  domain::UserRef user{value.installation,
-                       binding_->codec().make<domain::UserId>(
-                           "user", {std::to_string(value.user_id)})};
+  bot_model::UserRef user{value.installation,
+                          binding_->codec().make<bot_model::UserId>(
+                              "user", {std::to_string(value.user_id)})};
   binding_->codec().validate(user);
   // Standard nickname text is not restricted to SelfInfo's identifier shape.
   // Check only that optional projection before copying it. A valid native
@@ -60,16 +60,16 @@ auto LoginCoordinator::publish_completed(const core::SelfIdentityOrigin &origin,
   // its profile cannot be cached; same-account failure retains the snapshot.
   try {
     if (!value.nickname.empty())
-      domain::detail::validate_identifier(value.nickname, "self display_name",
-                                          2048);
+      bot_model::detail::validate_identifier(value.nickname,
+                                             "self display_name", 2048);
   } catch (const std::invalid_argument &) {
     return identity_->observe_user(origin, std::move(user));
   }
-  domain::SelfInfo info{.user = std::move(user),
-                        .display_name = value.nickname.empty()
-                                            ? std::nullopt
-                                            : std::optional{value.nickname},
-                        .username = std::nullopt};
+  bot_model::SelfInfo info{.user = std::move(user),
+                           .display_name = value.nickname.empty()
+                                               ? std::nullopt
+                                               : std::optional{value.nickname},
+                           .username = std::nullopt};
   return publish(origin, info);
 }
 auto LoginCoordinator::refresh(
@@ -96,28 +96,28 @@ auto LoginCoordinator::run_refresh(
              const core::SelfIdentityOrigin &source) {
         const auto parsed = parse_onebot11_operation_response(response, false);
         if (!parsed.ok())
-          return core::operation_detail::provider_failure<domain::SelfInfo>(
+          return core::operation_detail::provider_failure<bot_model::SelfInfo>(
               parsed);
         try {
           const auto &data = core::operation_detail::parsed_value(parsed);
           const auto id = adapter::onebot11::numeric_identity(data, "user_id");
           if (!id)
-            return core::operation_detail::malformed_read<domain::SelfInfo>(
+            return core::operation_detail::malformed_read<bot_model::SelfInfo>(
                 "OneBot self ID is missing");
           auto name = core::operation_detail::optional_string(data, "nickname");
-          domain::SelfInfo info{
+          bot_model::SelfInfo info{
               .user = {self->installation_,
-                       self->binding_->codec().make<domain::UserId>("user",
-                                                                    {*id})},
+                       self->binding_->codec().make<bot_model::UserId>("user",
+                                                                       {*id})},
               .display_name = name.empty() ? std::nullopt : std::optional{name},
               .username = std::nullopt};
           const auto publication = self->publish(source, info);
           if (publication.accepted())
-            return domain::BotOperationResult<domain::SelfInfo>::success(
+            return bot_model::BotOperationResult<bot_model::SelfInfo>::success(
                 std::move(info));
           return network::onebot11::retired_profile();
         } catch (...) {
-          return core::operation_detail::malformed_read<domain::SelfInfo>(
+          return core::operation_detail::malformed_read<bot_model::SelfInfo>(
               "OneBot self profile is invalid");
         }
       });

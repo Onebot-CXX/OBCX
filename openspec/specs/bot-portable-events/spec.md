@@ -5,7 +5,7 @@ Define typed received-message, sender, mention, attachment and reply evidence fo
 
 ## Requirements
 
-### Requirement: Ordinary message consumers receive typed domain events
+### Requirement: Ordinary message consumers receive typed bot events
 The common SDK SHALL expose MessageReceived with an exact MessageRef, a typed Sender, optional native sent_at, received_at, ReceivedBody, optional ReplyInfo and optional scoped MediaGroupRef. Ordinary consumers MUST NOT need platform raw JSON, CQ decoding, Telegram entity offsets or a platform-specific send target to read or reply to a message. Platform-specific information needed by current consumers SHALL use named bounded typed observations or explicit extension views. Normalization MUST preserve the genuine source observation identity without requiring a historical event archive or compatibility projection.
 
 #### Scenario: Actor replies to a QQ or Telegram event
@@ -147,5 +147,5 @@ Current configured references SHALL be resolved by the owning platform codec usi
 - **THEN** current scope resolution preserves that coverage without parsing IDs in actor business code or broadening an exact-topic ACL
 
 #### Scenario: SDK adoption affects persisted identity representation
-- **WHEN** a consumer adopts opaque domain references
+- **WHEN** a consumer adopts opaque bot references
 - **THEN** adoption alone does not authorize rewriting existing source/session/delivery keys or replaying completed or uncertain effects

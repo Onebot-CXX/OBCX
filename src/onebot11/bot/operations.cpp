@@ -24,7 +24,7 @@
 #include "network/image_fetch.hpp"
 #include "onebot11/adapter/message_converter.hpp"
 #include "onebot11/adapter/native_fields.hpp"
-#include "onebot11/bot/domain_binding.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 #include <atomic>
 #include <boost/asio/cancel_at.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -607,7 +607,7 @@ template <StandardSendMessage Request>
 using SendMessageOutcome =
     standard::ExecutionOutcome<typename SendMessageOperation<Request>::Result>;
 template <StandardSendMessage Request> struct PreparedSendMessage {
-  std::shared_ptr<const PlatformDomainBinding> binding_owner;
+  std::shared_ptr<const PlatformAdapter> binding_owner;
   const Request request;
   std::shared_ptr<OneBot11TransportCapability> transport_owner;
   std::shared_ptr<SelfIdentityCache> identity_owner;
@@ -909,7 +909,7 @@ template <OrdinaryQuery Request>
 using QueryOutcome =
     standard::ExecutionOutcome<typename QueryOperation<Request>::Result>;
 template <OrdinaryQuery Request> struct PreparedQuery {
-  std::shared_ptr<const PlatformDomainBinding> binding_owner;
+  std::shared_ptr<const PlatformAdapter> binding_owner;
   const Request request;
   std::shared_ptr<OneBot11TransportCapability> transport_owner;
   std::shared_ptr<SelfIdentityCache> identity_owner;
@@ -1269,7 +1269,7 @@ template <OrdinaryService Request>
 using ServiceOutcome =
     standard::ExecutionOutcome<typename ServiceOperation<Request>::Result>;
 template <OrdinaryService Request> struct PreparedService {
-  std::shared_ptr<const PlatformDomainBinding> binding_owner;
+  std::shared_ptr<const PlatformAdapter> binding_owner;
   const Request request;
   std::shared_ptr<OneBot11TransportCapability> transport_owner;
   std::shared_ptr<SelfIdentityCache> identity_owner;
@@ -1522,7 +1522,7 @@ template <OrdinaryMedia Request>
 using MediaOutcome =
     standard::ExecutionOutcome<typename MediaOperation<Request>::Result>;
 template <OrdinaryMedia Request> struct PreparedMedia {
-  std::shared_ptr<const PlatformDomainBinding> binding_owner;
+  std::shared_ptr<const PlatformAdapter> binding_owner;
   const standard_detail::MediaResultContext context;
   std::shared_ptr<OneBot11TransportCapability> transport_owner;
   std::shared_ptr<SelfIdentityCache> identity_owner;
@@ -2184,7 +2184,7 @@ auto serialize_mutation_parameters(const bot::Json &parameters,
 class OneBot11OperationsComponent::Endpoint final {
 public:
   explicit Endpoint(std::string installation_id,
-                    std::shared_ptr<const PlatformDomainBinding> binding,
+                    std::shared_ptr<const PlatformAdapter> binding,
                     std::chrono::milliseconds action_timeout)
       : installation_{.installation_id = std::move(installation_id),
                       .surface = bot::SurfaceId{"onebot11.qq"}},
@@ -2220,13 +2220,13 @@ public:
   void configure_received_media(OperationRegistry &operations,
                                 std::shared_ptr<BotEventCapability> ingress) {
     auto binding =
-        std::dynamic_pointer_cast<const onebot11::bot::QqDomainBinding>(
+        std::dynamic_pointer_cast<const onebot11::bot::QqPlatformAdapter>(
             binding_);
     if (!binding || received_media_)
       throw BotComponentRuntimeError("QQ live media requires one QQ binding");
     auto store = std::make_shared<onebot11::bot::detail::ReceivedMediaStore>(
         installation_, self_identity_, std::move(ingress), binding,
-        bot::detail::domain_maximum_items, bot::detail::domain_maximum_bytes);
+        bot::detail::bot_maximum_items, bot::detail::bot_maximum_bytes);
     operations.set_live_message_normalizer(
         [store, binding](
             const bot::BotInstallationRef &installation,
@@ -2415,12 +2415,11 @@ public:
     }
     try {
       const auto &document = parsed_value(parsed);
-      Result result{
-          bot::UserRef{installation_,
-                       codec().make<bot::UserId>("user", {*user_id})},
-          optional_string(document, "nickname"),
-          optional_string(document, "sex"),
-          bot::detail::domain_decode<std::int64_t>(document.at("age"))};
+      Result result{bot::UserRef{installation_,
+                                 codec().make<bot::UserId>("user", {*user_id})},
+                    optional_string(document, "nickname"),
+                    optional_string(document, "sex"),
+                    bot::detail::bot_decode<std::int64_t>(document.at("age"))};
       result.validate();
       co_return bot::BotOperationResult<Result>::success(std::move(result));
     } catch (const std::exception &) {
@@ -2515,7 +2514,7 @@ public:
       auto response = co_await boost::asio::co_spawn(
           executor, transport().send_action(std::move(payload), echo),
           boost::asio::cancel_at(deadline, boost::asio::use_awaitable));
-      auto raw = response.size() <= bot::detail::domain_maximum_bytes
+      auto raw = response.size() <= bot::detail::bot_maximum_bytes
                      ? bot::Json::parse(response, nullptr, false)
                      : bot::Json{};
       if (raw.is_object() && raw.contains("data") && raw["data"].is_object()) {
@@ -2764,12 +2763,12 @@ public:
     validate_native_image_file(file);
     // Reuse the existing common wire/node/depth ceilings and configured
     // action timeout, not new configuration defaults or memory/RSS policy.
-    const standard::CallLimits limits{bot::detail::domain_maximum_bytes,
-                                      bot::detail::domain_maximum_bytes,
+    const standard::CallLimits limits{bot::detail::bot_maximum_bytes,
+                                      bot::detail::bot_maximum_bytes,
                                       action_timeout_};
-    const standard::ValueLimits values{bot::detail::domain_maximum_bytes,
-                                       bot::detail::domain_maximum_items, 32,
-                                       bot::detail::domain_maximum_bytes};
+    const standard::ValueLimits values{bot::detail::bot_maximum_bytes,
+                                       bot::detail::bot_maximum_items, 32,
+                                       bot::detail::bot_maximum_bytes};
     auto call =
         std::make_shared<standard_detail::StandardCallState>(limits, deadline);
     const auto echo = next_echo();
@@ -2855,7 +2854,7 @@ public:
                                scope.components[0], segments, echo)
                          : protocol().serialize_send_private_message_request(
                                scope.components[0], segments, echo);
-      if (payload.size() > bot::detail::domain_maximum_bytes)
+      if (payload.size() > bot::detail::bot_maximum_bytes)
         throw std::invalid_argument("QQ send envelope exceeded");
       if (std::chrono::steady_clock::now() >= deadline)
         throw boost::system::system_error(boost::asio::error::operation_aborted,
@@ -2868,7 +2867,7 @@ public:
       auto parsed = parse_onebot11_operation_response(response, true);
       // Recover independently verifiable IDs even when the surrounding status
       // envelope is malformed. Association is then explicitly unknown.
-      auto raw = response.size() <= bot::detail::domain_maximum_bytes
+      auto raw = response.size() <= bot::detail::bot_maximum_bytes
                      ? bot::Json::parse(response, nullptr, false)
                      : bot::Json{};
       if (raw.is_object() && raw.contains("data") && raw["data"].is_object()) {
@@ -2981,7 +2980,7 @@ public:
   struct ForwardQueryWork {
     onebot11::bot::ObserveOneBotForwardMessageRequest request;
     bot::BotInstallationRef installation;
-    std::shared_ptr<const onebot11::bot::QqDomainBinding> binding;
+    std::shared_ptr<const onebot11::bot::QqPlatformAdapter> binding;
     std::shared_ptr<adapter::onebot11::ProtocolAdapter> protocol;
     std::shared_ptr<onebot11::bot::detail::ReceivedMediaStore> media;
     std::shared_ptr<OneBot11TransportCapability> transport;
@@ -3033,7 +3032,7 @@ public:
       return ready_forward(bot::failed_operation<Result>(
           Code::InvalidRequest, "QQ forward query installation mismatch"));
     auto binding =
-        std::dynamic_pointer_cast<const onebot11::bot::QqDomainBinding>(
+        std::dynamic_pointer_cast<const onebot11::bot::QqPlatformAdapter>(
             binding_);
     auto facade =
         std::dynamic_pointer_cast<OneBot11TransportCapability>(transport_);
@@ -3043,12 +3042,12 @@ public:
       return ready_forward(bot::failed_operation<Result>(
           Code::CacheUnavailable, "QQ forward query origin unavailable"));
     auto owned = request;
-    const standard::CallLimits limits{bot::detail::domain_maximum_bytes,
-                                      bot::detail::domain_maximum_bytes,
+    const standard::CallLimits limits{bot::detail::bot_maximum_bytes,
+                                      bot::detail::bot_maximum_bytes,
                                       action_timeout_};
-    const standard::ValueLimits values{bot::detail::domain_maximum_bytes,
-                                       bot::detail::domain_maximum_items, 32,
-                                       bot::detail::domain_maximum_bytes};
+    const standard::ValueLimits values{bot::detail::bot_maximum_bytes,
+                                       bot::detail::bot_maximum_items, 32,
+                                       bot::detail::bot_maximum_bytes};
     auto call =
         std::make_shared<standard_detail::StandardCallState>(limits, deadline);
     const auto echo = next_echo();
@@ -3164,13 +3163,13 @@ public:
       // back.
       const bool standard = !data.contains("messages");
       const auto &nodes = data.at(standard ? "message" : "messages");
-      bot::detail::validate_domain_wire(nodes);
+      bot::detail::validate_bot_wire(nodes);
       if (!nodes.is_array() || nodes.size() > 99)
         co_return malformed_read<Result>("QQ forward node limit exceeded");
       if (standard) {
         // Bound the entire borrowed tree and cumulative CQ expansion before
         // copying any node content into the synthetic normalization event.
-        bot::detail::DomainWireBudget expansion;
+        bot::detail::BotWireBudget expansion;
         expansion.inspect(nodes);
         const auto validate_segment = [](const bot::Json &segment) {
           if (!segment.is_object() || !segment.at("type").is_string() ||
@@ -3310,7 +3309,7 @@ public:
             normalized.body[position] = work->media->retain_forward_media(
                 request.forward.source, index, ordinal, segment.type,
                 actual_url,
-                onebot11::bot::QqDomainBinding::attachment_metadata(
+                onebot11::bot::QqPlatformAdapter::attachment_metadata(
                     segment.type, segment.data),
                 work->origin);
           }
@@ -3449,12 +3448,12 @@ public:
       if (!facade)
         return ready_media_read(unavailable<bot::MediaBlob>(
             "QQ file read requires origin-aware native transport"));
-      const standard::CallLimits limits{bot::detail::domain_maximum_bytes,
-                                        bot::detail::domain_maximum_bytes,
+      const standard::CallLimits limits{bot::detail::bot_maximum_bytes,
+                                        bot::detail::bot_maximum_bytes,
                                         action_timeout_};
-      const standard::ValueLimits values{bot::detail::domain_maximum_bytes,
-                                         bot::detail::domain_maximum_items, 32,
-                                         bot::detail::domain_maximum_bytes};
+      const standard::ValueLimits values{bot::detail::bot_maximum_bytes,
+                                         bot::detail::bot_maximum_items, 32,
+                                         bot::detail::bot_maximum_bytes};
       auto call = std::make_shared<standard_detail::StandardCallState>(
           limits, deadline);
       const auto echo = next_echo();
@@ -3906,7 +3905,7 @@ private:
     return binding_->codec();
   }
   bot::BotInstallationRef installation_;
-  std::shared_ptr<const PlatformDomainBinding> binding_;
+  std::shared_ptr<const PlatformAdapter> binding_;
   std::chrono::milliseconds action_timeout_;
   using ReplyChannel = boost::asio::experimental::concurrent_channel<void(
       boost::system::error_code, bot::BotOperationResult<bot::ReplyInfo>)>;
@@ -6377,7 +6376,7 @@ auto OneBot11OperationsComponent::Endpoint::execute_standard_get_record(
 OneBot11OperationsComponent::OneBot11OperationsComponent(
     std::string installation_id, boost::asio::any_io_executor executor,
     std::chrono::milliseconds self_refresh_interval,
-    std::shared_ptr<const PlatformDomainBinding> binding,
+    std::shared_ptr<const PlatformAdapter> binding,
     std::chrono::milliseconds action_timeout)
     : endpoint_(std::make_shared<Endpoint>(std::move(installation_id), binding,
                                            action_timeout)),
@@ -6435,13 +6434,13 @@ void OneBot11OperationsComponent::prepare(const CapabilityRegistry &registry) {
     // operations-only/custom-transport recipes valid; do not invent an ingress.
     auto events =
         registry.get<standard::StandardEventCapabilityV1>(standard_events_id);
-    // Explicit existing domain ceilings, not new configuration defaults.
+    // Explicit existing bot ceilings, not new configuration defaults.
     // Tighter transport read bounds remain independently enforced.
     const standard::ValueLimits event_limits{
-        .maximum_bytes = bot::detail::domain_maximum_bytes,
-        .maximum_nodes = bot::detail::domain_maximum_items,
+        .maximum_bytes = bot::detail::bot_maximum_bytes,
+        .maximum_nodes = bot::detail::bot_maximum_items,
         .maximum_depth = 32,
-        .maximum_text_bytes = bot::detail::domain_maximum_bytes};
+        .maximum_text_bytes = bot::detail::bot_maximum_bytes};
     standard_detail::StandardEventAccess::configure(
         *events, endpoint_->installation(), self_identity_, event_limits);
     native->set_standard_events(std::move(events));

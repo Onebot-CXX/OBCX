@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/actor/actor_commands.hpp"
-#include "core/bot/domain_events.hpp"
+#include "core/bot/bot_events.hpp"
 #include "core/bot/operation_result.hpp"
 
 namespace obcx::command {

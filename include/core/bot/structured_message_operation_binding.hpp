@@ -94,7 +94,7 @@ auto invoke_message_handler(
                                                          context.envelope);
               try {
                 recovery.outcome(*projected);
-              } catch (const bot::detail::DomainBudgetExceeded &) {
+              } catch (const bot::detail::BotBudgetExceeded &) {
                 // A bounded independently scoped prefix remains known.
               }
               recovered = recovery.finish();

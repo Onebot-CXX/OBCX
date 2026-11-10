@@ -42,8 +42,7 @@ struct ReadOneBotFileRequest {
     obcx::bot::detail::validate_utf8(file_id);
     if (file_id.find("://") != std::string::npos || file_id.starts_with("//"))
       throw std::invalid_argument("QQ file identifier is not a URL");
-    if (!maximum_bytes ||
-        maximum_bytes > obcx::bot::detail::domain_maximum_bytes)
+    if (!maximum_bytes || maximum_bytes > obcx::bot::detail::bot_maximum_bytes)
       throw std::invalid_argument("invalid QQ file read byte limit");
   }
 };
@@ -72,16 +71,16 @@ struct PokeOneBotGroupRequest {
 } // namespace obcx::onebot11::bot
 namespace obcx::bot {
 template <>
-struct detail::DomainRecordPreflight<onebot11::bot::ReadOneBotFileRequest> {
+struct detail::BotRecordPreflight<onebot11::bot::ReadOneBotFileRequest> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_text(d, "file_id", 1024, false);
     (void)detail::bounded_unsigned(d.at("maximum_bytes"),
-                                   detail::domain_maximum_bytes);
+                                   detail::bot_maximum_bytes);
   }
 };
-OBCX_DOMAIN_FIELDS(onebot11::bot::ReadOneBotFileRequest,
-                   OBCX_DOMAIN_FIELD(conversation), OBCX_DOMAIN_FIELD(file_id),
-                   OBCX_DOMAIN_FIELD(maximum_bytes));
+OBCX_BOT_FIELDS(onebot11::bot::ReadOneBotFileRequest,
+                OBCX_BOT_FIELD(conversation), OBCX_BOT_FIELD(file_id),
+                OBCX_BOT_FIELD(maximum_bytes));
 template <>
 struct OperationTraits<onebot11::bot::ReadOneBotFileRequest>
     : OperationContract<onebot11::bot::ReadOneBotFileRequest, MediaBlob,
@@ -102,15 +101,15 @@ struct OperationTraits<onebot11::bot::ReadOneBotFileRequest>
   }
 };
 template <>
-struct detail::DomainRecordPreflight<
+struct detail::BotRecordPreflight<
     onebot11::bot::SetOneBotMessageEmojiLikeRequest> {
   static void validate(const Json &d) {
     onebot11::bot::detail::preflight_text(d, "emoji_id", 20, false);
   }
 };
-OBCX_DOMAIN_FIELDS(onebot11::bot::SetOneBotMessageEmojiLikeRequest,
-                   OBCX_DOMAIN_FIELD(message), OBCX_DOMAIN_FIELD(emoji_id),
-                   OBCX_DOMAIN_FIELD(set));
+OBCX_BOT_FIELDS(onebot11::bot::SetOneBotMessageEmojiLikeRequest,
+                OBCX_BOT_FIELD(message), OBCX_BOT_FIELD(emoji_id),
+                OBCX_BOT_FIELD(set));
 template <>
 struct OperationTraits<onebot11::bot::SetOneBotMessageEmojiLikeRequest>
     : OperationContract<onebot11::bot::SetOneBotMessageEmojiLikeRequest,
@@ -130,8 +129,8 @@ struct OperationTraits<onebot11::bot::SetOneBotMessageEmojiLikeRequest>
       throw std::invalid_argument("QQ result scope mismatch");
   }
 };
-OBCX_DOMAIN_FIELDS(onebot11::bot::GetOneBotUserInfoRequest,
-                   OBCX_DOMAIN_FIELD(user), OBCX_DOMAIN_FIELD(no_cache));
+OBCX_BOT_FIELDS(onebot11::bot::GetOneBotUserInfoRequest, OBCX_BOT_FIELD(user),
+                OBCX_BOT_FIELD(no_cache));
 template <>
 struct OperationTraits<onebot11::bot::GetOneBotUserInfoRequest>
     : OperationContract<onebot11::bot::GetOneBotUserInfoRequest,
@@ -150,9 +149,9 @@ struct OperationTraits<onebot11::bot::GetOneBotUserInfoRequest>
       throw std::invalid_argument("QQ result scope mismatch");
   }
 };
-OBCX_DOMAIN_FIELDS(onebot11::bot::GetOneBotGroupMemberRequest,
-                   OBCX_DOMAIN_FIELD(target), OBCX_DOMAIN_FIELD(user),
-                   OBCX_DOMAIN_FIELD(no_cache));
+OBCX_BOT_FIELDS(onebot11::bot::GetOneBotGroupMemberRequest,
+                OBCX_BOT_FIELD(target), OBCX_BOT_FIELD(user),
+                OBCX_BOT_FIELD(no_cache));
 template <>
 struct OperationTraits<onebot11::bot::GetOneBotGroupMemberRequest>
     : OperationContract<onebot11::bot::GetOneBotGroupMemberRequest,
@@ -172,8 +171,8 @@ struct OperationTraits<onebot11::bot::GetOneBotGroupMemberRequest>
       throw std::invalid_argument("QQ result scope mismatch");
   }
 };
-OBCX_DOMAIN_FIELDS(onebot11::bot::ResolveOneBotGroupFileRequest,
-                   OBCX_DOMAIN_FIELD(media));
+OBCX_BOT_FIELDS(onebot11::bot::ResolveOneBotGroupFileRequest,
+                OBCX_BOT_FIELD(media));
 template <>
 struct OperationTraits<onebot11::bot::ResolveOneBotGroupFileRequest>
     : OperationContract<onebot11::bot::ResolveOneBotGroupFileRequest,
@@ -192,8 +191,8 @@ struct OperationTraits<onebot11::bot::ResolveOneBotGroupFileRequest>
       throw std::invalid_argument("QQ result scope mismatch");
   }
 };
-OBCX_DOMAIN_FIELDS(onebot11::bot::ResolveOneBotPrivateFileRequest,
-                   OBCX_DOMAIN_FIELD(media));
+OBCX_BOT_FIELDS(onebot11::bot::ResolveOneBotPrivateFileRequest,
+                OBCX_BOT_FIELD(media));
 template <>
 struct OperationTraits<onebot11::bot::ResolveOneBotPrivateFileRequest>
     : OperationContract<onebot11::bot::ResolveOneBotPrivateFileRequest,
@@ -212,8 +211,8 @@ struct OperationTraits<onebot11::bot::ResolveOneBotPrivateFileRequest>
       throw std::invalid_argument("QQ result scope mismatch");
   }
 };
-OBCX_DOMAIN_FIELDS(onebot11::bot::PokeOneBotGroupRequest,
-                   OBCX_DOMAIN_FIELD(target), OBCX_DOMAIN_FIELD(user));
+OBCX_BOT_FIELDS(onebot11::bot::PokeOneBotGroupRequest, OBCX_BOT_FIELD(target),
+                OBCX_BOT_FIELD(user));
 template <>
 struct OperationTraits<onebot11::bot::PokeOneBotGroupRequest>
     : OperationContract<onebot11::bot::PokeOneBotGroupRequest,

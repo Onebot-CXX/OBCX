@@ -12,9 +12,9 @@ See [OneBot media access](onebot-image-access.md) for ordinary bounded
 of the private native-image/URL actor example. Provider paths and detached query
 selectors do not grant common media-read authority.
 
-## Domain identity persistence
+## Bot identity persistence
 
-See [domain identity encoding and persistence](domain-identities.md) for the
+See [bot identity encoding and persistence](bot-identities.md) for the
 version-1 wire format, full installation/conversation scope, fixed examples,
 and the distinction between structural restoration and live authority.
 
@@ -23,7 +23,7 @@ and the distinction between structural restoration and live authority.
 See [cached self identity](self-identity.md) for the common QQ/Telegram
 `GetSelfRequest` API, its refresh configuration, and installation lifecycle.
 
-## Domain migration SDK floor
+## Bot migration SDK floor
 
 SDK 2.7.0 removes old messaging DTOs/facades, the QQ cache-only login projection,
 CardView, archive decoders/imports and generic reference conversion. Current
@@ -32,7 +32,7 @@ Store schema 5 persists typed messages only; Chat/Bridge consume those snapshots
 Bridge schema 5 removes old scalar member/publication/route projections, while
 preserving scoped receipts, retries and command fences. Old database schemas are
 rejected without runtime migration. The standalone Python offline utility is
-operator-run only; see [the coordinated cutover](domain-sdk-cutover.md).
+operator-run only; see [the coordinated cutover](bot-sdk-cutover.md).
 
 The maintained Message Store, Bridge, Chat LLM, ExHentai, template and QQ
 forward probe sources now require SDK/core **>=2.7.0,<3.0.0** in both package
@@ -54,7 +54,7 @@ and will test after deployment. Loader, full ABI, media and recovery acceptance
 remain unexecuted, not passed. Older frozen SDKs remain immutable retained
 products; do not alter their manifests or weaken requirements to reuse them.
 Core/SDK replacement and restart remain separate operations, not actor hot reload. See the
-[coordinated cutover inventory](domain-sdk-cutover.md) for the six package
+[coordinated cutover inventory](bot-sdk-cutover.md) for the six package
 versions, public API migration, owner-specific data boundaries and matching
 backup/rollback gates. The development registry is not a binary release.
 

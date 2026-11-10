@@ -2,7 +2,7 @@
 
 #include "common/message_type.hpp"
 #include "core/bot/bot_component_runtime.hpp"
-#include "core/bot/domain_events.hpp"
+#include "core/bot/bot_events.hpp"
 #include "core/bot/self_identity_cache.hpp"
 
 #include <boost/asio/any_io_executor.hpp>

@@ -2,7 +2,7 @@
 
 #include "core/actor/actor_commands.hpp"
 #include "core/actor/command_availability.hpp"
-#include "core/bot/domain_events.hpp"
+#include "core/bot/bot_events.hpp"
 #include "core/bot/operation_result.hpp"
 #include "core/bot/references.hpp"
 

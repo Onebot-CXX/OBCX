@@ -1,14 +1,15 @@
-#include "telegram/bot/domain_send.hpp"
+#include "telegram/bot/bot_send.hpp"
 #include "core/bot/bounded_file_reader.hpp"
 #include "core/bot/message_operation_binding.hpp"
 #include "network/http_client.hpp"
 #include "network/image_fetch.hpp"
-#include "telegram/bot/domain_binding.hpp"
+#include "telegram/bot/platform_adapter.hpp"
 #include "telegram/bot/response_parser.hpp"
 #include <algorithm>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
+#include <fmt/format.h>
 #include <set>
 
 namespace obcx::telegram::bot {
@@ -268,8 +269,8 @@ struct Execution {
     evidence.inspect(d::GatewayCodec<d::SendOutcome>::encode(
         d::send_failure(d::detail::unknown_send_error(), {}, true)));
   }
-  d::detail::DomainWireBudget evidence;
-  d::detail::DomainWireBudget recovery_work;
+  d::detail::BotWireBudget evidence;
+  d::detail::BotWireBudget recovery_work;
   std::set<std::string> seen;
   std::vector<d::SendOutputDetails> confirmed;
   std::optional<d::BotOperationError> error;
@@ -317,7 +318,7 @@ bool retain_send_evidence(const d::ConversationRef &target,
     d::SendOutputDetails detail{message, std::nullopt, {}};
     auto charge = state.evidence;
     charge.inspect(d::Json(message));
-    charge.inspect(d::detail::domain_encode(detail));
+    charge.inspect(d::detail::bot_encode(detail));
     charge.nodes(10);
     state.confirmed.push_back(std::move(detail));
     state.evidence = charge;
@@ -335,12 +336,12 @@ bool retain_send_evidence(const d::ConversationRef &target,
     if (auto media = native_media(target.installation, candidate)) {
       d::PublishedMedia published{media->media, media->identity, std::nullopt};
       charge = state.evidence;
-      charge.inspect(d::detail::domain_encode(published));
+      charge.inspect(d::detail::bot_encode(published));
       state.confirmed.back().reusable_media.push_back(std::move(published));
       state.evidence = charge;
     }
     return true;
-  } catch (const d::detail::DomainBudgetExceeded &) {
+  } catch (const d::detail::BotBudgetExceeded &) {
     throw;
   } catch (const std::exception &) {
     return false;
@@ -350,7 +351,7 @@ bool retain_send_evidence(const d::ConversationRef &target,
 // contradictory or malformed rejection must not claim definite non-submission.
 // Check borrowed bounds before that parser copies a result or diagnostic.
 void validate_send_envelope(const d::Json &document) {
-  d::detail::validate_domain_wire(document);
+  d::detail::validate_bot_wire(document);
   if (!document.is_object() || !document.contains("ok") ||
       !document.at("ok").is_boolean())
     return;
@@ -491,13 +492,14 @@ asio::awaitable<void> run(const d::SendMessageRequest &r,
       if (cancellation.cancelled() != asio::cancellation_type::none)
         throw std::runtime_error("send cancelled");
       state.in_flight = true;
+      const auto method = step.parameters.value("method", std::string{});
       auto response = step.files.empty()
-                          ? co_await transport.send_domain_request(
+                          ? co_await transport.send_bot_request(
                                 std::move(step.parameters), step.files)
                           : co_await uploader->upload(
                                 std::move(step.parameters), step.files);
-      if (response.size() > d::detail::domain_maximum_bytes)
-        throw d::detail::DomainBudgetExceeded{};
+      if (response.size() > d::detail::bot_maximum_bytes)
+        throw d::detail::BotBudgetExceeded{};
       const auto document = d::Json::parse(response, nullptr, false);
       const auto *value = document.is_object() && document.contains("result")
                               ? &document.at("result")
@@ -506,6 +508,14 @@ asio::awaitable<void> run(const d::SendMessageRequest &r,
                                 ? value->is_object()
                                 : value->is_array() &&
                                       value->size() == step.blocks.size());
+      std::string mismatch;
+      if (!value)
+        mismatch = "the response has no result";
+      else if (!full)
+        mismatch =
+            fmt::format("expected {} message(s), the response contains {}",
+                        step.blocks.size(),
+                        value->is_array() ? value->size() : std::size_t{1});
       const auto begin = state.confirmed.size();
       // Recover only the direct result object/array, never nested replies,
       // updates or arbitrary document identities. No candidate-list copy.
@@ -525,28 +535,44 @@ asio::awaitable<void> run(const d::SendMessageRequest &r,
         state.in_flight = false;
         co_return;
       }
+      if (mismatch.empty() &&
+          state.confirmed.size() - begin != step.blocks.size())
+        mismatch = fmt::format(
+            "only {} of {} returned message(s) could be matched to the target "
+            "chat",
+            state.confirmed.size() - begin, step.blocks.size());
       if (full && state.confirmed.size() - begin == step.blocks.size()) {
         for (std::size_t n = 0; n < step.blocks.size(); ++n) {
           const auto &block = r.body[step.blocks[n]];
           const auto &native = value->is_array() ? value->at(n) : *value;
+          const auto mismatched = [&](std::string reason) {
+            full = false;
+            if (mismatch.empty())
+              mismatch = fmt::format("message {} {}", n + 1, reason);
+          };
           std::visit(
               [&](const auto &input) {
                 using B = std::decay_t<decltype(input)>;
                 if constexpr (std::same_as<B, d::RichText>) {
                   if (!native.contains("text") ||
-                      !native.at("text").is_string() ||
-                      !matches_sent_text(
-                          native.at("text").get_ref<const std::string &>(),
-                          native_text(input, 4096).text))
-                    full = false;
+                      !native.at("text").is_string())
+                    mismatched("has no text");
+                  else if (!matches_sent_text(
+                               native.at("text").get_ref<const std::string &>(),
+                               native_text(input, 4096).text))
+                    mismatched("text differs from what was sent");
                 } else {
                   const auto kind = media_type(block);
-                  if (!native.contains(kind) ||
-                      !matches_sent_text(native.value("caption", std::string{}),
-                                         native_text(input.caption, 1024).text))
-                    full = false;
-                  if (state.confirmed[begin + n].reusable_media.empty())
-                    full = false;
+                  if (!native.contains(kind))
+                    mismatched(fmt::format("was sent as {} but Telegram "
+                                           "returned a different type",
+                                           kind));
+                  else if (!matches_sent_text(
+                               native.value("caption", std::string{}),
+                               native_text(input.caption, 1024).text))
+                    mismatched("caption differs from what was sent");
+                  else if (state.confirmed[begin + n].reusable_media.empty())
+                    mismatched(fmt::format("has no reusable {} file", kind));
                 }
               },
               block);
@@ -566,7 +592,10 @@ asio::awaitable<void> run(const d::SendMessageRequest &r,
       } else {
         state.error = failure(
             d::BotOperationErrorCode::MalformedResponse,
-            "Telegram batch did not establish all expected outputs", true);
+            fmt::format("Telegram {} response does not match what was sent: {}",
+                        method.empty() ? "send" : method,
+                        mismatch.empty() ? "unrecognized response" : mismatch),
+            true);
         state.unknown = true;
         state.in_flight = false;
         co_return;
@@ -738,12 +767,12 @@ NativeText native_formatted_text(const FormattedText &rich,
     throw std::invalid_argument("Telegram edit text is empty");
   return out;
 }
-d::ConversationCapabilities domain_capabilities(const d::ConversationRef &c,
-                                                bool upload) {
-  return domain_capabilities(c, upload, false);
+d::ConversationCapabilities bot_capabilities(const d::ConversationRef &c,
+                                             bool upload) {
+  return bot_capabilities(c, upload, false);
 }
-d::ConversationCapabilities domain_capabilities(const d::ConversationRef &c,
-                                                bool upload, bool file_read) {
+d::ConversationCapabilities bot_capabilities(const d::ConversationRef &c,
+                                             bool upload, bool file_read) {
   d::ConversationCapabilities out{
       .conversation = c,
       .operations = {d::CommonOperation::Send, d::CommonOperation::Delete,
@@ -798,20 +827,20 @@ d::ConversationCapabilities domain_capabilities(const d::ConversationRef &c,
   out.maximum_media_total_bytes = media_bound;
   return out;
 }
-asio::awaitable<d::SendOutcome> send_domain(
+asio::awaitable<d::SendOutcome> send_bot_message(
     const d::SendMessageRequest &r, core::TelegramTransport &transport,
     core::TelegramMediaUploader *uploader, std::chrono::milliseconds budget) {
-  return send_domain(r, transport, uploader, nullptr, budget);
+  return send_bot_message(r, transport, uploader, nullptr, budget);
 }
-asio::awaitable<d::SendOutcome> send_domain(
+asio::awaitable<d::SendOutcome> send_bot_message(
     const d::SendMessageRequest &r, core::TelegramTransport &transport,
     core::TelegramMediaUploader *uploader,
     std::shared_ptr<core::BoundedFileReader> file_reader,
     std::chrono::milliseconds budget) {
-  return send_domain(r, transport, uploader, std::move(file_reader), budget,
-                     nullptr);
+  return send_bot_message(r, transport, uploader, std::move(file_reader),
+                          budget, nullptr);
 }
-asio::awaitable<d::SendOutcome> send_domain(
+asio::awaitable<d::SendOutcome> send_bot_message(
     const d::SendMessageRequest &r, core::TelegramTransport &transport,
     core::TelegramMediaUploader *uploader,
     std::shared_ptr<core::BoundedFileReader> file_reader,

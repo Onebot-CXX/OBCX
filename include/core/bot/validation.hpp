@@ -15,31 +15,30 @@ class SendOutcomeEnvelopeBudget;
 
 namespace detail {
 
-inline constexpr std::size_t domain_maximum_bytes = 64 * 1024 * 1024;
-inline constexpr std::size_t domain_maximum_items = 65536;
+inline constexpr std::size_t bot_maximum_bytes = 64 * 1024 * 1024;
+inline constexpr std::size_t bot_maximum_items = 65536;
 
-class DomainBudgetExceeded : public std::invalid_argument {
+class BotBudgetExceeded : public std::invalid_argument {
 public:
-  DomainBudgetExceeded()
-      : std::invalid_argument("domain work exceeds hard bound") {}
+  BotBudgetExceeded() : std::invalid_argument("bot work exceeds hard bound") {}
 };
 // Shared by factory and record codecs, including bounded evidence recovery.
-class DomainWireBudget {
+class BotWireBudget {
 public:
   void nodes(std::size_t count = 1) {
-    if (count > domain_maximum_items - nodes_)
-      throw DomainBudgetExceeded{};
+    if (count > bot_maximum_items - nodes_)
+      throw BotBudgetExceeded{};
     nodes_ += count;
   }
   void bytes(std::size_t count) {
-    if (count > domain_maximum_bytes - bytes_)
-      throw DomainBudgetExceeded{};
+    if (count > bot_maximum_bytes - bytes_)
+      throw BotBudgetExceeded{};
     bytes_ += count;
   }
   void inspect(const Json &value, unsigned depth = 0) {
     nodes();
     if (depth > 32)
-      throw DomainBudgetExceeded{};
+      throw BotBudgetExceeded{};
     if (value.is_binary())
       bytes(value.get_binary().size());
     else if (value.is_string())
@@ -61,8 +60,8 @@ private:
   std::size_t bytes_{};
 };
 // Inspect the already-owned wire tree without copying any payload buffers.
-inline void validate_domain_wire(const Json &document) {
-  DomainWireBudget{}.inspect(document);
+inline void validate_bot_wire(const Json &document) {
+  BotWireBudget{}.inspect(document);
 }
 
 inline void require_object(const Json &document, const std::string_view type) {
@@ -92,7 +91,7 @@ inline void require_only_keys(
 
 inline auto require_string(const Json &document, const std::string_view key,
                            const std::string_view type) -> std::string {
-  validate_domain_wire(document);
+  validate_bot_wire(document);
   const auto field = std::string{key};
   if (!document.contains(field) || !document.at(field).is_string()) {
     throw std::invalid_argument(std::string{type} + " requires string " +

@@ -11,11 +11,11 @@ namespace obcx::bot {
 template <typename T> struct GatewayCodec {
   static auto encode(T &value) -> Json {
     Json payload(value);
-    detail::validate_domain_wire(payload);
+    detail::validate_bot_wire(payload);
     return payload;
   }
   static auto decode(const Json &payload) -> T {
-    detail::validate_domain_wire(payload);
+    detail::validate_bot_wire(payload);
     return payload.template get<T>();
   }
 };

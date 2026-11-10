@@ -76,41 +76,41 @@ requires(std::same_as<Request, SendPrivateMsgRequest> ||
          std::same_as<Request, SendGroupMsgRequest> ||
          std::same_as<Request, SendMsgRequest>)
 auto send_message_policy() -> obcx::core::StructuredMessagePolicy<Request> {
-  namespace domain = obcx::bot;
-  using Result = typename domain::OperationTraits<Request>::result_type;
+  namespace bot_model = obcx::bot;
+  using Result = typename bot_model::OperationTraits<Request>::result_type;
   return {
-      .target =
-          [](const Request &request) -> std::optional<domain::ConversationRef> {
+      .target = [](const Request &request)
+          -> std::optional<bot_model::ConversationRef> {
         return request.parameters.target;
       },
       .project = [](const Request &request, const Result &result)
-          -> std::optional<domain::SendOutcome> {
-        domain::OperationTraits<Request>::validate_result(request, result);
+          -> std::optional<bot_model::SendOutcome> {
+        bot_model::OperationTraits<Request>::validate_result(request, result);
         if (const auto *completed =
                 std::get_if<Completed<SendMessageData>>(&result.state)) {
           const auto &message = completed->value.message;
-          return domain::SendOutcome{
-              domain::SendReceipt{{message}, {{message, std::nullopt, {}}}}};
+          return bot_model::SendOutcome{
+              bot_model::SendReceipt{{message}, {{message, std::nullopt, {}}}}};
         }
         const bool unknown =
             result.evidence.submission != Submission::NotSubmitted;
-        auto code = domain::BotOperationErrorCode::OutcomeUnknown;
+        auto code = bot_model::BotOperationErrorCode::OutcomeUnknown;
         if (const auto *failure = std::get_if<ExecutionFailure>(&result.state))
           code = failure->error.code;
-        return domain::SendOutcome{domain::SendFailure{
+        return bot_model::SendOutcome{bot_model::SendFailure{
             {.code = code,
              .message = "standard send has no confirmed message result",
              .retryable = false,
              .submission_safety =
-                 unknown ? domain::SubmissionSafety::PossiblySubmitted
-                         : domain::SubmissionSafety::DefinitelyNotSubmitted},
+                 unknown ? bot_model::SubmissionSafety::PossiblySubmitted
+                         : bot_model::SubmissionSafety::DefinitelyNotSubmitted},
             {},
             {},
             unknown}};
       },
       .collect_confirmed_authors =
           [](const Request &request, const Result &result,
-             const domain::SendOutcome &recovered,
+             const bot_model::SendOutcome &recovered,
              obcx::core::ConfirmedAuthorEvidenceCollector &authors) {
             if (!std::holds_alternative<Completed<SendMessageData>>(
                     result.state) ||

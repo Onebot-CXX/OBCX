@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/bot/platform_domain_binding.hpp"
+#include "core/bot/platform_adapter.hpp"
 #include "core/bot/self_identity_cache.hpp"
 #include "onebot11/bot/standard_login.hpp"
 #include "onebot11/bot/transport.hpp"
@@ -14,7 +14,7 @@ class LoginCoordinator final
     : public std::enable_shared_from_this<LoginCoordinator> {
 public:
   LoginCoordinator(std::shared_ptr<core::SelfIdentityCache>,
-                   std::shared_ptr<const core::PlatformDomainBinding>,
+                   std::shared_ptr<const core::PlatformAdapter>,
                    obcx::bot::BotInstallationRef);
   auto capture_origin() const -> std::optional<core::SelfIdentityOrigin>;
   auto send(core::OneBot11TransportCapability &, ExecutionMode,
@@ -36,7 +36,7 @@ private:
                           core::SelfIdentityOrigin)
       -> boost::asio::awaitable<core::SelfIdentityCache::Result>;
   std::shared_ptr<core::SelfIdentityCache> identity_;
-  std::shared_ptr<const core::PlatformDomainBinding> binding_;
+  std::shared_ptr<const core::PlatformAdapter> binding_;
   obcx::bot::BotInstallationRef installation_;
 };
 } // namespace obcx::onebot11::bot::standard::detail

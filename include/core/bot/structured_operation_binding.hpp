@@ -37,7 +37,7 @@ public:
     return description_;
   }
 
-  // The process-owned handler derives disposition from its validated domain
+  // The process-owned handler derives disposition from its validated bot
   // outcome and retains native evidence through ordinary projection failures.
   [[nodiscard]] auto bind(Handler handler) const -> OperationBinding {
     if (!handler)

@@ -93,8 +93,8 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
     event.time = std::chrono::system_clock::now();
     event.post_type = "message";
     event.type = common::EventType::message;
-    // Bot API updates do not carry the receiving bot identity. The domain
-    // binding deliberately does not admit this legacy placeholder as a user.
+    // Bot API updates do not carry the receiving bot identity. The platform
+    // adapter deliberately does not admit this legacy placeholder as a user.
     event.self_id = "0";
 
     // Keep the raw payload around for handlers that need fields beyond the
@@ -408,8 +408,8 @@ auto ProtocolAdapter::parse_callback_query_event(
       event.time = std::chrono::system_clock::now();
       event.post_type = "notice";
       event.type = common::EventType::notice;
-      // Bot API updates do not carry the receiving bot identity. The domain
-      // binding deliberately does not admit this legacy placeholder as a user.
+      // Bot API updates do not carry the receiving bot identity. The platform
+      // adapter deliberately does not admit this legacy placeholder as a user.
       event.self_id = "0";
       event.notice_type = "callback_query";
 

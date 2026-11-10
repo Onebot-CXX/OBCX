@@ -25,7 +25,7 @@ public:
 };
 } // namespace detail
 namespace {
-namespace domain = obcx::bot;
+namespace bot_model = obcx::bot;
 using Json = detail::QueryJson;
 using Codec = detail::QueryNativeCodec;
 
@@ -35,17 +35,18 @@ using Codec = detail::QueryNativeCodec;
 [[noreturn]] void exceeded() {
   throw std::invalid_argument("standard query value exceeds bound");
 }
-void installation(const domain::BotInstallationRef &value) {
+void installation(const bot_model::BotInstallationRef &value) {
   value.validate();
   if (value.surface.value() != "onebot11.qq")
     malformed();
 }
-void installation(const domain::BotInstallationRef &value, const Codec &codec) {
+void installation(const bot_model::BotInstallationRef &value,
+                  const Codec &codec) {
   installation(value);
   codec.validate(value);
 }
 
-// Domain-style accounting: every tree node, string and object key is charged,
+// Bot-style accounting: every tree node, string and object key is charged,
 // including unknown fields. The entire retained projection is preflighted in
 // that SAME budget before allocation. DTO fields have no hypothetical JSON
 // keys; wire/framing accounting is separate. Each representation has root depth
@@ -57,14 +58,14 @@ public:
   }
   void bytes(std::size_t count) {
     if (count > limits_.maximum_bytes - bytes_ ||
-        count > domain::detail::domain_maximum_bytes - bytes_)
+        count > bot_model::detail::bot_maximum_bytes - bytes_)
       exceeded();
     bytes_ += count;
   }
   void node(std::size_t depth) {
     if (depth > limits_.maximum_depth || depth > 32 ||
         nodes_ == limits_.maximum_nodes ||
-        nodes_ == domain::detail::domain_maximum_items)
+        nodes_ == bot_model::detail::bot_maximum_items)
       exceeded();
     ++nodes_;
   }
@@ -75,7 +76,7 @@ public:
   }
   void text(std::string_view value) {
     text_size(value.size());
-    domain::detail::validate_utf8(value);
+    bot_model::detail::validate_utf8(value);
   }
   void inspect(const Json &value, std::size_t depth = 0) {
     node(depth);
@@ -91,7 +92,7 @@ public:
       malformed();
     }
   }
-  void scope(const domain::BotInstallationRef &value, std::size_t depth) {
+  void scope(const bot_model::BotInstallationRef &value, std::size_t depth) {
     node(depth);
     node(depth + 1);
     text(value.installation_id);
@@ -105,7 +106,7 @@ public:
     text(value.id.serialized());
   }
 
-  void native_reference(const domain::BotInstallationRef &value,
+  void native_reference(const bot_model::BotInstallationRef &value,
                         std::int64_t id, std::string_view tag,
                         std::string_view kind, std::size_t depth) {
     if (id <= 0)
@@ -118,7 +119,7 @@ public:
         std::to_chars(decimal, decimal + sizeof(decimal), id);
     if (error != std::errc{})
       malformed();
-    // Existing domain_ids.hpp encode_opaque: obcx1:<tag>: plus hex of
+    // Existing bot_ids.hpp encode_opaque: obcx1:<tag>: plus hex of
     // three length-prefixed fields (surface, kind, one decimal component).
     // Charge its ASCII string before the codec allocates the retained ID.
     const auto size = 6 + tag.size() + 1 +
@@ -135,13 +136,13 @@ private:
 
 // Borrowed shape only: caller bounds must precede validation/unpack, which
 // may allocate. The same ledger later charges retained/generated values.
-void preflight_selector(const domain::BotInstallationRef &scope,
+void preflight_selector(const bot_model::BotInstallationRef &scope,
                         QueryBudget &budget, std::size_t depth) {
   budget.node(depth);
   budget.scope(scope, depth + 1);
   budget.node(depth + 1);
 }
-void preflight_selector(const domain::BotInstallationRef &scope,
+void preflight_selector(const bot_model::BotInstallationRef &scope,
                         std::string_view resource, QueryBudget &budget,
                         std::size_t depth) {
   preflight_selector(scope, budget, depth);
@@ -295,30 +296,31 @@ auto native_id(const auto &ref, const Codec &codec, std::string_view kind)
     malformed();
   return result;
 }
-void member_scope(const domain::ConversationRef &group,
-                  const domain::UserRef &user) {
+void member_scope(const bot_model::ConversationRef &group,
+                  const bot_model::UserRef &user) {
   if (group.installation != user.installation)
     malformed();
 }
-auto user(const Json &value, const domain::BotInstallationRef &scope,
-          const Codec &codec) -> domain::UserRef {
+auto user(const Json &value, const bot_model::BotInstallationRef &scope,
+          const Codec &codec) -> bot_model::UserRef {
   const auto id = integer(value, "user_id");
   if (id <= 0)
     malformed();
-  domain::UserRef result{
-      scope, codec.make<domain::UserId>("user", {std::to_string(id)})};
+  bot_model::UserRef result{
+      scope, codec.make<bot_model::UserId>("user", {std::to_string(id)})};
   return result;
 }
-auto group(const Json &value, const domain::BotInstallationRef &scope,
-           const Codec &codec) -> domain::ConversationRef {
+auto group(const Json &value, const bot_model::BotInstallationRef &scope,
+           const Codec &codec) -> bot_model::ConversationRef {
   const auto id = integer(value, "group_id");
   if (id <= 0)
     malformed();
-  domain::ConversationRef result{
-      scope, codec.make<domain::ConversationId>("group", {std::to_string(id)})};
+  bot_model::ConversationRef result{
+      scope,
+      codec.make<bot_model::ConversationId>("group", {std::to_string(id)})};
   return result;
 }
-auto group_info(const Json &value, const domain::BotInstallationRef &scope,
+auto group_info(const Json &value, const bot_model::BotInstallationRef &scope,
                 const Codec &codec) -> GroupInfo {
   return {group(value, scope, codec), text(value, "group_name"),
           int32(value, "member_count"), int32(value, "max_member_count")};
@@ -359,18 +361,19 @@ void project_text(const Json &value, std::string_view key, QueryBudget &budget,
   budget.node(depth);
   budget.text(text(value, key));
 }
-void project_user(const Json &value, const domain::BotInstallationRef &scope,
+void project_user(const Json &value, const bot_model::BotInstallationRef &scope,
                   QueryBudget &budget, std::size_t depth) {
   budget.native_reference(scope, integer(value, "user_id"), "user", "user",
                           depth);
 }
-void project_group(const Json &value, const domain::BotInstallationRef &scope,
+void project_group(const Json &value,
+                   const bot_model::BotInstallationRef &scope,
                    QueryBudget &budget, std::size_t depth) {
   budget.native_reference(scope, integer(value, "group_id"), "conversation",
                           "group", depth);
 }
 void project_group_info(const Json &value,
-                        const domain::BotInstallationRef &scope,
+                        const bot_model::BotInstallationRef &scope,
                         QueryBudget &budget, std::size_t depth) {
   budget.node(depth);
   project_group(value, scope, budget, depth + 1);
@@ -381,7 +384,7 @@ void project_group_info(const Json &value,
   }
 }
 void project_honor_entry(const Json &value,
-                         const domain::BotInstallationRef &scope,
+                         const bot_model::BotInstallationRef &scope,
                          QueryBudget &budget, std::size_t depth, bool current) {
   budget.node(depth);
   project_user(value, scope, budget, depth + 1);
@@ -395,7 +398,7 @@ void project_honor_entry(const Json &value,
   }
 }
 auto honor_list(const Json &data, std::string_view key,
-                const domain::BotInstallationRef &scope, const Codec &codec)
+                const bot_model::BotInstallationRef &scope, const Codec &codec)
     -> std::optional<std::vector<HonorEntry>> {
   if (!data.contains(key))
     return std::nullopt;
@@ -436,21 +439,21 @@ void project_member_fields(const Json &value, QueryBudget &budget,
 }
 } // namespace
 
-MessageSelector::MessageSelector(domain::BotInstallationRef scope,
+MessageSelector::MessageSelector(bot_model::BotInstallationRef scope,
                                  std::int32_t id)
     : installation_(std::move(scope)), message_id_(id) {}
 auto MessageSelector::installation() const noexcept
-    -> const domain::BotInstallationRef & {
+    -> const bot_model::BotInstallationRef & {
   return installation_;
 }
-ForwardSelector::ForwardSelector(domain::BotInstallationRef scope,
+ForwardSelector::ForwardSelector(bot_model::BotInstallationRef scope,
                                  std::string id)
     : installation_(std::move(scope)), resource_id_(std::move(id)) {}
 auto ForwardSelector::installation() const noexcept
-    -> const domain::BotInstallationRef & {
+    -> const bot_model::BotInstallationRef & {
   return installation_;
 }
-auto QuerySelectors::import_message(const domain::BotInstallationRef &scope,
+auto QuerySelectors::import_message(const bot_model::BotInstallationRef &scope,
                                     std::int32_t id, const ValueLimits &limits)
     -> MessageSelector {
   QueryBudget budget{limits};
@@ -468,7 +471,7 @@ auto QuerySelectors::export_message(const MessageSelector &value,
   installation(value.installation_);
   return value.message_id_;
 }
-auto QuerySelectors::import_forward(const domain::BotInstallationRef &scope,
+auto QuerySelectors::import_forward(const bot_model::BotInstallationRef &scope,
                                     std::string_view id,
                                     const ValueLimits &limits)
     -> ForwardSelector {
@@ -491,7 +494,7 @@ auto QuerySelectors::export_forward(const ForwardSelector &value,
 
 namespace detail {
 auto encode_get_msg(const GetMessageParameters &p,
-                    const domain::BotInstallationRef &expected,
+                    const bot_model::BotInstallationRef &expected,
                     const Codec &codec, const ValueLimits &limits) -> Json {
   QueryBudget budget{limits};
   budget.node(0);
@@ -506,7 +509,7 @@ auto encode_get_msg(const GetMessageParameters &p,
   return result;
 }
 auto encode_get_forward_msg(const GetForwardMessageParameters &p,
-                            const domain::BotInstallationRef &expected,
+                            const bot_model::BotInstallationRef &expected,
                             const Codec &codec, const ValueLimits &limits)
     -> Json {
   QueryBudget budget{limits};

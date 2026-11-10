@@ -40,20 +40,20 @@ public:
     limits.validate();
   }
   void bytes(std::size_t count) {
-    charge(count, bytes_,
-           std::min(limits_.maximum_bytes,
-                    obcx::bot::detail::domain_maximum_bytes));
+    charge(
+        count, bytes_,
+        std::min(limits_.maximum_bytes, obcx::bot::detail::bot_maximum_bytes));
   }
   void node(std::size_t depth) {
     if (depth > std::min(limits_.maximum_depth, std::size_t{32}))
       over_limit();
-    charge(1, nodes_,
-           std::min(limits_.maximum_nodes,
-                    obcx::bot::detail::domain_maximum_items));
+    charge(
+        1, nodes_,
+        std::min(limits_.maximum_nodes, obcx::bot::detail::bot_maximum_items));
   }
   void text(std::string_view value) {
     if (value.size() > std::min(limits_.maximum_text_bytes,
-                                obcx::bot::detail::domain_maximum_bytes))
+                                obcx::bot::detail::bot_maximum_bytes))
       over_limit();
     bytes(value.size());
     for (std::size_t i = 0; i < value.size();) {

@@ -30,7 +30,7 @@ struct OperationRegistry::State {
   mutable std::shared_mutex mutex;
   std::map<bot::ActionId, std::shared_ptr<const OperationBinding>> bindings;
   std::shared_ptr<SelfIdentityCache> self_identity;
-  std::shared_ptr<const PlatformDomainBinding> domain_binding;
+  std::shared_ptr<const PlatformAdapter> platform_adapter;
   std::shared_ptr<const LiveMessageNormalizer> live_message_normalizer;
   std::shared_ptr<ReplyEvidenceStore> reply_evidence;
   bool sealed = false;
@@ -39,15 +39,15 @@ struct OperationRegistry::State {
 
 OperationRegistry::OperationRegistry(
     bot::BotInstallationRef installation,
-    std::shared_ptr<const PlatformDomainBinding> domain_binding) {
+    std::shared_ptr<const PlatformAdapter> platform_adapter) {
   installation.validate();
-  if (!domain_binding ||
-      domain_binding->codec().surface() != installation.surface)
+  if (!platform_adapter ||
+      platform_adapter->codec().surface() != installation.surface)
     throw std::invalid_argument(
-        "endpoint requires its registered domain binding");
+        "endpoint requires its registered platform adapter");
   auto evidence = std::make_shared<ReplyEvidenceStore>(installation);
   state_ = std::make_shared<State>(std::move(installation));
-  state_->domain_binding = std::move(domain_binding);
+  state_->platform_adapter = std::move(platform_adapter);
   state_->reply_evidence = std::move(evidence);
 }
 
@@ -144,7 +144,7 @@ auto OperationRegistry::normalize_live_message(
     -> bot::MessageReceived {
   const auto state = state_;
   std::shared_ptr<const LiveMessageNormalizer> normalizer;
-  std::shared_ptr<const PlatformDomainBinding> binding;
+  std::shared_ptr<const PlatformAdapter> binding;
   {
     std::shared_lock lock(state->mutex);
     if (state->closed)
@@ -152,7 +152,7 @@ auto OperationRegistry::normalize_live_message(
     if (!state->sealed)
       throw std::logic_error("message normalization endpoint is not prepared");
     normalizer = state->live_message_normalizer;
-    binding = state->domain_binding;
+    binding = state->platform_adapter;
   }
   if (normalizer && !origin)
     throw std::invalid_argument(
@@ -197,7 +197,8 @@ auto OperationRegistry::reply_evidence() const
 auto OperationRegistry::admit_message(const bot::MessageReceived &message,
                                       std::uint64_t expected_generation)
     -> bool {
-  bot::binding::validate_native_event(state_->domain_binding->codec(), message);
+  bot::binding::validate_native_event(state_->platform_adapter->codec(),
+                                      message);
   std::shared_lock lock(state_->mutex);
   return !state_->closed &&
          state_->reply_evidence->admit(message, expected_generation);
@@ -220,7 +221,7 @@ auto OperationRegistry::capture_message_admission_generation(
     -> MessageAdmissionGeneration {
   if (observed_self) {
     try {
-      state_->domain_binding->codec().validate(*observed_self);
+      state_->platform_adapter->codec().validate(*observed_self);
     } catch (...) {
       return {{SelfObservationStatus::InvalidIdentity, std::nullopt},
               std::nullopt};
@@ -363,7 +364,7 @@ void OperationRegistry::admit_send_evidence(
                                              &ConfirmedAuthorEvidence::message);
         if (found == authors.end())
           continue;
-        const auto &codec = state->domain_binding->codec();
+        const auto &codec = state->platform_adapter->codec();
         codec.validate(message);
         const bot::Sender *native = nullptr;
         if (found->native_author &&
@@ -510,7 +511,7 @@ auto OperationRegistry::invoke_structured_completed(
 
 void OperationRegistry::validate_native_admission(
     const State &state, const bot::OperationEnvelope &envelope) {
-  const auto &codec = state.domain_binding->codec();
+  const auto &codec = state.platform_adapter->codec();
   const auto validate = [&]<typename Request>() {
     if (envelope.action != bot::OperationTraits<Request>::action())
       return false;

@@ -78,7 +78,7 @@ struct adl_serializer<obcx::bot::detail::StableBotId<Tag>> {
   }
 
   static auto from_json(const json &document) -> Id {
-    obcx::bot::detail::validate_domain_wire(document);
+    obcx::bot::detail::validate_bot_wire(document);
     if (!document.is_string()) {
       throw std::invalid_argument("bot ID must be a string");
     }

@@ -92,7 +92,7 @@ public:
       -> core::SelfObservationResult;
   auto send_action_and_wait_async(std::string action_payload, uint64_t echo_id)
       -> asio::awaitable<std::string>;
-  auto send_domain_request(
+  auto send_bot_request(
       nlohmann::json parameters,
       const std::vector<std::pair<std::string, core::TelegramMediaUpload>>
           &files) -> asio::awaitable<std::string>;

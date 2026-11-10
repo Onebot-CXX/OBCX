@@ -17,15 +17,13 @@ public:
   explicit ContentBudget(const ValueLimits &limits) : limits_(limits) {}
   void bytes(std::size_t count) {
     add(bytes_, count,
-        std::min(limits_.maximum_bytes,
-                 obcx::bot::detail::domain_maximum_bytes));
+        std::min(limits_.maximum_bytes, obcx::bot::detail::bot_maximum_bytes));
   }
   void node(std::size_t depth) {
     if (depth > std::min<std::size_t>(limits_.maximum_depth, 32))
       invalid_content();
     add(nodes_, 1,
-        std::min(limits_.maximum_nodes,
-                 obcx::bot::detail::domain_maximum_items));
+        std::min(limits_.maximum_nodes, obcx::bot::detail::bot_maximum_items));
   }
   void string(std::string_view value) {
     std::size_t length = 0;
@@ -37,7 +35,7 @@ public:
   void string_part(std::size_t &length, std::size_t count) {
     add(length, count,
         std::min(limits_.maximum_text_bytes,
-                 obcx::bot::detail::domain_maximum_bytes));
+                 obcx::bot::detail::bot_maximum_bytes));
     bytes(count);
   }
   void string_value(std::string_view value, std::size_t depth) {

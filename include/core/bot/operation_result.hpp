@@ -48,13 +48,13 @@ void to_json(Json &document, const BotOperationResult<T> &result) {
   } else {
     encoded = {{"ok", false}, {"error", *result.error}};
   }
-  detail::validate_domain_wire(encoded);
+  detail::validate_bot_wire(encoded);
   document = std::move(encoded);
 }
 
 template <typename T>
 void from_json(const Json &document, BotOperationResult<T> &result) {
-  detail::validate_domain_wire(document);
+  detail::validate_bot_wire(document);
   detail::require_object(document, "BotOperationResult");
   if (!document.contains("ok") || !document.at("ok").is_boolean()) {
     throw std::invalid_argument("BotOperationResult requires boolean ok");

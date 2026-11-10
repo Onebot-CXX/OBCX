@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_messaging.hpp"
+#include "core/bot/bot_messaging.hpp"
 #include "onebot11/bot/media_path.hpp"
 
 namespace obcx::onebot11::bot::detail {
@@ -22,7 +22,7 @@ public:
       : limits_(limits), installation_(target.installation),
         envelope_(envelope), scope_(scope) {
     limits_.validate();
-    if (!envelope_ || envelope_ > obcx::bot::detail::domain_maximum_bytes)
+    if (!envelope_ || envelope_ > obcx::bot::detail::bot_maximum_bytes)
       throw std::invalid_argument("QQ forward envelope bound is invalid");
     charge(sizeof("{\"action\":\"send_group_forward_msg\",\"params\":{\"group_"
                   "id\":\"\",\"messages\":[]},\"echo\":}") -
@@ -91,7 +91,7 @@ public:
 private:
   void node_body(const obcx::bot::Json &body) {
     if (!body.is_array() || body.empty() ||
-        body.size() > obcx::bot::detail::domain_maximum_items)
+        body.size() > obcx::bot::detail::bot_maximum_items)
       throw std::invalid_argument("QQ forward body exceeds bounds");
     for (const auto &block : body) {
       auto type =
@@ -148,7 +148,7 @@ public:
     std::size_t result = 0;
     for (unsigned char c : value) {
       const auto count = escaped_character_size(c);
-      if (count > obcx::bot::detail::domain_maximum_bytes - result)
+      if (count > obcx::bot::detail::bot_maximum_bytes - result)
         throw std::invalid_argument("QQ native string exceeds envelope bound");
       result += count;
     }
@@ -247,7 +247,7 @@ private:
   }
   void rich_text(const obcx::bot::Json &value) {
     if (!value.is_array() ||
-        value.size() > obcx::bot::detail::domain_maximum_items)
+        value.size() > obcx::bot::detail::bot_maximum_items)
       throw std::invalid_argument("QQ rich text exceeds bounds");
     for (const auto &part : value) {
       auto type =

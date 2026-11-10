@@ -3,10 +3,10 @@
 #include "onebot11/bot/capability_ids.hpp"
 #include "onebot11/bot/command_adapter.hpp"
 #include "onebot11/bot/configuration.hpp"
-#include "onebot11/bot/domain_binding.hpp"
 #include "onebot11/bot/event_ingress.hpp"
 #include "onebot11/bot/operation_component.hpp"
 #include "onebot11/bot/operation_definitions.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 #include "onebot11/bot/protocol.hpp"
 #include "onebot11/bot/standard_event_runtime.hpp"
 #include "onebot11/bot/transport.hpp"
@@ -61,7 +61,7 @@ auto onebot_http_recipe() -> core::BotRecipeDescription {
 template <typename TransportComponent, typename Connection>
 auto make_plan(const core::BotInstallationInput &input, Connection connection,
                core::BotRecipeDescription description, std::string digest,
-               std::shared_ptr<const core::PlatformDomainBinding> binding)
+               std::shared_ptr<const core::PlatformAdapter> binding)
     -> std::shared_ptr<const core::BotInstallationPlan> {
   const obcx::bot::BotInstallationRef actor_event_installation{
       input.installation_id, input.surface};
@@ -104,7 +104,7 @@ auto make_plan(const core::BotInstallationInput &input, Connection connection,
 } // namespace
 
 void register_recipes(core::BotPlatformCatalog &catalog) {
-  const auto binding = std::make_shared<QqDomainBinding>();
+  const auto binding = std::make_shared<QqPlatformAdapter>();
   catalog.register_recipe(
       {.surface = surface,
        .transport = "websocket",
@@ -117,7 +117,7 @@ void register_recipes(core::BotPlatformCatalog &catalog) {
                  input, std::move(typed), onebot_websocket_recipe(),
                  core::configuration_digest(connection), binding);
            },
-       .domain_binding = binding});
+       .platform_adapter = binding});
   catalog.register_recipe(
       {.surface = surface,
        .transport = "http",
@@ -130,7 +130,7 @@ void register_recipes(core::BotPlatformCatalog &catalog) {
                  input, std::move(typed), onebot_http_recipe(),
                  core::configuration_digest(connection), binding);
            },
-       .domain_binding = binding});
+       .platform_adapter = binding});
 }
 
 } // namespace obcx::onebot11::bot

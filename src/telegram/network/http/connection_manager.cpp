@@ -2,7 +2,7 @@
 #include "common/logger.hpp"
 #include "network/proxy_http_client.hpp"
 #include "telegram/adapter/protocol_adapter.hpp"
-#include "telegram/bot/domain_binding.hpp"
+#include "telegram/bot/platform_adapter.hpp"
 #include "telegram/bot/response_parser.hpp"
 #include "telegram/network/detail/media_read.hpp"
 
@@ -370,7 +370,7 @@ auto TelegramConnectionManager::send_action_and_wait_async(
   }
 }
 
-auto TelegramConnectionManager::send_domain_request(
+auto TelegramConnectionManager::send_bot_request(
     nlohmann::json parameters,
     const std::vector<std::pair<std::string, core::TelegramMediaUpload>> &files)
     -> asio::awaitable<std::string> {
@@ -489,10 +489,10 @@ auto detail::TelegramMediaReadAccess::run(
       const auto document = json::parse(
           response.body, [](int depth, json::parse_event_t, json &) {
             if (depth > 32)
-              throw d::detail::DomainBudgetExceeded{};
+              throw d::detail::BotBudgetExceeded{};
             return true;
           });
-      d::detail::validate_domain_wire(document);
+      d::detail::validate_bot_wire(document);
       if (!document.is_object() || !document.at("ok").is_boolean())
         throw std::invalid_argument("invalid provider status");
       if (!document.at("ok").get<bool>()) {

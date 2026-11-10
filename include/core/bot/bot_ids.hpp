@@ -145,7 +145,7 @@ public:
     return OpaqueId{std::string(encoded)};
   }
   static auto from_json(const Json &document) -> OpaqueId {
-    validate_domain_wire(document);
+    validate_bot_wire(document);
     if (!document.is_string())
       throw std::invalid_argument("opaque identity must be a string");
     return restore(document.get_ref<const std::string &>());

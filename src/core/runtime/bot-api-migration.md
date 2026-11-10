@@ -1,4 +1,4 @@
-# Current process domain API integration
+# Current process bot API integration
 
 SDK/core 2.7.0 is the current-only source generation. Use the matching installed
 SDK; schema and version labels alone are not a C++ ABI or runtime acceptance
@@ -6,7 +6,7 @@ claim. No deployment, restart or online migration is authorized here.
 
 ## Process/platform boundary
 
-One registered PlatformDomainBinding per surface owns current native codecs,
+One registered PlatformAdapter per surface owns current native codecs,
 normalization, observed self and explicit configured conversation resolution.
 There is no archive decoder, generic reference conversion service, historical
 ID import or legacy media association. Native protocol carriers remain private

@@ -1,4 +1,4 @@
-#include "onebot11/bot/domain_binding.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 #include "onebot11/adapter/message_converter.hpp"
 #include "onebot11/adapter/native_fields.hpp"
 #include "received_media.hpp"
@@ -7,7 +7,7 @@
 
 namespace obcx::onebot11::bot {
 namespace {
-namespace domain = obcx::bot;
+namespace bot_model = obcx::bot;
 void decimal(std::string_view text, bool positive) {
   std::int64_t value{};
   auto [end, error] =
@@ -16,7 +16,7 @@ void decimal(std::string_view text, bool positive) {
       std::to_string(value) != text || (positive && value <= 0))
     throw std::invalid_argument("noncanonical QQ numeric identity");
 }
-std::string field(const domain::Json &value, std::string_view key,
+std::string field(const bot_model::Json &value, std::string_view key,
                   std::size_t maximum = 20) {
   const auto &v = value.at(std::string(key));
   if (v.is_string()) {
@@ -31,13 +31,13 @@ std::string field(const domain::Json &value, std::string_view key,
   throw std::invalid_argument("invalid QQ identity field");
 }
 void locator(std::string_view s) {
-  domain::detail::validate_identifier(s, "QQ native media locator", 512);
+  bot_model::detail::validate_identifier(s, "QQ native media locator", 512);
   if (s == "." || s == ".." ||
       s.find_first_of("/\\:?#&=%") != std::string_view::npos)
     throw std::invalid_argument("QQ media locator cannot be a path or URL");
 }
-auto media_metadata(const domain::Json &j) -> domain::MediaMetadata {
-  domain::MediaMetadata result;
+auto media_metadata(const bot_model::Json &j) -> bot_model::MediaMetadata {
+  bot_model::MediaMetadata result;
   for (auto key : {"file_size", "size"})
     if (j.contains(key))
       try {
@@ -54,7 +54,8 @@ auto media_metadata(const domain::Json &j) -> domain::MediaMetadata {
     if (j.contains(key) && j[key].is_string())
       try {
         const auto &value = j[key].get_ref<const std::string &>();
-        domain::detail::validate_identifier(value, "QQ media filename", 1024);
+        bot_model::detail::validate_identifier(value, "QQ media filename",
+                                               1024);
         // A display basename is metadata; a provider path or signed locator
         // belongs only to the private acquisition/archive boundary.
         if (value == "." || value == ".." ||
@@ -80,8 +81,8 @@ auto media_metadata(const domain::Json &j) -> domain::MediaMetadata {
 
 } // namespace
 
-auto QqDomainBinding::file_metadata(const domain::Json &data)
-    -> domain::MediaMetadata {
+auto QqPlatformAdapter::file_metadata(const bot_model::Json &data)
+    -> bot_model::MediaMetadata {
   auto metadata = media_metadata(data);
   metadata.size_bytes.reset();
   for (const auto key : {"file_size", "size"}) {
@@ -115,8 +116,8 @@ auto QqDomainBinding::file_metadata(const domain::Json &data)
   if (name != data.end() && name->is_string()) {
     try {
       const auto &value = name->get_ref<const std::string &>();
-      domain::detail::validate_identifier(value, "QQ file filename", 1024);
-      domain::detail::validate_utf8(value);
+      bot_model::detail::validate_identifier(value, "QQ file filename", 1024);
+      bot_model::detail::validate_utf8(value);
       if (value != "." && value != ".." &&
           value.find_first_of("/\\:?#") == std::string::npos)
         metadata.filename = value;
@@ -127,9 +128,9 @@ auto QqDomainBinding::file_metadata(const domain::Json &data)
   return metadata;
 }
 
-auto QqDomainBinding::attachment_metadata(std::string_view type,
-                                          const domain::Json &data)
-    -> domain::MediaMetadata {
+auto QqPlatformAdapter::attachment_metadata(std::string_view type,
+                                            const bot_model::Json &data)
+    -> bot_model::MediaMetadata {
   if (type == "file")
     return file_metadata(data);
   if (type == "image" || type == "video" || type == "record")
@@ -137,8 +138,8 @@ auto QqDomainBinding::attachment_metadata(std::string_view type,
   throw std::invalid_argument("unsupported QQ attachment metadata kind");
 }
 
-auto QqNativeReferenceCodec::surface() const -> domain::SurfaceId {
-  return domain::SurfaceId{"onebot11.qq"};
+auto QqNativeReferenceCodec::surface() const -> bot_model::SurfaceId {
+  return bot_model::SurfaceId{"onebot11.qq"};
 }
 void QqNativeReferenceCodec::validate_native(
     std::string_view tag, std::string_view kind,
@@ -175,8 +176,8 @@ void QqNativeReferenceCodec::validate_native(
     if (c[4].front() == '-' || c[5].front() == '-')
       throw std::invalid_argument("negative QQ forward index");
     if (kind == "forward-file-id") {
-      domain::detail::validate_identifier(c[6], "QQ file identifier", 1024);
-      domain::detail::validate_utf8(c[6]);
+      bot_model::detail::validate_identifier(c[6], "QQ file identifier", 1024);
+      bot_model::detail::validate_utf8(c[6]);
       if (c[6].find("://") != std::string_view::npos || c[6].starts_with("//"))
         throw std::invalid_argument("QQ file identifier is not a URL");
     } else {
@@ -198,8 +199,8 @@ void QqNativeReferenceCodec::validate_native(
     if (kind == "file-id") {
       // Unlike legacy "file" locators, this kind is minted only from an
       // explicit provider file_id. A slash in that ID is not an OS path.
-      domain::detail::validate_identifier(c[4], "QQ file identifier", 1024);
-      domain::detail::validate_utf8(c[4]);
+      bot_model::detail::validate_identifier(c[4], "QQ file identifier", 1024);
+      bot_model::detail::validate_utf8(c[4]);
       if (c[4].find("://") != std::string_view::npos || c[4].starts_with("//"))
         throw std::invalid_argument("QQ file identifier is not a URL");
     } else {
@@ -215,42 +216,42 @@ auto QqNativeReferenceCodec::normalize_username(std::string_view username) const
   decimal(username, true);
   return std::string(username);
 }
-auto QqDomainBinding::codec() const -> const QqNativeReferenceCodec & {
+auto QqPlatformAdapter::codec() const -> const QqNativeReferenceCodec & {
   return codec_;
 }
-auto QqDomainBinding::observed_self(const domain::BotInstallationRef &i,
-                                    const common::MessageEvent &event) const
-    -> std::optional<domain::UserRef> {
+auto QqPlatformAdapter::observed_self(const bot_model::BotInstallationRef &i,
+                                      const common::MessageEvent &event) const
+    -> std::optional<bot_model::UserRef> {
   codec_.validate(i);
   if (event.self_id.empty())
     return std::nullopt;
-  return domain::UserRef{i,
-                         codec_.make<domain::UserId>("user", {event.self_id})};
+  return bot_model::UserRef{
+      i, codec_.make<bot_model::UserId>("user", {event.self_id})};
 }
-auto QqDomainBinding::configured_conversation(
-    const domain::BotInstallationRef &installation,
-    const domain::ConfiguredConversation &target) const
-    -> domain::ConversationRef {
+auto QqPlatformAdapter::configured_conversation(
+    const bot_model::BotInstallationRef &installation,
+    const bot_model::ConfiguredConversation &target) const
+    -> bot_model::ConversationRef {
   codec_.validate(installation);
   target.validate();
   if (target.topic ||
-      target.kind == domain::ConfiguredConversationKind::Channel)
+      target.kind == bot_model::ConfiguredConversationKind::Channel)
     throw std::invalid_argument("unsupported QQ configured conversation");
-  const auto kind = target.kind == domain::ConfiguredConversationKind::Group
+  const auto kind = target.kind == bot_model::ConfiguredConversationKind::Group
                         ? "group"
                         : "private";
   return {installation,
-          codec_.make<domain::ConversationId>(kind, {target.native_id})};
+          codec_.make<bot_model::ConversationId>(kind, {target.native_id})};
 }
-auto QqDomainBinding::normalize_deleted_notice(
-    const domain::BotInstallationRef &installation,
-    const common::NoticeEvent &event, domain::TimePoint received_at) const
-    -> std::optional<domain::MessageDeleted> {
+auto QqPlatformAdapter::normalize_deleted_notice(
+    const bot_model::BotInstallationRef &installation,
+    const common::NoticeEvent &event, bot_model::TimePoint received_at) const
+    -> std::optional<bot_model::MessageDeleted> {
   codec_.validate(installation);
   if (event.notice_type != "group_recall" &&
       event.notice_type != "friend_recall")
     return std::nullopt;
-  domain::detail::validate_domain_wire(event.data);
+  bot_model::detail::validate_bot_wire(event.data);
   if (!event.data.is_object() || event.post_type != "notice" ||
       event.data.value("post_type", std::string{}) != "notice" ||
       event.data.value("notice_type", std::string{}) != event.notice_type)
@@ -264,29 +265,28 @@ auto QqDomainBinding::normalize_deleted_notice(
     throw std::invalid_argument("QQ recall notice scope mismatch");
   // The notice supplies the exact group or friend. Never derive private scope
   // from a message author, cached self, or a global message-id lookup.
-  domain::MessageDeleted result{
-      {{installation, codec_.make<domain::ConversationId>(
+  bot_model::MessageDeleted result{
+      {{installation, codec_.make<bot_model::ConversationId>(
                           group ? "group" : "private", {peer})},
-       codec_.make<domain::MessageId>("message", {message_id})},
+       codec_.make<bot_model::MessageId>("message", {message_id})},
       received_at};
   result.validate();
   return result;
 }
 
-auto QqDomainBinding::normalize_message(const domain::BotInstallationRef &i,
-                                        const common::MessageEvent &event,
-                                        domain::TimePoint received,
-                                        std::string_view observation) const
-    -> domain::MessageReceived {
+auto QqPlatformAdapter::normalize_message(
+    const bot_model::BotInstallationRef &i, const common::MessageEvent &event,
+    bot_model::TimePoint received, std::string_view observation) const
+    -> bot_model::MessageReceived {
   std::vector<std::size_t> ignored;
   return normalize_with_positions(i, event, received, observation, ignored);
 }
-auto QqDomainBinding::normalize_with_positions(
-    const domain::BotInstallationRef &i, const common::MessageEvent &event,
-    domain::TimePoint received, std::string_view observation,
-    std::vector<std::size_t> &positions) const -> domain::MessageReceived {
+auto QqPlatformAdapter::normalize_with_positions(
+    const bot_model::BotInstallationRef &i, const common::MessageEvent &event,
+    bot_model::TimePoint received, std::string_view observation,
+    std::vector<std::size_t> &positions) const -> bot_model::MessageReceived {
   positions.clear();
-  if (event.message.size() > domain::detail::domain_maximum_items)
+  if (event.message.size() > bot_model::detail::bot_maximum_items)
     throw std::invalid_argument("QQ content count exceeds bound");
   positions.reserve(event.message.size());
   codec_.validate(i);
@@ -300,18 +300,19 @@ auto QqDomainBinding::normalize_with_positions(
     address = event.user_id;
   else
     throw std::invalid_argument("ambiguous QQ event scope");
-  domain::MessageRef message{
-      {i, codec_.make<domain::ConversationId>(event.message_type, {address})},
-      codec_.make<domain::MessageId>("message", {event.message_id})};
-  domain::Sender sender = domain::UnknownSender{};
+  bot_model::MessageRef message{
+      {i,
+       codec_.make<bot_model::ConversationId>(event.message_type, {address})},
+      codec_.make<bot_model::MessageId>("message", {event.message_id})};
+  bot_model::Sender sender = bot_model::UnknownSender{};
   if (!event.anonymous && !event.user_id.empty()) {
     try {
-      sender = domain::KnownUser{
-          {i, codec_.make<domain::UserId>("user", {event.user_id})}};
+      sender = bot_model::KnownUser{
+          {i, codec_.make<bot_model::UserId>("user", {event.user_id})}};
     } catch (const std::invalid_argument &) {
     }
   }
-  domain::MessageReceived result{
+  bot_model::MessageReceived result{
       message, std::move(sender), std::nullopt, received,
       {},      std::nullopt,      std::nullopt};
   result.context.kind = event.message_type;
@@ -323,13 +324,14 @@ auto QqDomainBinding::normalize_with_positions(
     auto seconds = std::stoll(text);
     if (seconds > INT64_MAX / 1000 || seconds < INT64_MIN / 1000)
       throw std::invalid_argument("QQ time overflow");
-    result.sent_at = domain::TimePoint{seconds * 1000};
+    result.sent_at = bot_model::TimePoint{seconds * 1000};
   }
-  const auto append = [&](domain::ReceivedRichText::value_type value) {
+  const auto append = [&](bot_model::ReceivedRichText::value_type value) {
     if (result.body.empty() ||
-        !std::holds_alternative<domain::ReceivedRichText>(result.body.back()))
-      result.body.emplace_back(domain::ReceivedRichText{});
-    std::get<domain::ReceivedRichText>(result.body.back())
+        !std::holds_alternative<bot_model::ReceivedRichText>(
+            result.body.back()))
+      result.body.emplace_back(bot_model::ReceivedRichText{});
+    std::get<bot_model::ReceivedRichText>(result.body.back())
         .push_back(std::move(value));
   };
   const auto reply_count = std::ranges::count_if(
@@ -337,7 +339,7 @@ auto QqDomainBinding::normalize_with_positions(
   for (std::size_t index = 0; index < event.message.size(); ++index) {
     const auto &segment = event.message[index];
     struct PositionRecorder {
-      const domain::ReceivedBody &body;
+      const bot_model::ReceivedBody &body;
       std::vector<std::size_t> &positions;
       ~PositionRecorder() {
         positions.push_back(body.empty() ? 0 : body.size() - 1);
@@ -345,7 +347,7 @@ auto QqDomainBinding::normalize_with_positions(
     } recorder{result.body, positions};
     try {
       if (segment.type == "text") {
-        domain::Text text{segment.data.at("text").get<std::string>(), {}};
+        bot_model::Text text{segment.data.at("text").get<std::string>(), {}};
         text.validate();
         append(std::move(text));
         continue;
@@ -353,21 +355,22 @@ auto QqDomainBinding::normalize_with_positions(
       if (segment.type == "at") {
         auto id = field(segment.data, "qq");
         if (id == "all")
-          append(domain::MentionEveryone{});
+          append(bot_model::MentionEveryone{});
         else
-          append(
-              domain::Mention{{i, codec_.make<domain::UserId>("user", {id})}});
+          append(bot_model::Mention{
+              {i, codec_.make<bot_model::UserId>("user", {id})}});
         continue;
       }
       if (segment.type == "reply" && reply_count == 1 && !result.reply) {
-        auto target = domain::MessageRef{
-            message.conversation, codec_.make<domain::MessageId>(
+        auto target = bot_model::MessageRef{
+            message.conversation, codec_.make<bot_model::MessageId>(
                                       "message", {field(segment.data, "id")})};
-        auto ref = domain::binding::EvidenceFactory::reply_ref(
+        auto ref = bot_model::binding::EvidenceFactory::reply_ref(
             message, target, std::string(observation));
-        result.reply = domain::binding::EvidenceFactory::reply_info(
-            message, ref, std::nullopt, domain::ReplyRelation::SameConversation,
-            domain::ReplyAvailability::ReferenceOnly);
+        result.reply = bot_model::binding::EvidenceFactory::reply_info(
+            message, ref, std::nullopt,
+            bot_model::ReplyRelation::SameConversation,
+            bot_model::ReplyAvailability::ReferenceOnly);
         continue;
       }
       if (segment.type == "image" || segment.type == "video" ||
@@ -382,13 +385,13 @@ auto QqDomainBinding::normalize_with_positions(
             field(segment.data, file_id_present ? "file_id" : "file",
                   file_id_present ? 1024 : 512);
         auto metadata = attachment_metadata(segment.type, segment.data);
-        auto kind = segment.type == "image"    ? domain::MediaKind::Image
-                    : segment.type == "video"  ? domain::MediaKind::Video
-                    : segment.type == "record" ? domain::MediaKind::Voice
-                                               : domain::MediaKind::File;
+        auto kind = segment.type == "image"    ? bot_model::MediaKind::Image
+                    : segment.type == "video"  ? bot_model::MediaKind::Video
+                    : segment.type == "record" ? bot_model::MediaKind::Voice
+                                               : bot_model::MediaKind::File;
         // A provider filename is a locator, not evidence of content identity.
-        result.body.emplace_back(domain::ReceivedMedia{
-            {i, codec_.make<domain::MediaId>(
+        result.body.emplace_back(bot_model::ReceivedMedia{
+            {i, codec_.make<bot_model::MediaId>(
                     file_id_present ? "file-id" : segment.type,
                     {event.message_type, address, event.message_id,
                      std::to_string(index), file})},
@@ -407,12 +410,12 @@ auto QqDomainBinding::normalize_with_positions(
           return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' ||
                  c == '-';
         });
-    result.body.emplace_back(domain::UnsupportedContent{
+    result.body.emplace_back(bot_model::UnsupportedContent{
         "onebot11." + (safe_type ? segment.type.substr(0, 80) : "unknown"),
         std::nullopt});
   }
   capture_observations(event, result, positions);
-  domain::binding::validate_native_event(codec_, result);
+  bot_model::binding::validate_native_event(codec_, result);
   return result;
 }
 } // namespace obcx::onebot11::bot

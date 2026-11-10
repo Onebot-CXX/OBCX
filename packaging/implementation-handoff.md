@@ -41,7 +41,7 @@ binding/counts/integrity and unchanged effect/fence columns, then journals
 replacement. It never promotes unsupported historical rows or invokes providers.
 The assistant syntax checked it only and did **not execute it**. User-reported
 execution/startup logs do not establish a complete migration/recovery acceptance
-run. See actors/domain-sdk-cutover.md for explicit CLI and rollback boundaries.
+run. See actors/bot-sdk-cutover.md for explicit CLI and rollback boundaries.
 
 ## Final build evidence
 
@@ -114,7 +114,7 @@ An audit is not a malicious CMake/custom-command sandbox. Older checklist
 checkboxes did not distinguish local implemented registry/SDK work from these
 release gates; no acceptance is inferred from those counts.
 
-### Domain SDK runtime acceptance
+### Bot SDK runtime acceptance
 
 Real provider/loader/ACL/notification/cancellation/lease/media/recovery acceptance
 and dedicated complete standard-SDK consumer coverage remain operator-owned and

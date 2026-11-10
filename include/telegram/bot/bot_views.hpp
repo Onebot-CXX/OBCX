@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_events.hpp"
+#include "core/bot/bot_events.hpp"
 
 namespace obcx::telegram::bot {
 // Current scoped display observation; never a native-ID import or lookup grant.

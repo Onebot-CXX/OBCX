@@ -1,4 +1,4 @@
-# OneBot media access through the domain SDK
+# OneBot media access through the bot SDK
 
 ## Ordinary actor migration
 
@@ -57,8 +57,8 @@ read its supplied path through the process reader. Neither maps paths for actors
 Bridge owns conversion, cache keys, temporary files, leases, placeholders and
 cleanup through all outputs/cancellation/uncertain effects. It must not recover a
 failed read from a native URL/path. See the
-[QQ media implementation boundaries](../../src/onebot11/bot/domain-api.md) and
-[Telegram media matrix](../../src/telegram/bot/domain-api.md) for supported kinds
+[QQ media implementation boundaries](../../src/onebot11/bot/bot-api.md) and
+[Telegram media matrix](../../src/telegram/bot/bot-api.md) for supported kinds
 and explicit unavailable combinations. A bounded readable blob is not decoder,
 transcoding or provider-playback acceptance.
 
@@ -77,5 +77,5 @@ has its separately pinned reference in the change's standard coverage matrix.
 Current SDK/core and real actor builds are recorded under
 `build/domain-sdk-2.5.18-current/`; media/provider/cancellation and recovery
 acceptance remain open. Follow the [actor-only build procedure](README.md) and
-[coordinated cutover gates](domain-sdk-cutover.md); builds and metadata checks do
+[coordinated cutover gates](bot-sdk-cutover.md); builds and metadata checks do
 not authorize deployment, restart or probing.

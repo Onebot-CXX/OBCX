@@ -108,10 +108,9 @@ public:
                                    std::nullopt};
         // Invalid association is not a reason to discard the confirmed key.
         try {
-          d::detail::DomainRecordPreflight<ForwardOutputDetails>::validate(
-              entry);
+          d::detail::BotRecordPreflight<ForwardOutputDetails>::validate(entry);
           value.node_indices =
-              d::detail::domain_decode<std::optional<std::vector<std::size_t>>>(
+              d::detail::bot_decode<std::optional<std::vector<std::size_t>>>(
                   entry.at("node_indices"));
         } catch (...) {
           corrupt_ = true;
@@ -137,7 +136,7 @@ private:
       return;
     try {
       f();
-    } catch (const d::detail::DomainBudgetExceeded &) {
+    } catch (const d::detail::BotBudgetExceeded &) {
       corrupt_ = exhausted_ = true;
     } catch (...) {
       corrupt_ = true;
@@ -159,7 +158,7 @@ private:
     if (!confirmed(forward.source))
       throw std::invalid_argument("unconfirmed forward resource");
     // Typed field bounds are checked before encoding/copying a single value.
-    const auto encoded = d::detail::domain_encode(forward);
+    const auto encoded = d::detail::bot_encode(forward);
     budget_.replace_null(forward_slot(), encoded);
     result_.forward = forward;
   }
@@ -193,7 +192,7 @@ private:
     bool association = true;
     if (entry.node_indices && entry.node_indices->size() <= 99)
       budget_.inspect_optional(nodes_slot(),
-                               d::detail::domain_encode(*entry.node_indices));
+                               d::detail::bot_encode(*entry.node_indices));
     try {
       entry.validate();
       if (entry.node_indices)
@@ -205,10 +204,10 @@ private:
       corrupt_ = true;
     }
     // Encode the validated candidate before retaining any optional vector.
-    auto encoded = d::detail::domain_encode(
+    auto encoded = d::detail::bot_encode(
         ForwardOutputDetails{entry.message, std::nullopt});
     if (association && entry.node_indices)
-      encoded["node_indices"] = d::detail::domain_encode(*entry.node_indices);
+      encoded["node_indices"] = d::detail::bot_encode(*entry.node_indices);
     budget_.append(nodes_slot(), encoded);
     ForwardOutputDetails value{entry.message, std::nullopt};
     if (association)

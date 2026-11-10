@@ -33,7 +33,7 @@ struct SupportedActions {
 
   using obcx_bot_json_factory = void;
   static auto from_json(const Json &document) -> SupportedActions {
-    detail::validate_domain_wire(document);
+    detail::validate_bot_wire(document);
     detail::require_object(document, "SupportedActions");
     if (!document.contains("installation") || !document.contains("actions") ||
         !document.at("actions").is_array()) {
@@ -92,7 +92,7 @@ struct OperationEnvelope {
     detail::require_object(payload, "operation payload");
     if (payload.contains("action")) {
       const auto &payload_action = payload.at("action");
-      detail::validate_domain_wire(payload_action);
+      detail::validate_bot_wire(payload_action);
       if (!payload_action.is_string()) {
         throw std::invalid_argument("bot ID must be a string");
       }

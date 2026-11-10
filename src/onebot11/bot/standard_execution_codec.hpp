@@ -71,7 +71,7 @@ struct NativeReplyDisposition {
 // Caller supplies an already-owned tree; parsing/transport wire limits and
 // duplicate-key detection must precede this seam. Borrowed inspection charges
 // ALL unknown fields before extracting any header, without copying payloads.
-// ValueLimits follow DomainWireBudget accounting (not serialized wire size):
+// ValueLimits follow BotWireBudget accounting (not serialized wire size):
 // cumulative string/key/binary bytes, value nodes, root depth=0, per-text
 // limit. This classifies headers only: ok/0, async/1, failed/neither 0 nor 1,
 // subject to mode/restart restrictions. Signed-int64 retcodes are an SDK

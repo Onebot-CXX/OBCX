@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_events.hpp"
+#include "core/bot/bot_events.hpp"
 #include "core/bot/self_info.hpp"
 
 namespace obcx::bot {
@@ -55,7 +55,7 @@ struct ReadMediaRequest {
   std::size_t maximum_bytes;
   void validate() const {
     media.validate();
-    if (!maximum_bytes || maximum_bytes > detail::domain_maximum_bytes)
+    if (!maximum_bytes || maximum_bytes > detail::bot_maximum_bytes)
       throw std::invalid_argument("invalid explicit media read bound");
   }
 };
@@ -143,20 +143,19 @@ struct GetCapabilitiesRequest {
   ConversationRef conversation;
   void validate() const { conversation.validate(); }
 };
-template <> struct detail::DomainRecordPreflight<MemberInfo> {
+template <> struct detail::BotRecordPreflight<MemberInfo> {
   static void validate(const Json &d) {
     detail::preflight_optional_identifier(d, "display_name", "MemberInfo",
                                           2048);
     detail::preflight_optional_identifier(d, "username", "MemberInfo", 1024);
   }
 };
-template <> struct detail::DomainRecordPreflight<MediaCapability> {
+template <> struct detail::BotRecordPreflight<MediaCapability> {
   static void validate(const Json &d) {
     const auto &mime_types = d.at("mime_types");
     if (mime_types.is_null())
       return;
-    if (!mime_types.is_array() ||
-        mime_types.size() > detail::domain_maximum_items)
+    if (!mime_types.is_array() || mime_types.size() > detail::bot_maximum_items)
       throw std::invalid_argument("expected bounded capability MIME array");
     for (const auto &mime : mime_types) {
       if (!mime.is_string())
@@ -167,43 +166,39 @@ template <> struct detail::DomainRecordPreflight<MediaCapability> {
   }
 };
 
-OBCX_DOMAIN_FIELDS(MemberInfo, OBCX_DOMAIN_FIELD(conversation),
-                   OBCX_DOMAIN_FIELD(user), OBCX_DOMAIN_FIELD(display_name),
-                   OBCX_DOMAIN_FIELD(username), OBCX_DOMAIN_FIELD(is_bot),
-                   OBCX_DOMAIN_FIELD(role), OBCX_DOMAIN_FIELD(membership));
-OBCX_DOMAIN_FIELDS(GetMemberRequest, OBCX_DOMAIN_FIELD(conversation),
-                   OBCX_DOMAIN_FIELD(user));
-OBCX_DOMAIN_FIELDS(ResolveReplyRequest, OBCX_DOMAIN_FIELD(reply),
-                   OBCX_DOMAIN_FIELD(policy));
-OBCX_DOMAIN_FIELDS(ReadMediaRequest, OBCX_DOMAIN_FIELD(media),
-                   OBCX_DOMAIN_FIELD(maximum_bytes));
-OBCX_DOMAIN_FIELDS(MediaCapability, OBCX_DOMAIN_FIELD(kind),
-                   OBCX_DOMAIN_FIELD(source), OBCX_DOMAIN_FIELD(mime_types),
-                   OBCX_DOMAIN_FIELD(captions),
-                   OBCX_DOMAIN_FIELD(maximum_bytes),
-                   OBCX_DOMAIN_FIELD(maximum_width),
-                   OBCX_DOMAIN_FIELD(maximum_height));
-OBCX_DOMAIN_FIELDS(DeliveryCombination, OBCX_DOMAIN_FIELD(delivery),
-                   OBCX_DOMAIN_FIELD(media_kinds),
-                   OBCX_DOMAIN_FIELD(text_blocks), OBCX_DOMAIN_FIELD(captions),
-                   OBCX_DOMAIN_FIELD(mixed_media),
-                   OBCX_DOMAIN_FIELD(maximum_messages),
-                   OBCX_DOMAIN_FIELD(minimum_group_size),
-                   OBCX_DOMAIN_FIELD(maximum_group_size));
-OBCX_DOMAIN_FIELDS(ConversationCapabilities, OBCX_DOMAIN_FIELD(conversation),
-                   OBCX_DOMAIN_FIELD(operations),
-                   OBCX_DOMAIN_FIELD(text_styles), OBCX_DOMAIN_FIELD(media),
-                   OBCX_DOMAIN_FIELD(combinations),
-                   OBCX_DOMAIN_FIELD(maximum_text_utf8_bytes),
-                   OBCX_DOMAIN_FIELD(maximum_caption_utf8_bytes),
-                   OBCX_DOMAIN_FIELD(maximum_media_total_bytes),
-                   OBCX_DOMAIN_FIELD(may_send), OBCX_DOMAIN_FIELD(may_delete));
-OBCX_DOMAIN_FIELDS(GetCapabilitiesRequest, OBCX_DOMAIN_FIELD(conversation));
+OBCX_BOT_FIELDS(MemberInfo, OBCX_BOT_FIELD(conversation), OBCX_BOT_FIELD(user),
+                OBCX_BOT_FIELD(display_name), OBCX_BOT_FIELD(username),
+                OBCX_BOT_FIELD(is_bot), OBCX_BOT_FIELD(role),
+                OBCX_BOT_FIELD(membership));
+OBCX_BOT_FIELDS(GetMemberRequest, OBCX_BOT_FIELD(conversation),
+                OBCX_BOT_FIELD(user));
+OBCX_BOT_FIELDS(ResolveReplyRequest, OBCX_BOT_FIELD(reply),
+                OBCX_BOT_FIELD(policy));
+OBCX_BOT_FIELDS(ReadMediaRequest, OBCX_BOT_FIELD(media),
+                OBCX_BOT_FIELD(maximum_bytes));
+OBCX_BOT_FIELDS(MediaCapability, OBCX_BOT_FIELD(kind), OBCX_BOT_FIELD(source),
+                OBCX_BOT_FIELD(mime_types), OBCX_BOT_FIELD(captions),
+                OBCX_BOT_FIELD(maximum_bytes), OBCX_BOT_FIELD(maximum_width),
+                OBCX_BOT_FIELD(maximum_height));
+OBCX_BOT_FIELDS(DeliveryCombination, OBCX_BOT_FIELD(delivery),
+                OBCX_BOT_FIELD(media_kinds), OBCX_BOT_FIELD(text_blocks),
+                OBCX_BOT_FIELD(captions), OBCX_BOT_FIELD(mixed_media),
+                OBCX_BOT_FIELD(maximum_messages),
+                OBCX_BOT_FIELD(minimum_group_size),
+                OBCX_BOT_FIELD(maximum_group_size));
+OBCX_BOT_FIELDS(ConversationCapabilities, OBCX_BOT_FIELD(conversation),
+                OBCX_BOT_FIELD(operations), OBCX_BOT_FIELD(text_styles),
+                OBCX_BOT_FIELD(media), OBCX_BOT_FIELD(combinations),
+                OBCX_BOT_FIELD(maximum_text_utf8_bytes),
+                OBCX_BOT_FIELD(maximum_caption_utf8_bytes),
+                OBCX_BOT_FIELD(maximum_media_total_bytes),
+                OBCX_BOT_FIELD(may_send), OBCX_BOT_FIELD(may_delete));
+OBCX_BOT_FIELDS(GetCapabilitiesRequest, OBCX_BOT_FIELD(conversation));
 template <>
 struct OperationTraits<GetMemberRequest>
     : OperationContract<GetMemberRequest, MemberInfo, false> {
   static auto supports_surface(const SurfaceId &s) -> bool {
-    return domain_supports_surface(s);
+    return bot_supports_surface(s);
   }
   static auto installation(const request_type &r)
       -> const BotInstallationRef & {
@@ -219,7 +214,7 @@ template <>
 struct OperationTraits<ResolveReplyRequest>
     : OperationContract<ResolveReplyRequest, ReplyInfo, false> {
   static auto supports_surface(const SurfaceId &s) -> bool {
-    return domain_supports_surface(s);
+    return bot_supports_surface(s);
   }
   static auto installation(const request_type &r)
       -> const BotInstallationRef & {
@@ -235,7 +230,7 @@ template <>
 struct OperationTraits<ReadMediaRequest>
     : OperationContract<ReadMediaRequest, MediaBlob, false> {
   static auto supports_surface(const SurfaceId &s) -> bool {
-    return domain_supports_surface(s);
+    return bot_supports_surface(s);
   }
   static auto installation(const request_type &r)
       -> const BotInstallationRef & {
@@ -258,7 +253,7 @@ struct OperationTraits<GetCapabilitiesRequest>
     : OperationContract<GetCapabilitiesRequest, ConversationCapabilities,
                         false> {
   static auto supports_surface(const SurfaceId &s) -> bool {
-    return domain_supports_surface(s);
+    return bot_supports_surface(s);
   }
   static auto installation(const request_type &r)
       -> const BotInstallationRef & {

@@ -367,15 +367,14 @@ auto run_terminal_stage(std::shared_ptr<OrchestratorState> state,
     auto routed = co_await process_message(
         state, work.routing_config, std::move(failure_envelope), work.route);
     if (routed.stages.empty()) {
-      OBCX_ERROR("Terminal async actor {} failed in {}.{} with {}: {}; no "
-                 "ActorFailed pipeline handled the failure",
+      OBCX_ERROR("Actor '{}' failed in pipeline '{}' stage '{}': {} [{}]",
                  work.actor, work.pipeline, work.stage,
-                 actor_result.failure->code, actor_result.failure->message);
+                 actor_result.failure->message, actor_result.failure->code);
     } else if (!routed.ok()) {
-      OBCX_ERROR(
-          "ActorFailed pipeline could not handle terminal async failure from "
-          "{}.{} ({})",
-          work.pipeline, work.stage, actor_result.failure->code);
+      OBCX_ERROR("Actor '{}' failed in pipeline '{}' stage '{}' [{}], and the "
+                 "ActorFailed pipeline that should handle it also failed",
+                 work.actor, work.pipeline, work.stage,
+                 actor_result.failure->code);
     }
   }
 

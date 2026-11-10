@@ -18,7 +18,7 @@ auto configured_installation(const common::RuntimeConfigSnapshot &snapshot,
     const auto &catalog = ProcessConfigAccess::catalog(snapshot);
     if (metadata.ingress_platform != platform ||
         catalog->ingress_platform(metadata.surface) != platform ||
-        !catalog->domain_binding(metadata.surface))
+        !catalog->platform_adapter(metadata.surface))
       break;
     return {metadata.installation_id, metadata.surface};
   }
@@ -88,7 +88,7 @@ auto CommandScopeResolver::source_from_invocation(
         *impl_->snapshot, installation, invocation.source_platform);
     // Bound the borrowed input before making the envelope copies needed by
     // the existing projector. Do not rebuild a source from historical facts.
-    bot::detail::validate_domain_wire(invocation.source_event);
+    bot::detail::validate_bot_wire(invocation.source_event);
     bot::detail::validate_identifier(invocation.conversation_id,
                                      "command conversation", 1024);
     bot::detail::validate_identifier(invocation.sender, "command sender", 1024);

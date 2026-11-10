@@ -1,6 +1,7 @@
-#include "telegram/bot/domain_binding.hpp"
-#include "telegram/bot/domain_operations.hpp"
-#include "telegram/bot/domain_views.hpp"
+#include "telegram/bot/platform_adapter.hpp"
+#include "telegram/bot/bot_operations.hpp"
+#include "telegram/bot/bot_views.hpp"
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -62,7 +63,7 @@ std::vector<std::optional<std::size_t>> boundaries(std::string_view s) {
 // text/entity copy or output construction. The aggregate bound includes fields
 // ignored by the typed projection, including unknown archival fields.
 void preflight_native_message(const d::Json &message) {
-  d::detail::validate_domain_wire(message);
+  d::detail::validate_bot_wire(message);
   d::detail::require_object(message, "Telegram message");
   for (auto key : {"text", "caption"})
     if (message.contains(key)) {
@@ -84,11 +85,11 @@ void preflight_native_message(const d::Json &message) {
     }
   // Unknown native fields become one bounded UnsupportedContent each. Charge
   // worst-case output expansion before allocating even the first output block.
-  d::detail::DomainWireBudget projected;
+  // Invalid field names still get a marker, but no description.
+  d::detail::BotWireBudget projected;
   for (auto it = message.begin(); it != message.end(); ++it) {
-    d::detail::validate_identifier(it.key(), "Telegram native field", 128);
     projected.nodes(8);
-    projected.bytes(it.key().size());
+    projected.bytes(128 + it.key().size());
   }
 }
 d::ReceivedRichText rich(const d::BotInstallationRef &installation,
@@ -528,24 +529,155 @@ d::MessageReceived normalize_message_impl(const d::BotInstallationRef &i,
                                        : std::optional{type.substr(0, 128)}});
         }
     }
-  const std::set<std::string> known{
-      "is_edited", "message_id", "message_thread_id", "is_topic_message",
-      "from", "sender_chat", "sender_boost_count", "sender_business_bot",
-      "date", "chat", "forward_origin",
-      // Legacy equivalents of forward_origin are
-      // metadata, not unsupported message content.
-      "forward_from", "forward_from_chat", "forward_from_message_id",
-      "forward_signature", "forward_sender_name", "forward_date",
-      "is_automatic_forward", "reply_to_message", "external_reply", "quote",
-      "reply_to_story", "via_bot", "edit_date", "has_protected_content",
-      "is_from_offline", "media_group_id", "author_signature", "text",
-      "entities", "link_preview_options", "effect_id", "animation", "audio",
-      "document", "photo", "sticker", "video", "video_note", "voice", "caption",
-      "caption_entities", "show_caption_above_media", "has_media_spoiler",
-      "reply_markup", "business_connection_id"};
-  for (auto it = j.begin(); it != j.end(); ++it)
-    if (!known.contains(it.key()))
-      out.body.emplace_back(d::UnsupportedContent{it.key(), std::nullopt});
+  // Includes handled envelope fields; their identity and reply semantics must
+  // remain in the typed projection rather than become metadata.
+  static constexpr std::string_view normalized_fields[]{
+      "message_id",
+      "message_thread_id",
+      "from",
+      "sender_chat",
+      "chat",
+      "is_topic_message",
+      "reply_to_message",
+      "external_reply",
+      "quote",
+      "reply_to_story",
+      "edit_date",
+      "media_group_id",
+      "text",
+      "entities",
+      "effect_id",
+      "animation",
+      "audio",
+      "document",
+      "photo",
+      "sticker",
+      "video",
+      "video_note",
+      "voice",
+      "caption",
+      "caption_entities",
+      "show_caption_above_media",
+      "has_media_spoiler",
+      "reply_markup",
+      "is_edited"};
+  static constexpr std::string_view metadata_fields[]{"sender_boost_count",
+                                                      "sender_business_bot",
+                                                      "sender_tag",
+                                                      "date",
+                                                      "forward_origin",
+                                                      "is_automatic_forward",
+                                                      "via_bot",
+                                                      "guest_bot_caller_user",
+                                                      "guest_bot_caller_chat",
+                                                      "has_protected_content",
+                                                      "is_from_offline",
+                                                      "is_paid_post",
+                                                      "author_signature",
+                                                      "paid_star_count",
+                                                      "suggested_post_info",
+                                                      "forward_date",
+                                                      "forward_from",
+                                                      "forward_from_chat",
+                                                      "forward_from_message_id",
+                                                      "forward_sender_name",
+                                                      "forward_signature",
+                                                      "link_preview_options"};
+  static constexpr std::string_view unsupported_content_fields[]{
+      "rich_message", "live_photo",    "paid_media", "story",
+      "widget",       "checklist",     "contact",    "dice",
+      "game",         "poll",          "venue",      "location",
+      "invoice",      "passport_data", "giveaway",   "giveaway_winners"};
+  static constexpr std::string_view service_fields[]{
+      "new_chat_members",
+      "left_chat_member",
+      "chat_owner_left",
+      "chat_owner_changed",
+      "new_chat_title",
+      "new_chat_photo",
+      "delete_chat_photo",
+      "group_chat_created",
+      "supergroup_chat_created",
+      "channel_chat_created",
+      "message_auto_delete_timer_changed",
+      "migrate_to_chat_id",
+      "migrate_from_chat_id",
+      "pinned_message",
+      "successful_payment",
+      "refunded_payment",
+      "users_shared",
+      "chat_shared",
+      "gift",
+      "unique_gift",
+      "gift_upgrade_sent",
+      "connected_website",
+      "write_access_allowed",
+      "proximity_alert_triggered",
+      "boost_added",
+      "chat_background_set",
+      "checklist_tasks_done",
+      "checklist_tasks_added",
+      "community_chat_added",
+      "community_chat_joined",
+      "community_chat_removed",
+      "direct_message_price_changed",
+      "forum_topic_created",
+      "forum_topic_edited",
+      "forum_topic_closed",
+      "forum_topic_reopened",
+      "general_forum_topic_hidden",
+      "general_forum_topic_unhidden",
+      "giveaway_created",
+      "giveaway_completed",
+      "managed_bot_created",
+      "paid_message_price_changed",
+      "paid_messages_waived",
+      "poll_option_added",
+      "poll_option_deleted",
+      "suggested_post_approved",
+      "suggested_post_approval_failed",
+      "suggested_post_declined",
+      "suggested_post_paid",
+      "suggested_post_refunded",
+      "ton_wallet_transfer",
+      "video_chat_scheduled",
+      "video_chat_started",
+      "video_chat_ended",
+      "video_chat_participants_invited",
+      "web_app_data"};
+  static constexpr std::string_view scope_identity_or_reply_fields[]{
+      "direct_messages_topic",  "receiver_user",
+      "ephemeral_message_id",   "guest_query_id",
+      "business_connection_id", "reply_to_checklist_task_id",
+      "reply_to_poll_option_id"};
+  const auto contains_field = [](const auto &fields, std::string_view key) {
+    return std::ranges::find(fields, key) != std::end(fields);
+  };
+  for (auto it = j.begin(); it != j.end(); ++it) {
+    const auto &key = it.key();
+    if (contains_field(normalized_fields, key) ||
+        contains_field(metadata_fields, key))
+      continue;
+    if (contains_field(unsupported_content_fields, key) ||
+        contains_field(scope_identity_or_reply_fields, key))
+      out.body.emplace_back(
+          d::UnsupportedContent{std::string{"telegram."} + key, std::nullopt});
+    else if (contains_field(service_fields, key))
+      out.body.emplace_back(d::UnsupportedContent{"telegram.service", key});
+    else {
+      const auto ascii_letter = [](unsigned char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+      };
+      const bool identifier =
+          !key.empty() && key.size() <= 128 && ascii_letter(key.front()) &&
+          std::ranges::all_of(key, [&](unsigned char c) {
+            return ascii_letter(c) || (c >= '0' && c <= '9');
+          });
+      out.body.emplace_back(d::UnsupportedContent{
+          "telegram.unknown-field",
+          identifier ? std::optional{key} : std::nullopt});
+    }
+  }
   if (j.contains("edit_date") || j.value("is_edited", false))
     out.body.emplace_back(
         d::UnsupportedContent{"telegram.edited", std::nullopt});
@@ -606,7 +738,7 @@ d::MessageReceived normalize_native_message(
   return normalize_message_impl(installation, message, received, observation);
 }
 namespace {
-class Binding final : public core::PlatformDomainBinding {
+class Binding final : public core::PlatformAdapter {
 public:
   const d::binding::NativeReferenceCodec &codec() const override {
     return reference_codec();
@@ -648,7 +780,7 @@ public:
   }
 };
 } // namespace
-std::shared_ptr<const core::PlatformDomainBinding> domain_binding() {
+std::shared_ptr<const core::PlatformAdapter> platform_adapter() {
   static auto binding = std::make_shared<const Binding>();
   return binding;
 }
@@ -716,14 +848,14 @@ std::optional<MessageUpdateObservation> message_update_observation(
       reply["target"] = message.reply->reference()->target();
   }
   const auto serialized =
-      d::Json::array({message.message, d::detail::domain_encode(message.sender),
-                      d::detail::domain_encode(message.body),
-                      d::detail::domain_encode(message.observations),
-                      d::detail::domain_encode(message.context.sender_profile),
+      d::Json::array({message.message, d::detail::bot_encode(message.sender),
+                      d::detail::bot_encode(message.body),
+                      d::detail::bot_encode(message.observations),
+                      d::detail::bot_encode(message.context.sender_profile),
                       reply})
           .dump();
-  if (serialized.size() > d::detail::domain_maximum_bytes)
-    throw d::detail::DomainBudgetExceeded{};
+  if (serialized.size() > d::detail::bot_maximum_bytes)
+    throw d::detail::BotBudgetExceeded{};
   const std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> context(
       EVP_MD_CTX_new(), &EVP_MD_CTX_free);
   constexpr std::string_view prefix = "obcx.telegram.typed-edit.v1";

@@ -1,6 +1,6 @@
 #include "standard_mutation_codec.hpp"
 
-#include "onebot11/bot/domain_binding.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 
 #include <charconv>
 #include <cmath>
@@ -11,7 +11,7 @@
 
 namespace obcx::onebot11::bot::standard {
 namespace {
-namespace domain = obcx::bot;
+namespace bot_model = obcx::bot;
 
 // Always use the genuine QQ codec, including its canonical spelling/ranges.
 // These helpers only inspect existing references; they never mint new ones.
@@ -26,32 +26,32 @@ auto native_id(const auto &id) -> std::int64_t {
   return result;
 }
 
-void validate_group(const domain::ConversationRef &group) {
+void validate_group(const bot_model::ConversationRef &group) {
   const QqNativeReferenceCodec codec;
   codec.validate(group);
   if (codec.unpack(group.id).kind != "group")
     throw std::invalid_argument("mutation requires group scope");
 }
 
-void validate_group_user(const domain::ConversationRef &group,
-                         const domain::UserRef &user) {
+void validate_group_user(const bot_model::ConversationRef &group,
+                         const bot_model::UserRef &user) {
   validate_group(group);
   QqNativeReferenceCodec{}.validate(user);
   if (group.installation != user.installation)
     throw std::invalid_argument("mutation reference installation mismatch");
 }
 
-void validate_installation(const domain::BotInstallationRef &expected,
-                           const domain::BotInstallationRef &actual) {
+void validate_installation(const bot_model::BotInstallationRef &expected,
+                           const bot_model::BotInstallationRef &actual) {
   QqNativeReferenceCodec{}.validate(expected);
   if (expected != actual)
     throw std::invalid_argument("mutation target installation mismatch");
 }
 
 void validate_text(std::string_view text) {
-  if (text.size() > domain::detail::domain_maximum_bytes)
+  if (text.size() > bot_model::detail::bot_maximum_bytes)
     throw std::invalid_argument("mutation text exceeds hard bound");
-  domain::detail::validate_utf8(text);
+  bot_model::detail::validate_utf8(text);
 }
 
 void validate_duration(const DurationSeconds &duration, bool title) {
@@ -111,27 +111,27 @@ public:
     this->text(text);
   }
 
-  void installation(const domain::BotInstallationRef &installation,
+  void installation(const bot_model::BotInstallationRef &installation,
                     std::size_t depth) {
     value(depth);
     string(installation.installation_id, depth + 1);
     string(installation.surface.value(), depth + 1);
   }
 
-  void reference(const domain::UserRef &user, std::size_t depth) {
+  void reference(const bot_model::UserRef &user, std::size_t depth) {
     value(depth);
     installation(user.installation, depth + 1);
     string(user.id.serialized(), depth + 1);
   }
 
-  void reference(const domain::ConversationRef &conversation,
+  void reference(const bot_model::ConversationRef &conversation,
                  std::size_t depth) {
     value(depth);
     installation(conversation.installation, depth + 1);
     string(conversation.id.serialized(), depth + 1);
   }
 
-  void reference(const domain::MessageRef &message, std::size_t depth) {
+  void reference(const bot_model::MessageRef &message, std::size_t depth) {
     value(depth);
     reference(message.conversation, depth + 1);
     string(message.id.serialized(), depth + 1);
@@ -144,13 +144,13 @@ public:
 
 private:
   const ValueLimits &limits_;
-  domain::detail::DomainWireBudget hard_budget_;
+  bot_model::detail::BotWireBudget hard_budget_;
   std::size_t nodes_{};
   std::size_t bytes_{};
 };
 
 auto begin_parameters(const ValueLimits &limits,
-                      const domain::BotInstallationRef &installation)
+                      const bot_model::BotInstallationRef &installation)
     -> MutationValueBudget {
   MutationValueBudget budget(limits);
   // Two borrowed roots: selected installation and parameter DTO. Neither
@@ -229,7 +229,7 @@ void SetGroupSpecialTitleParameters::validate() const {
 
 namespace detail {
 auto encode_parameters(const SendLikeParameters &parameters,
-                       const domain::BotInstallationRef &installation,
+                       const bot_model::BotInstallationRef &installation,
                        const ValueLimits &limits) -> common::json {
   auto budget = begin_parameters(limits, installation);
   budget.reference(parameters.user, 1);
@@ -241,7 +241,7 @@ auto encode_parameters(const SendLikeParameters &parameters,
 }
 
 auto encode_parameters(const DeleteMsgParameters &parameters,
-                       const domain::BotInstallationRef &installation,
+                       const bot_model::BotInstallationRef &installation,
                        const ValueLimits &limits) -> common::json {
   auto budget = begin_parameters(limits, installation);
   budget.reference(parameters.message, 1);
@@ -253,7 +253,7 @@ auto encode_parameters(const DeleteMsgParameters &parameters,
 }
 
 auto encode_parameters(const SetGroupKickParameters &parameters,
-                       const domain::BotInstallationRef &installation,
+                       const bot_model::BotInstallationRef &installation,
                        const ValueLimits &limits) -> common::json {
   auto budget = begin_parameters(limits, installation);
   budget.reference(parameters.group, 1);
@@ -268,7 +268,7 @@ auto encode_parameters(const SetGroupKickParameters &parameters,
 }
 
 auto encode_parameters(const SetGroupBanParameters &parameters,
-                       const domain::BotInstallationRef &installation,
+                       const bot_model::BotInstallationRef &installation,
                        const ValueLimits &limits) -> common::json {
   auto budget = begin_parameters(limits, installation);
   budget.reference(parameters.group, 1);
@@ -283,7 +283,7 @@ auto encode_parameters(const SetGroupBanParameters &parameters,
 }
 
 auto encode_parameters(const SetGroupWholeBanParameters &parameters,
-                       const domain::BotInstallationRef &installation,
+                       const bot_model::BotInstallationRef &installation,
                        const ValueLimits &limits) -> common::json {
   auto budget = begin_parameters(limits, installation);
   budget.reference(parameters.group, 1);
@@ -295,7 +295,7 @@ auto encode_parameters(const SetGroupWholeBanParameters &parameters,
 }
 
 auto encode_parameters(const SetGroupAdminParameters &parameters,
-                       const domain::BotInstallationRef &installation,
+                       const bot_model::BotInstallationRef &installation,
                        const ValueLimits &limits) -> common::json {
   auto budget = begin_parameters(limits, installation);
   budget.reference(parameters.group, 1);
@@ -309,7 +309,7 @@ auto encode_parameters(const SetGroupAdminParameters &parameters,
 }
 
 auto encode_parameters(const SetGroupAnonymousParameters &parameters,
-                       const domain::BotInstallationRef &installation,
+                       const bot_model::BotInstallationRef &installation,
                        const ValueLimits &limits) -> common::json {
   auto budget = begin_parameters(limits, installation);
   budget.reference(parameters.group, 1);
@@ -321,7 +321,7 @@ auto encode_parameters(const SetGroupAnonymousParameters &parameters,
 }
 
 auto encode_parameters(const SetGroupCardParameters &parameters,
-                       const domain::BotInstallationRef &installation,
+                       const bot_model::BotInstallationRef &installation,
                        const ValueLimits &limits) -> common::json {
   auto budget = begin_parameters(limits, installation);
   budget.reference(parameters.group, 1);
@@ -335,7 +335,7 @@ auto encode_parameters(const SetGroupCardParameters &parameters,
 }
 
 auto encode_parameters(const SetGroupNameParameters &parameters,
-                       const domain::BotInstallationRef &installation,
+                       const bot_model::BotInstallationRef &installation,
                        const ValueLimits &limits) -> common::json {
   auto budget = begin_parameters(limits, installation);
   budget.reference(parameters.group, 1);
@@ -348,7 +348,7 @@ auto encode_parameters(const SetGroupNameParameters &parameters,
 }
 
 auto encode_parameters(const SetGroupLeaveParameters &parameters,
-                       const domain::BotInstallationRef &installation,
+                       const bot_model::BotInstallationRef &installation,
                        const ValueLimits &limits) -> common::json {
   auto budget = begin_parameters(limits, installation);
   budget.reference(parameters.group, 1);
@@ -360,7 +360,7 @@ auto encode_parameters(const SetGroupLeaveParameters &parameters,
 }
 
 auto encode_parameters(const SetGroupSpecialTitleParameters &parameters,
-                       const domain::BotInstallationRef &installation,
+                       const bot_model::BotInstallationRef &installation,
                        const ValueLimits &limits) -> common::json {
   auto budget = begin_parameters(limits, installation);
   budget.reference(parameters.group, 1);

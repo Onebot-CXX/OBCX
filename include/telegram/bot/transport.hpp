@@ -38,7 +38,7 @@ public:
       -> SelfObservationResult = 0;
   virtual auto send_action(std::string payload, std::uint64_t echo)
       -> boost::asio::awaitable<std::string> = 0;
-  virtual auto send_domain_request(
+  virtual auto send_bot_request(
       nlohmann::json parameters,
       const std::vector<std::pair<std::string, TelegramMediaUpload>> &files)
       -> boost::asio::awaitable<std::string> = 0;
@@ -90,7 +90,7 @@ public:
       -> SelfObservationResult override;
   auto send_action(std::string payload, std::uint64_t echo)
       -> boost::asio::awaitable<std::string> override;
-  auto send_domain_request(
+  auto send_bot_request(
       nlohmann::json parameters,
       const std::vector<std::pair<std::string, TelegramMediaUpload>> &files)
       -> boost::asio::awaitable<std::string> override;

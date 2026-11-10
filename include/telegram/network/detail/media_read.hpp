@@ -1,7 +1,7 @@
 #pragma once
 
 // Process-private native read admission. Not part of the installed actor SDK.
-#include "core/bot/domain_queries.hpp"
+#include "core/bot/bot_queries.hpp"
 #include "network/http_call.hpp"
 #include "telegram/network/connection_manager.hpp"
 

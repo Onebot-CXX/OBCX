@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_queries.hpp"
+#include "core/bot/bot_queries.hpp"
 #include "core/bot/send_gateway_codec.hpp"
 namespace obcx::telegram::bot {
 struct SendStickerRequest {
@@ -14,7 +14,7 @@ struct SendStickerRequest {
     if (target.installation.surface !=
             obcx::bot::SurfaceId{"telegram.bot_api"} ||
         sticker.installation != target.installation || !maximum_bytes ||
-        maximum_bytes > obcx::bot::detail::domain_maximum_bytes)
+        maximum_bytes > obcx::bot::detail::bot_maximum_bytes)
       throw std::invalid_argument("invalid sticker scope or budget");
     if (reply_to) {
       reply_to->validate();
@@ -45,7 +45,7 @@ struct StrikethroughText {
   std::string content;
   void validate() const {
     if (content.empty() ||
-        content.size() > obcx::bot::detail::domain_maximum_bytes)
+        content.size() > obcx::bot::detail::bot_maximum_bytes)
       throw std::invalid_argument("invalid Telegram strikethrough text");
     obcx::bot::detail::validate_utf8(content);
   }
@@ -61,7 +61,7 @@ struct EditFormattedTextRequest {
     message.validate();
     if (message.conversation.installation.surface !=
             obcx::bot::SurfaceId{"telegram.bot_api"} ||
-        text.empty() || text.size() > obcx::bot::detail::domain_maximum_items)
+        text.empty() || text.size() > obcx::bot::detail::bot_maximum_items)
       throw std::invalid_argument("invalid Telegram formatted edit");
     for (const auto &part : text)
       std::visit(
@@ -103,9 +103,9 @@ struct TopicReceipt {
 void validate_topic_result(const CreateTopicRequest &, const TopicReceipt &);
 } // namespace obcx::telegram::bot
 namespace obcx::bot {
-OBCX_DOMAIN_FIELDS(telegram::bot::SendStickerRequest, OBCX_DOMAIN_FIELD(target),
-                   OBCX_DOMAIN_FIELD(sticker), OBCX_DOMAIN_FIELD(reply_to),
-                   OBCX_DOMAIN_FIELD(maximum_bytes));
+OBCX_BOT_FIELDS(telegram::bot::SendStickerRequest, OBCX_BOT_FIELD(target),
+                OBCX_BOT_FIELD(sticker), OBCX_BOT_FIELD(reply_to),
+                OBCX_BOT_FIELD(maximum_bytes));
 template <>
 struct OperationTraits<telegram::bot::SendStickerRequest>
     : OperationContract<telegram::bot::SendStickerRequest, SendOutcome, true> {
@@ -120,17 +120,16 @@ struct OperationTraits<telegram::bot::SendStickerRequest>
     telegram::bot::validate_sticker_outcome(r, v);
   }
 };
-OBCX_DOMAIN_FIELDS(telegram::bot::EditTextRequest, OBCX_DOMAIN_FIELD(message),
-                   OBCX_DOMAIN_FIELD(text));
-OBCX_DOMAIN_FIELDS(telegram::bot::EditTextReceipt, OBCX_DOMAIN_FIELD(message));
-OBCX_DOMAIN_FIELDS(telegram::bot::StrikethroughText,
-                   OBCX_DOMAIN_FIELD(content));
-OBCX_DOMAIN_FIELDS(telegram::bot::EditFormattedTextRequest,
-                   OBCX_DOMAIN_FIELD(message), OBCX_DOMAIN_FIELD(text));
+OBCX_BOT_FIELDS(telegram::bot::EditTextRequest, OBCX_BOT_FIELD(message),
+                OBCX_BOT_FIELD(text));
+OBCX_BOT_FIELDS(telegram::bot::EditTextReceipt, OBCX_BOT_FIELD(message));
+OBCX_BOT_FIELDS(telegram::bot::StrikethroughText, OBCX_BOT_FIELD(content));
+OBCX_BOT_FIELDS(telegram::bot::EditFormattedTextRequest,
+                OBCX_BOT_FIELD(message), OBCX_BOT_FIELD(text));
 template <>
-struct detail::DomainEncodePreflight<telegram::bot::EditFormattedTextRequest> {
+struct detail::BotEncodePreflight<telegram::bot::EditFormattedTextRequest> {
   static void validate(const telegram::bot::EditFormattedTextRequest &value) {
-    detail::DomainWireBudget budget;
+    detail::BotWireBudget budget;
     detail::inspect_send_wire_value(value, budget);
   }
 };
@@ -150,10 +149,10 @@ struct OperationTraits<telegram::bot::EditFormattedTextRequest>
       throw std::invalid_argument("formatted edit receipt scope mismatch");
   }
 };
-OBCX_DOMAIN_FIELDS(telegram::bot::CreateTopicRequest, OBCX_DOMAIN_FIELD(parent),
-                   OBCX_DOMAIN_FIELD(name));
-OBCX_DOMAIN_FIELDS(telegram::bot::TopicReceipt, OBCX_DOMAIN_FIELD(conversation),
-                   OBCX_DOMAIN_FIELD(name));
+OBCX_BOT_FIELDS(telegram::bot::CreateTopicRequest, OBCX_BOT_FIELD(parent),
+                OBCX_BOT_FIELD(name));
+OBCX_BOT_FIELDS(telegram::bot::TopicReceipt, OBCX_BOT_FIELD(conversation),
+                OBCX_BOT_FIELD(name));
 template <>
 struct OperationTraits<telegram::bot::EditTextRequest>
     : OperationContract<telegram::bot::EditTextRequest,

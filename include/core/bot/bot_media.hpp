@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_codec.hpp"
+#include "core/bot/bot_codec.hpp"
 #include "core/bot/references.hpp"
 
 namespace obcx::bot {
@@ -51,7 +51,7 @@ struct BytesSource {
   MediaMetadata metadata;
   void validate() const {
     metadata.validate();
-    if (bytes.empty() || bytes.size() > detail::domain_maximum_bytes ||
+    if (bytes.empty() || bytes.size() > detail::bot_maximum_bytes ||
         (metadata.size_bytes && *metadata.size_bytes != bytes.size()))
       throw std::invalid_argument("invalid owned media size");
   }
@@ -114,49 +114,45 @@ struct MediaBlob {
       throw std::invalid_argument("invalid media kind");
   }
 };
-template <> struct detail::DomainRecordPreflight<MediaMetadata> {
+template <> struct detail::BotRecordPreflight<MediaMetadata> {
   static void validate(const Json &d) {
     detail::preflight_optional_identifier(d, "mime_type", "MediaMetadata", 256);
     detail::preflight_optional_identifier(d, "filename", "MediaMetadata", 1024);
   }
 };
-template <> struct detail::DomainRecordPreflight<BytesSource> {
+template <> struct detail::BotRecordPreflight<BytesSource> {
   static void validate(const Json &d) {
     const auto &bytes = d.at("bytes");
     if (!bytes.is_binary() || bytes.get_binary().empty() ||
-        bytes.get_binary().size() > detail::domain_maximum_bytes)
+        bytes.get_binary().size() > detail::bot_maximum_bytes)
       throw std::invalid_argument("invalid owned media size");
     const auto &size = d.at("metadata").at("size_bytes");
     if (!size.is_null() &&
-        detail::domain_decode<std::uint64_t>(size) != bytes.get_binary().size())
+        detail::bot_decode<std::uint64_t>(size) != bytes.get_binary().size())
       throw std::invalid_argument("invalid owned media size");
   }
 };
-template <> struct detail::DomainRecordPreflight<LocalFile> {
+template <> struct detail::BotRecordPreflight<LocalFile> {
   static void validate(const Json &d) {
     (void)detail::require_identifier(d, "path", "LocalFile", 4096);
   }
 };
-template <> struct detail::DomainRecordPreflight<HttpSource> {
+template <> struct detail::BotRecordPreflight<HttpSource> {
   static void validate(const Json &d) {
     (void)detail::require_identifier(d, "url", "HttpSource", 8192);
   }
 };
 
-OBCX_DOMAIN_FIELDS(MediaRef, OBCX_DOMAIN_FIELD(installation),
-                   OBCX_DOMAIN_FIELD(id));
-OBCX_DOMAIN_FIELDS(MediaIdentity, OBCX_DOMAIN_FIELD(installation),
-                   OBCX_DOMAIN_FIELD(id));
-OBCX_DOMAIN_FIELDS(MediaMetadata, OBCX_DOMAIN_FIELD(mime_type),
-                   OBCX_DOMAIN_FIELD(filename), OBCX_DOMAIN_FIELD(size_bytes),
-                   OBCX_DOMAIN_FIELD(width), OBCX_DOMAIN_FIELD(height),
-                   OBCX_DOMAIN_FIELD(duration_ms));
-OBCX_DOMAIN_FIELDS(BytesSource, OBCX_DOMAIN_FIELD(bytes),
-                   OBCX_DOMAIN_FIELD(metadata));
-OBCX_DOMAIN_FIELDS(LocalFile, OBCX_DOMAIN_FIELD(path),
-                   OBCX_DOMAIN_FIELD(metadata));
-OBCX_DOMAIN_FIELDS(HttpSource, OBCX_DOMAIN_FIELD(url),
-                   OBCX_DOMAIN_FIELD(metadata));
-OBCX_DOMAIN_FIELDS(MediaBlob, OBCX_DOMAIN_FIELD(source),
-                   OBCX_DOMAIN_FIELD(kind), OBCX_DOMAIN_FIELD(identity));
+OBCX_BOT_FIELDS(MediaRef, OBCX_BOT_FIELD(installation), OBCX_BOT_FIELD(id));
+OBCX_BOT_FIELDS(MediaIdentity, OBCX_BOT_FIELD(installation),
+                OBCX_BOT_FIELD(id));
+OBCX_BOT_FIELDS(MediaMetadata, OBCX_BOT_FIELD(mime_type),
+                OBCX_BOT_FIELD(filename), OBCX_BOT_FIELD(size_bytes),
+                OBCX_BOT_FIELD(width), OBCX_BOT_FIELD(height),
+                OBCX_BOT_FIELD(duration_ms));
+OBCX_BOT_FIELDS(BytesSource, OBCX_BOT_FIELD(bytes), OBCX_BOT_FIELD(metadata));
+OBCX_BOT_FIELDS(LocalFile, OBCX_BOT_FIELD(path), OBCX_BOT_FIELD(metadata));
+OBCX_BOT_FIELDS(HttpSource, OBCX_BOT_FIELD(url), OBCX_BOT_FIELD(metadata));
+OBCX_BOT_FIELDS(MediaBlob, OBCX_BOT_FIELD(source), OBCX_BOT_FIELD(kind),
+                OBCX_BOT_FIELD(identity));
 } // namespace obcx::bot

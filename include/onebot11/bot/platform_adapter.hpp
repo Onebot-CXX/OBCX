@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/bot/platform_domain_binding.hpp"
+#include "core/bot/platform_adapter.hpp"
 
 namespace obcx::onebot11::bot {
 // Process-private: actors restore opaque values, never construct native tuples.
@@ -14,7 +14,7 @@ public:
       -> std::string override;
 };
 
-class QqDomainBinding final : public core::PlatformDomainBinding {
+class QqPlatformAdapter final : public core::PlatformAdapter {
 public:
   auto codec() const -> const QqNativeReferenceCodec & override;
   // Process-only observation helper; grants no read or filesystem authority.

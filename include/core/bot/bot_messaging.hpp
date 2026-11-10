@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bot/domain_media.hpp"
+#include "core/bot/bot_media.hpp"
 #include "core/bot/operation_result.hpp"
 #include "core/bot/operation_traits.hpp"
 #include <algorithm>
@@ -11,7 +11,7 @@ struct Text {
   std::string content;
   std::vector<TextStyle> styles;
   void validate() const {
-    if (content.empty() || content.size() > detail::domain_maximum_bytes)
+    if (content.empty() || content.size() > detail::bot_maximum_bytes)
       throw std::invalid_argument("invalid text length");
     detail::validate_utf8(content);
     std::vector<TextStyle> seen;
@@ -30,7 +30,7 @@ struct Mention {
 using RichText = std::vector<std::variant<Text, Mention>>;
 inline void validate_rich_text(const RichText &text,
                                const BotInstallationRef &installation) {
-  if (text.size() > detail::domain_maximum_items)
+  if (text.size() > detail::bot_maximum_items)
     throw std::invalid_argument("rich text exceeds bound");
   for (const auto &item : text)
     std::visit(
@@ -93,9 +93,9 @@ struct SendLimits {
   std::size_t maximum_media_item_bytes;
   std::size_t maximum_media_total_bytes;
   void validate() const {
-    if (!maximum_messages || maximum_messages > detail::domain_maximum_items ||
+    if (!maximum_messages || maximum_messages > detail::bot_maximum_items ||
         maximum_media_item_bytes > maximum_media_total_bytes ||
-        maximum_media_total_bytes > detail::domain_maximum_bytes)
+        maximum_media_total_bytes > detail::bot_maximum_bytes)
       throw std::invalid_argument("invalid explicit send limits");
   }
 };
@@ -107,7 +107,7 @@ inline void validate_message_body(const ConversationRef &target,
                                   std::size_t &known_media_bytes) {
   target.validate();
   limits.validate();
-  if (body.empty() || body.size() > detail::domain_maximum_items)
+  if (body.empty() || body.size() > detail::bot_maximum_items)
     throw std::invalid_argument("invalid message body");
   if (known_media_bytes > limits.maximum_media_total_bytes)
     throw std::invalid_argument("known media exceeds explicit total budget");
@@ -163,7 +163,7 @@ struct SendMessageRequest {
   void validate() const {
     target.validate();
     limits.validate();
-    if (body.empty() || body.size() > detail::domain_maximum_items ||
+    if (body.empty() || body.size() > detail::bot_maximum_items ||
         delivery > DeliveryPolicy::AllowSplit)
       throw std::invalid_argument("invalid message body or delivery policy");
     if (reply_to) {
@@ -229,7 +229,7 @@ inline void validate_output_details(
   if (messages.size() != details.size())
     throw std::invalid_argument(
         "output details must correspond to every confirmed reference");
-  detail::DomainWireBudget work;
+  detail::BotWireBudget work;
   work.nodes(messages.size());
   work.nodes(details.size());
   std::set<MessageId> seen;
@@ -243,9 +243,9 @@ inline void validate_output_details(
     work.nodes(details[i].reusable_media.size());
     for (const auto &media : details[i].reusable_media) {
       media.validate();
-      work.inspect(detail::domain_encode(media.media));
+      work.inspect(detail::bot_encode(media.media));
       if (media.identity)
-        work.inspect(detail::domain_encode(*media.identity));
+        work.inspect(detail::bot_encode(*media.identity));
     }
     details[i].validate();
     if (messages[i] != details[i].message ||
@@ -339,7 +339,7 @@ inline void validate_send_outcome(const SendMessageRequest &request,
   std::visit(
       [&](const auto &value) {
         value.validate();
-        detail::DomainWireBudget content_work;
+        detail::BotWireBudget content_work;
         for (const auto &detail : value.output_details) {
           if (detail.message.conversation != request.target)
             throw std::invalid_argument("send result target mismatch");
@@ -372,59 +372,54 @@ inline void validate_send_outcome(const SendMessageRequest &request,
       },
       outcome);
 }
-template <> struct detail::DomainRecordPreflight<File> {
+template <> struct detail::BotRecordPreflight<File> {
   static void validate(const Json &d) {
     (void)detail::require_identifier(d, "filename", "File", 1024);
   }
 };
 
-OBCX_DOMAIN_FIELDS(Text, OBCX_DOMAIN_FIELD(content), OBCX_DOMAIN_FIELD(styles));
-OBCX_DOMAIN_FIELDS(Mention, OBCX_DOMAIN_FIELD(user));
-OBCX_DOMAIN_FIELDS(Image, OBCX_DOMAIN_FIELD(source),
-                   OBCX_DOMAIN_FIELD(caption));
-OBCX_DOMAIN_FIELDS(Animation, OBCX_DOMAIN_FIELD(source),
-                   OBCX_DOMAIN_FIELD(caption));
-OBCX_DOMAIN_FIELDS(Video, OBCX_DOMAIN_FIELD(source),
-                   OBCX_DOMAIN_FIELD(caption));
-OBCX_DOMAIN_FIELDS(Audio, OBCX_DOMAIN_FIELD(source), OBCX_DOMAIN_FIELD(kind),
-                   OBCX_DOMAIN_FIELD(caption));
-OBCX_DOMAIN_FIELDS(File, OBCX_DOMAIN_FIELD(source), OBCX_DOMAIN_FIELD(filename),
-                   OBCX_DOMAIN_FIELD(caption));
-OBCX_DOMAIN_FIELDS(SendLimits, OBCX_DOMAIN_FIELD(maximum_messages),
-                   OBCX_DOMAIN_FIELD(maximum_media_item_bytes),
-                   OBCX_DOMAIN_FIELD(maximum_media_total_bytes));
-OBCX_DOMAIN_FIELDS(SendMessageRequest, OBCX_DOMAIN_FIELD(target),
-                   OBCX_DOMAIN_FIELD(body), OBCX_DOMAIN_FIELD(reply_to),
-                   OBCX_DOMAIN_FIELD(delivery), OBCX_DOMAIN_FIELD(limits));
-OBCX_DOMAIN_FIELDS(DeleteMessageRequest, OBCX_DOMAIN_FIELD(message));
-OBCX_DOMAIN_FIELDS(DeleteReceipt, OBCX_DOMAIN_FIELD(message));
-OBCX_DOMAIN_FIELDS(TextRange, OBCX_DOMAIN_FIELD(inline_index),
-                   OBCX_DOMAIN_FIELD(utf8_offset),
-                   OBCX_DOMAIN_FIELD(utf8_length));
-OBCX_DOMAIN_FIELDS(ContentSlice, OBCX_DOMAIN_FIELD(block_index),
-                   OBCX_DOMAIN_FIELD(text));
-OBCX_DOMAIN_FIELDS(PublishedMedia, OBCX_DOMAIN_FIELD(media),
-                   OBCX_DOMAIN_FIELD(identity), OBCX_DOMAIN_FIELD(block_index));
-OBCX_DOMAIN_FIELDS(SendOutputDetails, OBCX_DOMAIN_FIELD(message),
-                   OBCX_DOMAIN_FIELD(content),
-                   OBCX_DOMAIN_FIELD(reusable_media));
-OBCX_DOMAIN_FIELDS(SendReceipt, OBCX_DOMAIN_FIELD(messages),
-                   OBCX_DOMAIN_FIELD(output_details));
-OBCX_DOMAIN_FIELDS(SendFailure, OBCX_DOMAIN_FIELD(error),
-                   OBCX_DOMAIN_FIELD(confirmed_messages),
-                   OBCX_DOMAIN_FIELD(output_details),
-                   OBCX_DOMAIN_FIELD(may_have_unconfirmed_messages));
+OBCX_BOT_FIELDS(Text, OBCX_BOT_FIELD(content), OBCX_BOT_FIELD(styles));
+OBCX_BOT_FIELDS(Mention, OBCX_BOT_FIELD(user));
+OBCX_BOT_FIELDS(Image, OBCX_BOT_FIELD(source), OBCX_BOT_FIELD(caption));
+OBCX_BOT_FIELDS(Animation, OBCX_BOT_FIELD(source), OBCX_BOT_FIELD(caption));
+OBCX_BOT_FIELDS(Video, OBCX_BOT_FIELD(source), OBCX_BOT_FIELD(caption));
+OBCX_BOT_FIELDS(Audio, OBCX_BOT_FIELD(source), OBCX_BOT_FIELD(kind),
+                OBCX_BOT_FIELD(caption));
+OBCX_BOT_FIELDS(File, OBCX_BOT_FIELD(source), OBCX_BOT_FIELD(filename),
+                OBCX_BOT_FIELD(caption));
+OBCX_BOT_FIELDS(SendLimits, OBCX_BOT_FIELD(maximum_messages),
+                OBCX_BOT_FIELD(maximum_media_item_bytes),
+                OBCX_BOT_FIELD(maximum_media_total_bytes));
+OBCX_BOT_FIELDS(SendMessageRequest, OBCX_BOT_FIELD(target),
+                OBCX_BOT_FIELD(body), OBCX_BOT_FIELD(reply_to),
+                OBCX_BOT_FIELD(delivery), OBCX_BOT_FIELD(limits));
+OBCX_BOT_FIELDS(DeleteMessageRequest, OBCX_BOT_FIELD(message));
+OBCX_BOT_FIELDS(DeleteReceipt, OBCX_BOT_FIELD(message));
+OBCX_BOT_FIELDS(TextRange, OBCX_BOT_FIELD(inline_index),
+                OBCX_BOT_FIELD(utf8_offset), OBCX_BOT_FIELD(utf8_length));
+OBCX_BOT_FIELDS(ContentSlice, OBCX_BOT_FIELD(block_index),
+                OBCX_BOT_FIELD(text));
+OBCX_BOT_FIELDS(PublishedMedia, OBCX_BOT_FIELD(media), OBCX_BOT_FIELD(identity),
+                OBCX_BOT_FIELD(block_index));
+OBCX_BOT_FIELDS(SendOutputDetails, OBCX_BOT_FIELD(message),
+                OBCX_BOT_FIELD(content), OBCX_BOT_FIELD(reusable_media));
+OBCX_BOT_FIELDS(SendReceipt, OBCX_BOT_FIELD(messages),
+                OBCX_BOT_FIELD(output_details));
+OBCX_BOT_FIELDS(SendFailure, OBCX_BOT_FIELD(error),
+                OBCX_BOT_FIELD(confirmed_messages),
+                OBCX_BOT_FIELD(output_details),
+                OBCX_BOT_FIELD(may_have_unconfirmed_messages));
 
 namespace detail {
-// Mirrors domain_encode's wire shape without allocating a JSON tree or copying
+// Mirrors bot_encode's wire shape without allocating a JSON tree or copying
 // payloads. Custom reference encodings deliberately have no record schema key.
 // New leaf types must be accounted explicitly rather than serialized to
 // inspect.
 template <class T>
-void inspect_send_wire_value(const T &value, DomainWireBudget &budget,
+void inspect_send_wire_value(const T &value, BotWireBudget &budget,
                              unsigned depth = 0) {
   if (depth > 32)
-    throw DomainBudgetExceeded{};
+    throw BotBudgetExceeded{};
   if constexpr (IsOptional<T>::value) {
     if (value)
       inspect_send_wire_value(*value, budget, depth);
@@ -437,13 +432,13 @@ void inspect_send_wire_value(const T &value, DomainWireBudget &budget,
       budget.bytes(name.size());
       inspect_send_wire_value(item, budget, depth + 1);
     };
-    if constexpr (DomainRecord<T>) {
+    if constexpr (BotRecord<T>) {
       field("schema", 1U);
       std::apply(
           [&](auto... member) {
             (field(member.first, value.*member.second), ...);
           },
-          DomainFields<T>::fields());
+          BotFields<T>::fields());
     } else if constexpr (std::same_as<T, std::vector<std::uint8_t>>) {
       budget.bytes(value.size());
     } else if constexpr (IsVector<T>::value) {
@@ -479,43 +474,43 @@ void inspect_send_wire_value(const T &value, DomainWireBudget &budget,
 }
 } // namespace detail
 
-template <> struct detail::DomainEncodePreflight<SendMessageRequest> {
+template <> struct detail::BotEncodePreflight<SendMessageRequest> {
   static void validate(const SendMessageRequest &value) {
-    detail::DomainWireBudget budget;
+    detail::BotWireBudget budget;
     detail::inspect_send_wire_value(value, budget);
   }
 };
 
-template <> struct detail::DomainDecodePreflight<SendMessageRequest> {
+template <> struct detail::BotDecodePreflight<SendMessageRequest> {
   static void validate(const Json &payload) {
-    detail::validate_domain_wire(payload);
-    const auto limits = detail::domain_decode<SendLimits>(payload.at("limits"));
+    detail::validate_bot_wire(payload);
+    const auto limits = detail::bot_decode<SendLimits>(payload.at("limits"));
     detail::validate_binary_budget(payload, limits.maximum_media_item_bytes,
                                    limits.maximum_media_total_bytes);
   }
 };
 
-// Nested records enter domain_decode directly, without a top-level gateway or
+// Nested records enter bot_decode directly, without a top-level gateway or
 // ADL preflight. Run the identical bounded caller policy before member copies.
 template <>
-struct detail::DomainRecordPreflight<SendMessageRequest>
-    : detail::DomainDecodePreflight<SendMessageRequest> {};
+struct detail::BotRecordPreflight<SendMessageRequest>
+    : detail::BotDecodePreflight<SendMessageRequest> {};
 
 template <> struct GatewayCodec<SendMessageRequest> {
   static auto encode(SendMessageRequest &value) -> Json {
     value.validate();
-    auto d = detail::domain_encode(value);
+    auto d = detail::bot_encode(value);
     detail::validate_binary_budget(d, value.limits.maximum_media_item_bytes,
                                    value.limits.maximum_media_total_bytes);
     return d;
   }
   static auto decode(const Json &payload) -> SendMessageRequest {
-    detail::DomainDecodePreflight<SendMessageRequest>::validate(payload);
-    return detail::domain_decode<SendMessageRequest>(payload);
+    detail::BotDecodePreflight<SendMessageRequest>::validate(payload);
+    return detail::bot_decode<SendMessageRequest>(payload);
   }
 };
 
-inline auto domain_supports_surface(const SurfaceId &surface) -> bool {
+inline auto bot_supports_surface(const SurfaceId &surface) -> bool {
   return surface == SurfaceId{"onebot11.qq"} ||
          surface == SurfaceId{"telegram.bot_api"};
 }
@@ -524,7 +519,7 @@ struct OperationTraits<SendMessageRequest>
     : OperationContract<SendMessageRequest, SendOutcome, true> {
   static constexpr bool requires_outcome_client = true;
   static auto supports_surface(const SurfaceId &s) -> bool {
-    return domain_supports_surface(s);
+    return bot_supports_surface(s);
   }
   static auto installation(const request_type &r)
       -> const BotInstallationRef & {
@@ -538,7 +533,7 @@ template <>
 struct OperationTraits<DeleteMessageRequest>
     : OperationContract<DeleteMessageRequest, DeleteReceipt, true> {
   static auto supports_surface(const SurfaceId &s) -> bool {
-    return domain_supports_surface(s);
+    return bot_supports_surface(s);
   }
   static auto installation(const request_type &r)
       -> const BotInstallationRef & {

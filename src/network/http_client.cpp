@@ -227,7 +227,8 @@ auto request_until_owned(std::shared_ptr<HttpClientState> self,
   } else if (error == asio::error::message_size) {
     message.append(" response body limit exceeded");
   } else {
-    message.append(" request failed");
+    message.append(" request failed: ");
+    message.append(error.message());
   }
   const auto kind =
       error == asio::error::timed_out           ? HttpClientErrorKind::Timeout
@@ -322,7 +323,9 @@ auto HttpClientState::perform(
     co_return make_response(std::move(response));
   } catch (const boost::system::system_error &error) {
     self->connected = false;
-    OBCX_WARN("HTTP {} request failed", method_name);
+    // The path is not logged because Telegram paths carry the bot token.
+    OBCX_WARN("HTTP {} to {}:{} failed: {}", method_name, settings.config.host,
+              settings.config.port, error.code().message());
     const auto submission_state =
         method == detail::CurlHttpMethod::Post &&
                 detail::curl_error_definitely_not_submitted(error.code())

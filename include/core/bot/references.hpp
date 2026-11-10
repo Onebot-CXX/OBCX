@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/bot/domain_ids.hpp"
+#include "core/bot/bot_ids.hpp"
 #include "core/bot/ids.hpp"
 #include "core/bot/json_codec.hpp"
 #include "core/bot/validation.hpp"
@@ -21,7 +21,7 @@ struct BotInstallationRef {
 
   using obcx_bot_json_factory = void;
   static auto from_json(const Json &document) -> BotInstallationRef {
-    detail::validate_domain_wire(document);
+    detail::validate_bot_wire(document);
     detail::require_only_keys(document, "BotInstallationRef",
                               {"installation_id", "surface"});
     if (!document.contains("surface")) {
@@ -53,7 +53,7 @@ struct ConversationRef {
     id.validate_surface(installation.surface);
   }
   static auto from_json(const Json &d) -> ConversationRef {
-    detail::validate_domain_wire(d);
+    detail::validate_bot_wire(d);
     detail::require_only_keys(d, "ConversationRef", {"installation", "id"});
     ConversationRef v{d.at("installation").get<BotInstallationRef>(),
                       d.at("id").get<ConversationId>()};
@@ -71,7 +71,7 @@ struct UserRef {
     id.validate_surface(installation.surface);
   }
   static auto from_json(const Json &d) -> UserRef {
-    detail::validate_domain_wire(d);
+    detail::validate_bot_wire(d);
     detail::require_only_keys(d, "UserRef", {"installation", "id"});
     UserRef v{d.at("installation").get<BotInstallationRef>(),
               d.at("id").get<UserId>()};
@@ -89,7 +89,7 @@ struct MessageRef {
     id.validate_surface(conversation.installation.surface);
   }
   static auto from_json(const Json &d) -> MessageRef {
-    detail::validate_domain_wire(d);
+    detail::validate_bot_wire(d);
     detail::require_only_keys(d, "MessageRef", {"conversation", "id"});
     MessageRef v{d.at("conversation").get<ConversationRef>(),
                  d.at("id").get<MessageId>()};

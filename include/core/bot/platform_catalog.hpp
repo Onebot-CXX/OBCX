@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/bot/installation_plan.hpp"
-#include "core/bot/platform_domain_binding.hpp"
+#include "core/bot/platform_adapter.hpp"
 
 #include <functional>
 #include <map>
@@ -28,7 +28,7 @@ struct BotRecipeRegistration {
   std::string transport;
   std::string ingress_platform;
   Parser parse;
-  std::shared_ptr<const PlatformDomainBinding> domain_binding;
+  std::shared_ptr<const PlatformAdapter> platform_adapter;
 };
 
 // Construction is explicit and single-owner. Only sealed const catalogs are
@@ -43,8 +43,8 @@ public:
 
   void register_recipe(BotRecipeRegistration registration);
   void seal();
-  [[nodiscard]] auto domain_binding(const bot::SurfaceId &surface) const
-      -> std::shared_ptr<const PlatformDomainBinding>;
+  [[nodiscard]] auto platform_adapter(const bot::SurfaceId &surface) const
+      -> std::shared_ptr<const PlatformAdapter>;
   [[nodiscard]] auto ingress_platform(const bot::SurfaceId &surface) const
       -> std::string;
   [[nodiscard]] auto sealed() const noexcept -> bool { return sealed_; }

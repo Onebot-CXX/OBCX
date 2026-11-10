@@ -21,7 +21,7 @@ public:
 };
 } // namespace detail
 namespace {
-namespace domain = obcx::bot;
+namespace bot_model = obcx::bot;
 using Json = detail::QueryJson;
 
 [[noreturn]] void malformed() {
@@ -30,7 +30,7 @@ using Json = detail::QueryJson;
 [[noreturn]] void exceeded() {
   throw std::invalid_argument("standard media query value exceeds bound");
 }
-void installation(const domain::BotInstallationRef &scope) {
+void installation(const bot_model::BotInstallationRef &scope) {
   scope.validate();
   if (scope.surface.value() != "onebot11.qq")
     malformed();
@@ -51,26 +51,26 @@ public:
   void node(std::size_t depth) {
     if (depth > limits_.maximum_depth || depth > 32 ||
         nodes_ == limits_.maximum_nodes ||
-        nodes_ == domain::detail::domain_maximum_items)
+        nodes_ == bot_model::detail::bot_maximum_items)
       exceeded();
     ++nodes_;
   }
   void text(std::string_view value) {
     if (value.size() > limits_.maximum_text_bytes ||
         value.size() > limits_.maximum_bytes - bytes_ ||
-        value.size() > domain::detail::domain_maximum_bytes - bytes_)
+        value.size() > bot_model::detail::bot_maximum_bytes - bytes_)
       exceeded();
     bytes_ += value.size();
-    domain::detail::validate_utf8(value);
+    bot_model::detail::validate_utf8(value);
   }
-  void scope(const domain::BotInstallationRef &value, std::size_t depth) {
+  void scope(const bot_model::BotInstallationRef &value, std::size_t depth) {
     node(depth);
     node(depth + 1);
     text(value.installation_id);
     node(depth + 1);
     text(value.surface.value());
   }
-  void selector(const domain::BotInstallationRef &value,
+  void selector(const bot_model::BotInstallationRef &value,
                 std::string_view filename, std::size_t depth) {
     node(depth);
     scope(value, depth + 1);
@@ -134,11 +134,11 @@ void project_file(std::string_view path, MediaQueryBudget &budget) {
 }
 } // namespace
 
-ImageFileSelector::ImageFileSelector(domain::BotInstallationRef scope,
+ImageFileSelector::ImageFileSelector(bot_model::BotInstallationRef scope,
                                      std::string filename)
     : installation_(std::move(scope)), filename_(std::move(filename)) {}
 auto ImageFileSelector::installation() const noexcept
-    -> const domain::BotInstallationRef & {
+    -> const bot_model::BotInstallationRef & {
   return installation_;
 }
 void ImageFileSelector::with_filename(
@@ -147,10 +147,9 @@ void ImageFileSelector::with_filename(
   require_access(use);
   visitor(filename_);
 }
-auto MediaQuerySelectors::import_image(const domain::BotInstallationRef &scope,
-                                       std::string_view filename,
-                                       const ValueLimits &limits)
-    -> ImageFileSelector {
+auto MediaQuerySelectors::import_image(
+    const bot_model::BotInstallationRef &scope, std::string_view filename,
+    const ValueLimits &limits) -> ImageFileSelector {
   MediaQueryBudget budget{limits};
   budget.selector(scope, filename, 0); // borrowed
   budget.selector(scope, filename, 0); // retained
@@ -158,11 +157,11 @@ auto MediaQuerySelectors::import_image(const domain::BotInstallationRef &scope,
   return ImageFileSelector{scope, std::string{filename}};
 }
 
-RecordFileSelector::RecordFileSelector(domain::BotInstallationRef scope,
+RecordFileSelector::RecordFileSelector(bot_model::BotInstallationRef scope,
                                        std::string filename)
     : installation_(std::move(scope)), filename_(std::move(filename)) {}
 auto RecordFileSelector::installation() const noexcept
-    -> const domain::BotInstallationRef & {
+    -> const bot_model::BotInstallationRef & {
   return installation_;
 }
 void RecordFileSelector::with_filename(
@@ -171,10 +170,9 @@ void RecordFileSelector::with_filename(
   require_access(use);
   visitor(filename_);
 }
-auto MediaQuerySelectors::import_record(const domain::BotInstallationRef &scope,
-                                        std::string_view filename,
-                                        const ValueLimits &limits)
-    -> RecordFileSelector {
+auto MediaQuerySelectors::import_record(
+    const bot_model::BotInstallationRef &scope, std::string_view filename,
+    const ValueLimits &limits) -> RecordFileSelector {
   MediaQueryBudget budget{limits};
   budget.selector(scope, filename, 0);
   budget.selector(scope, filename, 0);
@@ -184,7 +182,7 @@ auto MediaQuerySelectors::import_record(const domain::BotInstallationRef &scope,
 
 namespace detail {
 auto encode_get_image(const GetImageParameters &p,
-                      const domain::BotInstallationRef &expected,
+                      const bot_model::BotInstallationRef &expected,
                       const QueryNativeCodec &codec, const ValueLimits &limits)
     -> QueryJson {
   MediaQueryBudget budget{limits};
@@ -214,7 +212,7 @@ auto decode_get_image_data(const QueryJson &data, const ValueLimits &limits)
   return {{SensitiveValueFactory::text(path)}};
 }
 auto encode_get_record(const GetRecordParameters &p,
-                       const domain::BotInstallationRef &expected,
+                       const bot_model::BotInstallationRef &expected,
                        const QueryNativeCodec &codec, const ValueLimits &limits)
     -> QueryJson {
   MediaQueryBudget budget{limits};

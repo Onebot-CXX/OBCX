@@ -1,7 +1,7 @@
 #include "core/bot/message_operation_binding.hpp"
 #include "network/http_client.hpp"
-#include "telegram/bot/domain_binding.hpp"
-#include "telegram/bot/domain_send.hpp"
+#include "telegram/bot/bot_send.hpp"
+#include "telegram/bot/platform_adapter.hpp"
 #include "telegram/bot/response_parser.hpp"
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -51,7 +51,7 @@ asio::awaitable<void> execute_sticker(
       co_return;
     }
     const auto bytes = d::detail::bounded_unsigned(
-        file.value->at("file_size"), d::detail::domain_maximum_bytes);
+        file.value->at("file_size"), d::detail::bot_maximum_bytes);
     const std::size_t native_bound =
         native.kind == "sticker-static" ? 512U * 1024U
         : native.kind == "sticker-webm" ? 256U * 1024U
@@ -74,8 +74,7 @@ asio::awaitable<void> execute_sticker(
         no_files;
     state.in_flight = true;
     auto parsed = parse_telegram_operation_response(
-        co_await transport.send_domain_request(std::move(params), no_files),
-        true);
+        co_await transport.send_bot_request(std::move(params), no_files), true);
     if (!parsed.ok()) {
       state.error = *parsed.error;
       state.unknown = state.error->submission_safety ==
@@ -136,7 +135,7 @@ asio::awaitable<void> execute_sticker(
                 native.kind)
           complete = false;
         state.evidence.details(detail);
-      } catch (const d::detail::DomainBudgetExceeded &) {
+      } catch (const d::detail::BotBudgetExceeded &) {
         throw;
       } catch (...) {
         complete = false;

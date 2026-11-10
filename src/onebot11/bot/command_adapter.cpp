@@ -1,10 +1,10 @@
 #include "onebot11/bot/command_adapter.hpp"
-#include "core/bot/domain_events.hpp"
+#include "core/bot/bot_events.hpp"
 #include "core/bot/gateway_codec.hpp"
 #include "core/command/command_detection.hpp"
 #include "core/command/command_source_projector.hpp"
 #include "onebot11/adapter/native_fields.hpp"
-#include "onebot11/bot/domain_binding.hpp"
+#include "onebot11/bot/platform_adapter.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <utility>
@@ -47,7 +47,7 @@ public:
       const obcx::bot::BotInstallationRef &installation,
       std::string_view sender) const -> bool override {
     try {
-      QqDomainBinding binding;
+      QqPlatformAdapter binding;
       binding.codec().validate(installation);
       if (sender.empty() || sender.size() > 20)
         return false;
@@ -65,7 +65,7 @@ public:
       const MessageEnvelope &event,
       const obcx::bot::BotInstallationRef &installation) const
       -> obcx::bot::BotOperationResult<core::CommandSourceProjection> override {
-    namespace domain = obcx::bot;
+    namespace bot_model = obcx::bot;
     try {
       if (event.source_platform != platform() ||
           event.source_bot != installation.installation_id ||
@@ -91,17 +91,18 @@ public:
       const auto message_id = field("message_id");
       if (sender.empty() || field("conversation_id") != event.conversation_id)
         throw std::invalid_argument("command source identity mismatch");
-      auto source = event.payload.at("message").get<domain::MessageReceived>();
-      domain::detail::validate_domain_wire(event.raw);
-      domain::detail::validate_domain_wire(event.payload.at("payload"));
+      auto source =
+          event.payload.at("message").get<bot_model::MessageReceived>();
+      bot_model::detail::validate_bot_wire(event.raw);
+      bot_model::detail::validate_bot_wire(event.payload.at("payload"));
       if (!event.raw.is_object() || event.payload.at("payload") != event.raw ||
           event.raw.at("message_type") != kind ||
           event.raw.at("user_id") != sender ||
           event.raw.at("message_id") != message_id)
         throw std::invalid_argument("command archive identity mismatch");
-      QqDomainBinding binding;
+      QqPlatformAdapter binding;
       binding.codec().validate(installation);
-      domain::binding::validate_native_event(binding.codec(), source);
+      bot_model::binding::validate_native_event(binding.codec(), source);
       if (event.payload.contains("topic_id") ||
           event.raw.contains("message_thread_id"))
         throw std::invalid_argument("QQ command cannot have a topic");
@@ -132,40 +133,40 @@ public:
       }
       const auto conversation = binding.configured_conversation(
           installation,
-          {kind == "group" ? domain::ConfiguredConversationKind::Group
-                           : domain::ConfiguredConversationKind::Private,
+          {kind == "group" ? bot_model::ConfiguredConversationKind::Group
+                           : bot_model::ConfiguredConversationKind::Private,
            kind == "group" ? group : sender, std::nullopt});
-      const domain::MessageRef expected{
+      const bot_model::MessageRef expected{
           conversation,
-          binding.codec().make<domain::MessageId>("message", {message_id})};
+          binding.codec().make<bot_model::MessageId>("message", {message_id})};
       if (source.message != expected)
         throw std::invalid_argument("QQ typed command source mismatch");
       const bool anonymous = event.raw.contains("anonymous") &&
                              !event.raw.at("anonymous").is_null();
-      std::optional<domain::UserRef> expected_user;
+      std::optional<bot_model::UserRef> expected_user;
       if (!anonymous) {
         try {
-          expected_user = domain::UserRef{
+          expected_user = bot_model::UserRef{
               installation,
-              binding.codec().make<domain::UserId>("user", {sender})};
+              binding.codec().make<bot_model::UserId>("user", {sender})};
         } catch (const std::invalid_argument &) {
           // The live binding also retains unknown/non-user sender evidence.
         }
       }
-      const auto *known = std::get_if<domain::KnownUser>(&source.sender);
+      const auto *known = std::get_if<bot_model::KnownUser>(&source.sender);
       if ((expected_user && (!known || known->user != *expected_user)) ||
           (!expected_user &&
-           !std::holds_alternative<domain::UnknownSender>(source.sender)))
+           !std::holds_alternative<bot_model::UnknownSender>(source.sender)))
         throw std::invalid_argument("QQ typed sender mismatch");
-      return domain::BotOperationResult<core::CommandSourceProjection>::success(
-          {std::move(source),
-           {std::string{platform()}, event.source_bot,
-            kind == "group" ? command::ConversationKind::Group
-                            : command::ConversationKind::Private,
-            group, sender, std::nullopt}});
+      return bot_model::BotOperationResult<core::CommandSourceProjection>::
+          success({std::move(source),
+                   {std::string{platform()}, event.source_bot,
+                    kind == "group" ? command::ConversationKind::Group
+                                    : command::ConversationKind::Private,
+                    group, sender, std::nullopt}});
     } catch (...) {
-      return domain::failed_operation<core::CommandSourceProjection>(
-          domain::BotOperationErrorCode::InvalidRequest,
+      return bot_model::failed_operation<core::CommandSourceProjection>(
+          bot_model::BotOperationErrorCode::InvalidRequest,
           "command source has missing, inconsistent or unsupported evidence");
     }
   }
@@ -218,7 +219,7 @@ public:
         return failure("command_reply_scope_invalid");
       const auto source =
           event.payload.at("message").get<obcx::bot::MessageReceived>();
-      QqDomainBinding binding;
+      QqPlatformAdapter binding;
       const auto expected = binding.configured_conversation(
           installation,
           {kind == "group" ? obcx::bot::ConfiguredConversationKind::Group

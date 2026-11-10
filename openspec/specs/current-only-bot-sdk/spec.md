@@ -1,4 +1,4 @@
-# current-only-domain-sdk Specification
+# current-only-bot-sdk Specification
 
 ## Purpose
 Define the current-only SDK/consumer boundary, typed persistence and explicit
@@ -7,7 +7,7 @@ offline transition without runtime historical import or renewed authority.
 ## Requirements
 
 ### Requirement: Current-only SDK contracts
-The maintained SDK SHALL expose current typed domain contracts, not obsolete
+The maintained SDK SHALL expose current typed bot contracts, not obsolete
 group/private/topic messaging DTOs, MessagingClient, generic legacy reference
 conversion, archive restoration, compatibility projections or historical media
 imports. Current platform operations and private protocol implementation SHALL

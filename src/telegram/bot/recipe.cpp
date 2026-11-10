@@ -5,10 +5,10 @@
 #include "telegram/bot/command_adapter.hpp"
 #include "telegram/bot/command_catalog_component.hpp"
 #include "telegram/bot/configuration.hpp"
-#include "telegram/bot/domain_binding.hpp"
 #include "telegram/bot/event_ingress.hpp"
 #include "telegram/bot/operation_component.hpp"
 #include "telegram/bot/operation_definitions.hpp"
+#include "telegram/bot/platform_adapter.hpp"
 #include "telegram/bot/protocol.hpp"
 #include "telegram/bot/transport.hpp"
 
@@ -94,7 +94,7 @@ void register_recipes(core::BotPlatformCatalog &catalog) {
              telegram_http_recipe(), core::configuration_digest(connection),
              make_command_adapter(typed.bot_username));
        },
-       domain_binding()});
+       platform_adapter()});
 }
 
 } // namespace obcx::telegram::bot

@@ -24,7 +24,7 @@ The process SHALL register one native operation endpoint capability for each ena
 - **THEN** no operation registration API accepts `IBot`, `IQQBot`, `ITelegramBot`, a concrete bot, or a live-bot registry entry
 
 ### Requirement: Supported actions match the closed implementation matrix
-Each operation endpoint SHALL publish only reviewed common domain operations and provider extensions implemented by its actual installed descriptors and adapters. Typed conversation capabilities SHALL be derived from the same source, including supported content kinds, sources, combinations and known bounds. Optional uploader/source support SHALL be advertised only when the same installation has the required capability. Neither raw action presence nor platform brand SHALL imply support for arbitrary message content. Static support reporting MUST NOT infer support from RTTI, inheritance, another installation or live provider I/O.
+Each operation endpoint SHALL publish only reviewed common bot operations and provider extensions implemented by its actual installed descriptors and adapters. Typed conversation capabilities SHALL be derived from the same source, including supported content kinds, sources, combinations and known bounds. Optional uploader/source support SHALL be advertised only when the same installation has the required capability. Neither raw action presence nor platform brand SHALL imply support for arbitrary message content. Static support reporting MUST NOT infer support from RTTI, inheritance, another installation or live provider I/O.
 
 #### Scenario: Telegram endpoint is inspected
 - **WHEN** a caller queries a composed Telegram installation
@@ -39,7 +39,7 @@ Each operation endpoint SHALL publish only reviewed common domain operations and
 - **THEN** related upload source/action capabilities are absent and attempted use is rejected before sending
 
 ### Requirement: Actors call one data-only operation client
-The runtime SHALL expose the common typed BotClient to actors and reuse the same process-owned routing/lifecycle backend for generation-owned command services. Ordinary actor methods SHALL accept finite domain requests and return typed results, including a complete SendOutcome for sending and the existing cache-only self action. The internal gateway and its codecs SHALL remain implementation/binding infrastructure rather than a required business-facing JSON API. The common SDK MUST NOT include all provider DTOs or expose live bots, registry entries, connection managers, credentials or provider executors. Explicit platform clients SHALL use the same controlled backend without arbitrary native dispatch.
+The runtime SHALL expose the common typed BotClient to actors and reuse the same process-owned routing/lifecycle backend for generation-owned command services. Ordinary actor methods SHALL accept finite bot requests and return typed results, including a complete SendOutcome for sending and the existing cache-only self action. The internal gateway and its codecs SHALL remain implementation/binding infrastructure rather than a required business-facing JSON API. The common SDK MUST NOT include all provider DTOs or expose live bots, registry entries, connection managers, credentials or provider executors. Explicit platform clients SHALL use the same controlled backend without arbitrary native dispatch.
 
 #### Scenario: Actor sends to a configured group
 - **WHEN** an actor supplies an exact configured ConversationRef and typed body
@@ -100,7 +100,7 @@ The owning installation SHALL perform authenticated media resolution/download, s
 - **THEN** the dispatcher returns CacheUnavailable without initiating or waiting for a native identity request
 
 ### Requirement: Existing process lifecycle and compatibility remain authoritative
-One shared process-owned routing backend SHALL serve all compatible actor generations through typed clients. Validation-only SHALL perform no network or persistent side effect and reload SHALL not recreate installations. Candidate preparation MUST NOT refresh or mutate the live self cache; approved lifecycle refresh happens only after successful publication. In-flight domain operations SHALL retain required process dependencies, inherit actor cancellation and one total operation budget, and MUST NOT spawn unowned detached work. The final ordinary SDK surface SHALL expose only data-only clients/events rather than legacy live bots or raw provider adapters.
+One shared process-owned routing backend SHALL serve all compatible actor generations through typed clients. Validation-only SHALL perform no network or persistent side effect and reload SHALL not recreate installations. Candidate preparation MUST NOT refresh or mutate the live self cache; approved lifecycle refresh happens only after successful publication. In-flight bot operations SHALL retain required process dependencies, inherit actor cancellation and one total operation budget, and MUST NOT spawn unowned detached work. The final ordinary SDK surface SHALL expose only data-only clients/events rather than legacy live bots or raw provider adapters.
 
 #### Scenario: Actor generation reloads
 - **WHEN** a compatible candidate generation is prepared
@@ -111,7 +111,7 @@ One shared process-owned routing backend SHALL serve all compatible actor genera
 - **THEN** codec/recipe/capability checks occur without provider calls, downloads, sends or cache refresh
 
 #### Scenario: Process shuts down
-- **WHEN** shutdown races with an in-flight domain operation
+- **WHEN** shutdown races with an in-flight bot operation
 - **THEN** required endpoint, protocol, transport and executor state remains valid through bounded completion/cancellation and confirmed output evidence is not intentionally discarded
 
 #### Scenario: Legacy compatibility API is checked
@@ -176,7 +176,7 @@ The dispatcher SHALL expose an idempotent boundary that closes new success-notif
 - **WHEN** explicit shutdown and owner destruction both request notification cleanup
 - **THEN** cleanup is idempotent and no notification can be admitted after closure or cause its worker to join itself
 
-### Requirement: Platform adapters plan bounded ordered domain delivery
+### Requirement: Platform adapters plan bounded ordered bot delivery
 The common dispatcher SHALL validate the exact route and finite request before invoking a registered platform adapter. The adapter SHALL validate all known content/source/reply constraints and construct a bounded execution plan before the first message-producing call. It SHALL enforce the explicitly selected multiplicity policy, retain full encoded conversation scope, use one logical deadline and stop after the first failed step. Platform method selection and native address decoding SHALL remain outside actor code and generic platform-independent dispatch.
 
 #### Scenario: Unsupported block follows valid text

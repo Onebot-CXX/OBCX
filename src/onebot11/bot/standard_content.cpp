@@ -394,8 +394,7 @@ auto encode_content(const SendContent &content,
   if ((!cq && !single && composed.encoding != ContentEncoding::SegmentArray) ||
       (single && composed.segments.size() != 1) ||
       composed.segments.size() >
-          std::min(limits.maximum_nodes,
-                   obcx::bot::detail::domain_maximum_items))
+          std::min(limits.maximum_nodes, obcx::bot::detail::bot_maximum_items))
     invalid_content();
   if (!single)
     budget.node(1); // message array or CQ string
