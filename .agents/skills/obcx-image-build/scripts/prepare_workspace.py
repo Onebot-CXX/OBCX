@@ -107,13 +107,11 @@ def main():
     used = {p["id"] for p in graph["providers"]}
     workspace["providers"] = [p for p in workspace["providers"] if p["id"] in used]
     for provider in workspace["providers"]:
-        paths = [provider["provenance"]["path"]]
-        if provider["version_probe"]["kind"] == "receipt":
-            paths.append(provider["version_probe"]["path"])
-        for relative in paths:
-            target = source / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(repo / relative, target)
+        probe = provider["version_probe"]["kind"]
+        require(probe in {"cmake-variable", "target-property", "pkg-config"},
+                f"Unsupported provider probe for image snapshot: {provider['id']} {probe}")
+        require("provenance" not in provider,
+                f"Provider file provenance is not handled: {provider['id']}")
     (source / "packages.toml").write_text("".join(k + " = " + inline(v) + "\n" for k, v in workspace.items()))
     actors = sorted(n["metadata"]["artifact"]["name"] for n in nodes.values() if n["kind"] == "actor")
     report = {"source": str(source), "actors": actors, "packages": sorted(nodes), "platform": args.platform,
