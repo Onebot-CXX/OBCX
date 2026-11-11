@@ -52,7 +52,7 @@ auto ProtocolAdapter::parse_event(std::string_view json_str)
     -> std::optional<common::Event> {
   try {
     auto json = nlohmann::json::parse(json_str);
-    OBCX_DEBUG("Parsing Telegram update ({} bytes)", json_str.size());
+    OBCX_TRACE("Parsing Telegram update ({} bytes)", json_str.size());
 
     if (json.contains("update_id")) {
       if (json.contains("message")) {
@@ -108,14 +108,14 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
     if (message.contains("message_id")) {
       event.message_id = std::to_string(message["message_id"].get<int64_t>());
-      OBCX_DEBUG("Extracted message_id: {}", event.message_id);
+      OBCX_TRACE("Extracted message_id: {}", event.message_id);
     }
 
     if (message.contains("from")) {
       auto from = message["from"];
       if (from.contains("id")) {
         event.user_id = std::to_string(from["id"].get<int64_t>());
-        OBCX_DEBUG("Extracted user_id: {}", event.user_id);
+        OBCX_TRACE("Extracted user_id: {}", event.user_id);
       }
     }
 
@@ -123,16 +123,16 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       auto chat = message["chat"];
       if (chat.contains("id")) {
         std::string chat_id = std::to_string(chat["id"].get<int64_t>());
-        OBCX_DEBUG("Extracted chat_id: {}", chat_id);
+        OBCX_TRACE("Extracted chat_id: {}", chat_id);
 
         if (chat.contains("type")) {
           std::string chat_type = chat["type"];
-          OBCX_DEBUG("Extracted Telegram chat type");
+          OBCX_TRACE("Extracted Telegram chat type");
 
           if (chat_type == "supergroup" || chat_type == "group") {
             event.group_id = chat_id;
             event.message_type = "group";
-            OBCX_DEBUG("Set group_id: {}", chat_id);
+            OBCX_TRACE("Set group_id: {}", chat_id);
           } else if (chat_type == "private") {
             event.message_type = "private";
           } else if (chat_type == "channel") {
@@ -144,7 +144,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
     if (message.contains("text")) {
       event.raw_message = message["text"];
-      OBCX_DEBUG("Extracted Telegram text ({} bytes)",
+      OBCX_TRACE("Extracted Telegram text ({} bytes)",
                  event.raw_message.size());
 
       common::MessageSegment segment;
@@ -160,7 +160,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
         std::string file_id = photo["file_id"];
 
         event.raw_message = std::string("[Photo]");
-        OBCX_DEBUG("Extracted Telegram photo attachment");
+        OBCX_TRACE("Extracted Telegram photo attachment");
 
         common::MessageSegment segment;
         segment.type = "image";
@@ -176,7 +176,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = sticker["file_id"];
 
       event.raw_message = std::string("[Sticker]");
-      OBCX_DEBUG("Extracted Telegram sticker attachment");
+      OBCX_TRACE("Extracted Telegram sticker attachment");
 
       common::MessageSegment segment;
 
@@ -198,7 +198,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = video["file_id"];
 
       event.raw_message = std::string("[Video]");
-      OBCX_DEBUG("Extracted Telegram video attachment");
+      OBCX_TRACE("Extracted Telegram video attachment");
 
       common::MessageSegment segment;
       segment.type = "video";
@@ -225,7 +225,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = animation["file_id"];
 
       event.raw_message = std::string("[Animation]");
-      OBCX_DEBUG("Extracted Telegram animation attachment");
+      OBCX_TRACE("Extracted Telegram animation attachment");
 
       common::MessageSegment segment;
       segment.type = "animation";
@@ -252,7 +252,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = document["file_id"];
 
       event.raw_message = std::string("[Document]");
-      OBCX_DEBUG("Extracted Telegram document attachment");
+      OBCX_TRACE("Extracted Telegram document attachment");
 
       common::MessageSegment segment;
       segment.type = "document";
@@ -278,7 +278,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = audio["file_id"];
 
       event.raw_message = std::string("[Audio]");
-      OBCX_DEBUG("Extracted Telegram audio attachment");
+      OBCX_TRACE("Extracted Telegram audio attachment");
 
       common::MessageSegment segment;
       segment.type = "audio";
@@ -304,7 +304,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = voice["file_id"];
 
       event.raw_message = std::string("[Voice]");
-      OBCX_DEBUG("Extracted Telegram voice attachment");
+      OBCX_TRACE("Extracted Telegram voice attachment");
 
       common::MessageSegment segment;
       segment.type = "voice";
@@ -321,7 +321,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
       std::string file_id = video_note["file_id"];
 
       event.raw_message = std::string("[Video Note]");
-      OBCX_DEBUG("Extracted Telegram video-note attachment");
+      OBCX_TRACE("Extracted Telegram video-note attachment");
 
       common::MessageSegment segment;
       segment.type = "video_note";
@@ -340,7 +340,7 @@ auto ProtocolAdapter::parse_message_event(const nlohmann::json &update_json)
 
     event.font = 0; // Not applicable for Telegram
 
-    OBCX_DEBUG("Successfully parsed event");
+    OBCX_TRACE("Successfully parsed event");
     return event;
   } catch (const std::exception &) {
     OBCX_ERROR("Failed to parse Telegram message");
@@ -361,7 +361,7 @@ auto ProtocolAdapter::parse_edited_message_event(
               std::get_if<common::MessageEvent>(&event_opt.value())) {
         msg_event->data["is_edited"] = true;
         msg_event->sub_type = "edited";
-        OBCX_DEBUG("Marked as edit message: message_id={}",
+        OBCX_TRACE("Marked as edit message: message_id={}",
                    msg_event->message_id);
         return event_opt;
       }
@@ -426,7 +426,7 @@ auto ProtocolAdapter::parse_callback_query_event(
             callback_query["message"]["chat"]["id"].get<int64_t>());
       }
 
-      OBCX_DEBUG("Successfully parsed callback query event");
+      OBCX_TRACE("Successfully parsed callback query event");
       return event;
     }
   } catch (const std::exception &) {
@@ -533,7 +533,7 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
 
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_DEBUG("sendSticker added reply message ID: {}",
+          OBCX_TRACE("sendSticker added reply message ID: {}",
                      reply_to_message_id.value());
         }
 
@@ -601,7 +601,7 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
 
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_DEBUG("sendVideo added reply message ID: {}",
+          OBCX_TRACE("sendVideo added reply message ID: {}",
                      reply_to_message_id.value());
         }
 
@@ -641,7 +641,7 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
 
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_DEBUG("sendVideoNote added reply message ID: {}",
+          OBCX_TRACE("sendVideoNote added reply message ID: {}",
                      reply_to_message_id.value());
         }
 
@@ -723,7 +723,7 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
 
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_DEBUG("sendAudio added reply message ID: {}",
+          OBCX_TRACE("sendAudio added reply message ID: {}",
                      reply_to_message_id.value());
         }
 
@@ -762,7 +762,7 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
 
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_DEBUG("sendVoice added reply message ID: {}",
+          OBCX_TRACE("sendVoice added reply message ID: {}",
                      reply_to_message_id.value());
         }
 
@@ -797,7 +797,7 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
 
         if (reply_to_message_id.has_value()) {
           json["reply_to_message_id"] = reply_to_message_id.value();
-          OBCX_DEBUG("sendDocument added reply message ID: {}",
+          OBCX_TRACE("sendDocument added reply message ID: {}",
                      reply_to_message_id.value());
         }
 
@@ -826,7 +826,7 @@ auto ProtocolAdapter::serialize_send_topic_message_request(
 
   if (reply_to_message_id.has_value()) {
     json["reply_to_message_id"] = reply_to_message_id.value();
-    OBCX_DEBUG("Added reply message ID: {}", reply_to_message_id.value());
+    OBCX_TRACE("Added reply message ID: {}", reply_to_message_id.value());
   }
 
   if (echo.has_value()) {

@@ -82,6 +82,21 @@ Access tokens, secrets, proxy passwords, tokenized URLs, and other credential-be
 - **WHEN** components log their selected surface, transport, endpoint, and proxy mode
 - **THEN** logs contain no credential-bearing value or tokenized provider URL
 
+### Requirement: Secret values live only in the explicit secrets file
+The configuration SHALL name its secrets file explicitly in `global.secrets_file`, resolved relative to the configuration file. That file SHALL be a regular file inaccessible to group and others whose top-level entries are all `name = "value"` strings; it SHALL be re-read whenever a configuration snapshot is built. Bot `access_token` and `proxy_password` fields and actor-declared secret fields SHALL accept only `{ secret = "<name>" }` references; inline strings MUST be rejected. Secret values SHALL NOT enter the configuration document visible to actors. An actor SHALL resolve only names listed in its `actors.<name>.secrets` grant, and every grant and every reference in its `config` table SHALL be validated against the secrets file and grant at load time.
+
+#### Scenario: Inline credential is configured
+- **WHEN** a bot connection sets `access_token` to a plain string
+- **THEN** loading fails with `inline_secret_rejected` at that path without printing the value
+
+#### Scenario: Secrets file is shared
+- **WHEN** the secrets file is readable by group or others
+- **THEN** loading fails with `secrets_file_permissions` before any installation is prepared
+
+#### Scenario: Actor references an ungranted secret
+- **WHEN** an actor configuration references a name missing from its `secrets` grant
+- **THEN** loading fails with `ungranted_secret` at the referencing path
+
 ### Requirement: Validation-only and reload are side-effect free and component aware
 Validation-only SHALL parse typed configurations, select recipes, and validate component dependencies and advertised operation surfaces without opening sockets, starting threads, publishing command catalogs, or calling providers. Reload candidates SHALL validate configured installation identity and required capabilities against the unchanged process-owned active installations and MUST NOT recreate them.
 

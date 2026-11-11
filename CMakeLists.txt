@@ -7,16 +7,18 @@ endif()
 
 project(OBCX VERSION 2.7.0 LANGUAGES CXX)
 
-find_program(OBCX_PATCHELF_EXECUTABLE NAMES patchelf REQUIRED)
-
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+   CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|aarch64|arm64)$")
+  find_program(OBCX_PATCHELF_EXECUTABLE NAMES patchelf REQUIRED)
+elseif(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND
+       CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+  find_program(OBCX_INSTALL_NAME_TOOL_EXECUTABLE NAMES install_name_tool REQUIRED)
+  find_program(OBCX_OTOOL_EXECUTABLE NAMES otool REQUIRED)
+  find_program(OBCX_CODESIGN_EXECUTABLE NAMES codesign REQUIRED)
+else()
   message(FATAL_ERROR
-    "OBCX reflected actor SDK supports Linux x86_64 and arm64 only")
-endif()
-if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|aarch64|arm64)$")
-  message(FATAL_ERROR
-    "OBCX reflected actor SDK supports Linux x86_64 and arm64 only; got "
-    "${CMAKE_SYSTEM_PROCESSOR}")
+    "OBCX reflected actor SDK supports Linux x86_64/arm64 and Darwin arm64 only; got "
+    "${CMAKE_SYSTEM_NAME} ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
 if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
    CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16.1)
@@ -66,7 +68,9 @@ configure_file(
   "${CMAKE_BINARY_DIR}/generated/obcx/version.hpp"
   @ONLY)
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+if(APPLE)
+  set(VCPKG_TRIPLET "arm64-osx")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
   set(VCPKG_TRIPLET "arm64-linux")
 else()
   set(VCPKG_TRIPLET "x64-linux")

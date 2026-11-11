@@ -84,7 +84,7 @@ def main():
     sys.path.insert(0, str(repo / "cmake"))
     from obcx_package.io import metadata
     from obcx_package.resolver import Resolver
-    resolver = Resolver(repo / "packages.toml", output / "resolved-sources", "development", "deny")
+    resolver = Resolver(repo / "packages.toml", output / "resolved-sources", "development", "allow")
     resolver.options["roots"] = list(dict.fromkeys(args.actors))
     resolver.options["profile"] = "production"
     resolver.options["platform"] = args.platform

@@ -45,9 +45,10 @@ RANGE = text(format="semver-range")
 PATH = text(format="relative-path")
 SUBDIR = text(format="subdir")
 HTTPS = text(format="https")
+GIT_URL = text(format="git-url")
 SHA = text(pattern=r"^[0-9a-f]{64}$")
 COMMIT = text(pattern=r"^[0-9a-f]{40}$")
-PLATFORM = choice("linux-x86_64", "linux-arm64")
+PLATFORM = choice("linux-x86_64", "linux-arm64", "darwin-arm64")
 VISIBILITY = choice("private", "public", "interface")
 LIBRARY_EDGE = obj({"id": ID, "version": RANGE, "target": EXPORT, "visibility": VISIBILITY})
 ACTOR_EDGE = obj({"id": ID, "version": RANGE})
@@ -88,7 +89,16 @@ ARCHIVE_PROVENANCE = obj({"kind": choice("archive"), "path": PATH, "sha256": SHA
 PATH_SOURCE = obj({"id": ID, "kind": choice("path"), "path": PATH,
                    "provenance": {"oneOf": [obj({"kind": choice("working-tree")}),
                                              GIT_PROVENANCE, ARCHIVE_PROVENANCE]}})
-GIT_SOURCE = obj({"id": ID, "kind": choice("git"), "repository": HTTPS, "commit": COMMIT, "subdir": SUBDIR})
+GIT_REF = text(format="git-ref")
+
+
+def git_source(**ref) -> dict:
+    return obj({"id": ID, "kind": choice("git"), "repository": GIT_URL, **ref, "subdir": SUBDIR})
+
+
+# A commit pins the source; with a branch/tag beside it the ref is only a label.
+GIT_SOURCE = {"oneOf": [git_source(commit=COMMIT), git_source(branch=GIT_REF), git_source(tag=GIT_REF),
+                        git_source(branch=GIT_REF, commit=COMMIT), git_source(tag=GIT_REF, commit=COMMIT)]}
 VERSION_PROBE = {"oneOf": [
     obj({"kind": choice("cmake-variable"), "name": text(pattern=r"^[A-Za-z_][A-Za-z0-9_-]*$")}),
     obj({"kind": choice("target-property"), "target": EXPORT, "property": text(pattern=r"^[A-Z_][A-Z0-9_]*$")}),
@@ -167,6 +177,24 @@ def check_format(value: str, name: str) -> None:
             _ = url.port
         except ValueError:
             raise PackageError("requires HTTPS without embedded credentials, query or fragment") from None
+    elif name == "git-url":
+        try:
+            url = urlsplit(value)
+            # SSH may name the login user; HTTPS must not carry credentials.
+            if (url.scheme not in {"https", "ssh"} or not url.hostname or url.password or
+                    (url.scheme == "https" and url.username) or not url.path.strip("/") or
+                    url.query or url.fragment or any(c.isspace() for c in value)):
+                raise ValueError
+            _ = url.port
+        except ValueError:
+            raise PackageError("requires an https:// or ssh:// Git URL without password, query or fragment") from None
+    elif name == "git-ref":
+        parts = value.split("/")
+        if (value.startswith(("-", "refs/")) or value.endswith(".") or value == "@" or
+                ".." in value or "@{" in value or
+                any(ord(c) < 33 or ord(c) == 127 or c in "~^:?*[\\" for c in value) or
+                any(not part or part.startswith(".") or part.endswith(".lock") for part in parts)):
+            raise PackageError("requires a short Git branch/tag name (no refs/ prefix) valid for git check-ref-format")
     elif name in {"relative-path", "subdir"}:
         path = PurePosixPath(value)
         if (path.is_absolute() or "\\" in value or ":" in value or

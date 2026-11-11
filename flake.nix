@@ -8,33 +8,91 @@
   outputs =
     { nixpkgs, ... }:
     let
-      linuxSystems = [
+      supportedSystems = [
         "x86_64-linux"
         "aarch64-linux"
+        "aarch64-darwin"
       ];
-      darwinSystems = [ "aarch64-darwin" ];
-      supportedSystems = linuxSystems ++ darwinSystems;
 
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-      pkgsFor = system: import nixpkgs { inherit system; };
-    in
-    {
-      formatter = forAllSystems (
+      pkgsFor =
         system:
         let
-          pkgs = pkgsFor system;
+          pkgs = import nixpkgs { inherit system; };
+          stdenv = pkgs.gcc16Stdenv;
+          # Keep tools on the binary cache while sharing libstdc++ across the
+          # ABI-facing dependencies and package-provided workspace shells.
+          gccLibraries = rec {
+            gtest = pkgs.gtest.override { inherit stdenv; };
+            gbenchmark = pkgs.gbenchmark.override { inherit stdenv gtest; };
+            catch2_3 = pkgs.catch2_3.override { inherit stdenv; };
+            abseil-cpp = pkgs.abseil-cpp.override {
+              abseil-cpp_202608 =
+                (pkgs.abseil-cpp_202608.override { inherit stdenv gtest; }).overrideAttrs
+                  (old: {
+                    # GCC does not add the SDK framework include directory itself.
+                    env = (old.env or { }) // {
+                      NIX_CFLAGS_COMPILE = "-F${pkgs.apple-sdk}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks";
+                    };
+                  });
+            };
+            boost =
+              (pkgs.boost.override {
+                inherit stdenv;
+                # OBCX uses Asio headers, Thread, and Program_options, not Context.
+                extraB2Args = [
+                  "--with-thread"
+                  "--with-program_options"
+                ];
+              }).overrideAttrs
+                (old: {
+                  preConfigure =
+                    builtins.replaceStrings
+                      [ "using clang-darwin" "-rpath $out/lib/" ]
+                      [ "using gcc" "-Wl,-rpath,$out/lib/" ]
+                      old.preConfigure;
+                  buildPhase = builtins.replaceStrings [ "--without-python" ] [ "" ] old.buildPhase;
+                  installPhase = builtins.replaceStrings [ "--without-python" ] [ "" ] old.installPhase;
+                });
+            fmt = (pkgs.fmt.override { inherit stdenv; }).overrideAttrs (old: {
+              # GCC's Darwin isnan raises FE_INVALID for signaling NaNs.
+              preCheck = (old.preCheck or "") + ''
+                export GTEST_FILTER=-float_test.isnan
+              '';
+            });
+            spdlog = pkgs.spdlog.override { inherit stdenv fmt catch2_3; };
+            tomlplusplus = pkgs.tomlplusplus.override { inherit stdenv; };
+            ftxui = pkgs.ftxui.override { inherit stdenv gtest gbenchmark; };
+            re2 = pkgs.re2.override {
+              inherit
+                stdenv
+                abseil-cpp
+                gtest
+                gbenchmark
+                ;
+            };
+          };
         in
+        pkgs // pkgs.lib.optionalAttrs (system == "aarch64-darwin") gccLibraries;
+      # `nix fmt` always carries clang-format. Dev shells carry it only with the
+      # other clang tools, so the CI shell does not grow a clang-tools closure.
+      mkTreefmt =
+        pkgs: includeClangTools:
         pkgs.writeShellApplication {
           name = "treefmt";
           runtimeInputs = [
-            pkgs.clang-tools
+            pkgs.nixfmt
+            pkgs.taplo
             pkgs.treefmt
-          ];
+          ]
+          ++ pkgs.lib.optional includeClangTools pkgs.clang-tools;
           text = ''
             exec ${pkgs.treefmt}/bin/treefmt "$@"
           '';
-        }
-      );
+        };
+    in
+    {
+      formatter = forAllSystems (system: mkTreefmt (pkgsFor system) true);
 
       devShells = forAllSystems (
         system:
@@ -51,7 +109,7 @@
             if raw == "" then
               throw "Use scripts/nix_develop.py to enter an OBCX workspace shell (requires --impure)."
             else if selection.system != system then
-              throw "OBCX workspace platform does not match the Nix shell system."
+              throw "OBCX_NIX_SHELL_INPUTS system does not match this Nix shell."
             else
               map (
                 entry:
@@ -82,7 +140,8 @@
                   if ! ${pkgs.python3}/bin/python3 ${./.}/scripts/nix_develop.py \
                     --workspace "$root/packages.toml" \
                     --cache "$root/build/actor-dev/package-state/sources" \
-                    --mode development --network deny \
+                    --mode development --network allow \
+                    --nix-system ${system} \
                     --shell ${if includeClangTools then "workspace" else "workspace-ci"} \
                     --print-env; then
                     echo "OBCX: failed to load workspace Nix dependencies." >&2
@@ -101,47 +160,26 @@
               packageShells,
               autoWorkspace,
             }:
-            if pkgs.stdenv.hostPlatform.isDarwin then
-              pkgs.mkShell {
-                inputsFrom = packageShells;
-                packages =
-                  with pkgs;
-                  [
-                    cmake
-                    ninja
-                    git
-                    pkg-config
-                    cmake-format
-                    doxygen
-                    ffmpeg
-                    openspec
-                    treefmt
-                  ]
-                  ++ pkgs.lib.optional includeClangTools clangTools;
-
-                shellHook = ''
-                  echo "OBCX macOS shell: tooling only; native builds require Linux GCC 16.1+ reflection."
-                  export CC=clang
-                  export CXX=clang++
+            let
+              stdenv = pkgs.gcc16Stdenv;
+              # nixpkgs marks perf and liburing unavailable on some systems.
+              whenAvailable = pkg: pkgs.lib.optional (pkg.meta.available or false) pkg;
+              # clangd must query the same GCC 16 wrapper that generated
+              # compile_commands.json; otherwise it falls back to an older
+              # libstdc++ search path where the C++26 <meta> header is absent.
+              clangToolsWithGccQuery = pkgs.symlinkJoin {
+                name = "obcx-clang-tools-${clangTools.version}";
+                paths = [ clangTools ];
+                nativeBuildInputs = [ pkgs.makeWrapper ];
+                postBuild = ''
+                  rm -f "$out/bin/clangd"
+                  makeWrapper ${clangTools}/bin/clangd "$out/bin/clangd" \
+                    --add-flags "--query-driver=${stdenv.cc}/bin/g++,${stdenv.cc.cc}/bin/g++"
                 '';
-              }
-            else
-              let
-                stdenv = pkgs.gcc16Stdenv;
-                # clangd must query the same GCC 16 wrapper that generated
-                # compile_commands.json; otherwise it falls back to an older
-                # libstdc++ search path where the C++26 <meta> header is absent.
-                clangToolsWithGccQuery = pkgs.symlinkJoin {
-                  name = "obcx-clang-tools-${clangTools.version}";
-                  paths = [ clangTools ];
-                  nativeBuildInputs = [ pkgs.makeWrapper ];
-                  postBuild = ''
-                    rm -f "$out/bin/clangd"
-                    makeWrapper ${clangTools}/bin/clangd "$out/bin/clangd" \
-                      --add-flags "--query-driver=${stdenv.cc}/bin/g++,${stdenv.cc.cc}/bin/g++"
-                  '';
-                };
-                obcxDependencies = with pkgs; [
+              };
+              obcxDependencies =
+                with pkgs;
+                [
                   boost
                   brotli
                   curl
@@ -157,42 +195,49 @@
                   libxml2
                   re2
                   zstd
-                  liburing
                   # Optional diagnostic builds need jemalloc.pc and jeprof.
                   # CMake links it only when profiling is explicitly enabled.
                   jemalloc
                   stdenv.cc.cc.lib
-                ];
-              in
-              pkgs.mkShell.override { inherit stdenv; } {
-                inputsFrom = packageShells;
-                nativeBuildInputs =
-                  with pkgs;
-                  [
-                    cmake
-                    ninja
-                    git
-                    gcc16
-                    binutils
-                    pkg-config
-                    cmake-format
-                    doxygen
-                    ffmpeg
-                    perf
-                    treefmt
-                  ]
-                  ++ pkgs.lib.optional includeClangTools clangToolsWithGccQuery;
+                ]
+                ++ whenAvailable pkgs.liburing;
+            in
+            pkgs.mkShell.override { inherit stdenv; } {
+              inputsFrom = packageShells;
+              nativeBuildInputs =
+                with pkgs;
+                [
+                  cmake
+                  ninja
+                  git
+                  gcc16
+                  binutils
+                  pkg-config
+                  cmake-format
+                  doxygen
+                  ffmpeg
+                ]
+                ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+                  patchelf
+                ]
+                ++ whenAvailable pkgs.perf
+                ++ [ (mkTreefmt pkgs includeClangTools) ]
+                ++ pkgs.lib.optional includeClangTools clangToolsWithGccQuery;
 
-                buildInputs = obcxDependencies;
+              buildInputs = obcxDependencies;
 
-                shellHook = ''
-                  ${pkgs.lib.optionalString autoWorkspace (autoWorkspaceHook {
-                    inherit includeClangTools;
-                  })}
-                  export CC=gcc
-                  export CXX=g++
-                '';
-              };
+              shellHook = ''
+                ${pkgs.lib.optionalString autoWorkspace (autoWorkspaceHook {
+                  inherit includeClangTools;
+                })}
+                export CC=gcc
+                export CXX=g++
+                ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
+                  # Host Homebrew LLVM flags would link its libunwind/libc++ into GCC builds.
+                  unset LDFLAGS CPPFLAGS
+                ''}
+              '';
+            };
         in
         {
           default = mkDevShell {
@@ -207,21 +252,18 @@
             autoWorkspace = true;
           };
         }
-        //
-          pkgs.lib.optionalAttrs
-            (pkgs.stdenv.hostPlatform.isLinux && builtins.getEnv "OBCX_NIX_SHELL_INPUTS" != "")
-            {
-              workspace = mkDevShell {
-                includeClangTools = true;
-                packageShells = workspaceInputs;
-                autoWorkspace = false;
-              };
-              workspace-ci = mkDevShell {
-                includeClangTools = false;
-                packageShells = workspaceInputs;
-                autoWorkspace = false;
-              };
-            }
+        // pkgs.lib.optionalAttrs (builtins.getEnv "OBCX_NIX_SHELL_INPUTS" != "") {
+          workspace = mkDevShell {
+            includeClangTools = true;
+            packageShells = workspaceInputs;
+            autoWorkspace = false;
+          };
+          workspace-ci = mkDevShell {
+            includeClangTools = false;
+            packageShells = workspaceInputs;
+            autoWorkspace = false;
+          };
+        }
       );
     };
 }

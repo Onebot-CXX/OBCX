@@ -17,6 +17,7 @@
         "OBCX_PACKAGES_CACHE": "${sourceDir}/build/actor-dev/package-state/sources",
         "OBCX_PACKAGES_STATE_DIR": "${sourceDir}/build/actor-dev/package-state/cmake",
         "OBCX_PACKAGES_MODE": "development",
+        "OBCX_PACKAGES_NETWORK": "allow",
         "OBCX_BUILD_BENCHMARKS": "OFF"
       }
     },
@@ -31,6 +32,7 @@
         "OBCX_PACKAGES_CACHE": "${sourceDir}/build/actor-release/package-state/sources",
         "OBCX_PACKAGES_STATE_DIR": "${sourceDir}/build/actor-release/package-state/cmake",
         "OBCX_PACKAGES_MODE": "development",
+        "OBCX_PACKAGES_NETWORK": "allow",
         "OBCX_BUILD_BENCHMARKS": "ON"
       }
     }

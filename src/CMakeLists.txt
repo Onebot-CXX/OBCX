@@ -7,6 +7,7 @@ set(OBCX_GENERIC_RUNTIME_SOURCES
     common/json_utils.cpp
     common/message_type.cpp
     common/config_snapshot.cpp
+    common/secret_store.cpp
     core/runtime/process_configuration.cpp
     network/curl_asio_multi.cpp
     network/http_client.cpp
@@ -174,8 +175,6 @@ foreach(_runtime IN ITEMS obcx_generic_runtime_objects obcx_onebot11_runtime_obj
   if(OBCX_ENABLE_JEMALLOC_PROFILING)
     target_compile_options(${_runtime} PRIVATE -fno-omit-frame-pointer)
   endif()
-  target_compile_definitions(${_runtime} PRIVATE
-    OBCX_PATCHELF_EXECUTABLE="${OBCX_PATCHELF_EXECUTABLE}")
   set_target_properties(${_runtime} PROPERTIES POSITION_INDEPENDENT_CODE ON)
   if(OBCX_ENABLE_IO_URING AND OBCX_IO_URING_TARGET)
     target_compile_definitions(${_runtime} PUBLIC BOOST_ASIO_HAS_IO_URING=1)
@@ -191,8 +190,22 @@ target_link_libraries(obcx_telegram_runtime_objects PRIVATE obcx_generic_runtime
 
 target_compile_features(obcx_core PUBLIC cxx_std_26)
 target_compile_options(obcx_core PUBLIC -freflection)
-target_compile_definitions(obcx_core PRIVATE
-    OBCX_PATCHELF_EXECUTABLE="${OBCX_PATCHELF_EXECUTABLE}")
+foreach(_runtime IN ITEMS obcx_core obcx_generic_runtime_objects
+                          obcx_onebot11_runtime_objects obcx_telegram_runtime_objects
+                          obcx_generic_runtime)
+  if(APPLE)
+    target_compile_definitions(${_runtime} PRIVATE
+      OBCX_INSTALL_NAME_TOOL_EXECUTABLE="${OBCX_INSTALL_NAME_TOOL_EXECUTABLE}"
+      OBCX_OTOOL_EXECUTABLE="${OBCX_OTOOL_EXECUTABLE}"
+      OBCX_CODESIGN_EXECUTABLE="${OBCX_CODESIGN_EXECUTABLE}")
+  else()
+    target_compile_definitions(${_runtime} PRIVATE
+      OBCX_PATCHELF_EXECUTABLE="${OBCX_PATCHELF_EXECUTABLE}")
+  endif()
+endforeach()
+if(APPLE)
+  target_link_options(obcx_core PRIVATE "LINKER:-headerpad_max_install_names")
+endif()
 
 # ============================================================================
 # Boost.Asio io_uring backend
@@ -259,6 +272,7 @@ install(FILES
     ${CMAKE_SOURCE_DIR}/include/common/json_utils.hpp
     ${CMAKE_SOURCE_DIR}/include/common/logger.hpp
     ${CMAKE_SOURCE_DIR}/include/common/message_type.hpp
+    ${CMAKE_SOURCE_DIR}/include/common/secret_store.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obcx/common)
 
 install(FILES

@@ -59,7 +59,8 @@
               "items": {
                 "enum": [
                   "linux-x86_64",
-                  "linux-arm64"
+                  "linux-arm64",
+                  "darwin-arm64"
                 ],
                 "type": "string"
               },
@@ -481,7 +482,8 @@
               "items": {
                 "enum": [
                   "linux-x86_64",
-                  "linux-arm64"
+                  "linux-arm64",
+                  "darwin-arm64"
                 ],
                 "type": "string"
               },

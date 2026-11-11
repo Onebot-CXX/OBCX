@@ -11,7 +11,15 @@
 #include <cstring>
 #include <dlfcn.h>
 #include <fstream>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <mach-o/dyld_images.h>
+#include <mach-o/loader.h>
+#include <mach/mach.h>
+#include <spawn.h>
+#else
 #include <link.h>
+#endif
 #include <openssl/evp.h>
 #include <optional>
 #include <sstream>
@@ -22,8 +30,22 @@
 #include <unistd.h>
 #include <unordered_map>
 
+#if defined(__APPLE__)
+#ifndef OBCX_INSTALL_NAME_TOOL_EXECUTABLE
+#define OBCX_INSTALL_NAME_TOOL_EXECUTABLE "install_name_tool"
+#endif
+#ifndef OBCX_OTOOL_EXECUTABLE
+#define OBCX_OTOOL_EXECUTABLE "otool"
+#endif
+#ifndef OBCX_CODESIGN_EXECUTABLE
+#define OBCX_CODESIGN_EXECUTABLE "codesign"
+#endif
+
+extern char **environ;
+#else
 #ifndef OBCX_PATCHELF_EXECUTABLE
 #define OBCX_PATCHELF_EXECUTABLE "patchelf"
+#endif
 #endif
 
 namespace obcx::core {
@@ -65,6 +87,44 @@ auto run_command(const std::vector<std::string> &arguments) -> CommandResult {
             .output = "pipe failed: " + std::string{std::strerror(errno)}};
   }
 
+#if defined(__APPLE__)
+  std::vector<char *> argv;
+  argv.reserve(arguments.size() + 1);
+  for (const auto &argument : arguments) {
+    argv.push_back(const_cast<char *>(argument.c_str()));
+  }
+  argv.push_back(nullptr);
+  posix_spawn_file_actions_t actions;
+  int spawn_error = posix_spawn_file_actions_init(&actions);
+  if (spawn_error != 0) {
+    close(descriptors[0]);
+    close(descriptors[1]);
+    return {.exit_code = -1, .output = std::strerror(spawn_error)};
+  }
+  spawn_error = posix_spawn_file_actions_addclose(&actions, descriptors[0]);
+  if (spawn_error == 0) {
+    spawn_error = posix_spawn_file_actions_adddup2(&actions, descriptors[1],
+                                                   STDOUT_FILENO);
+  }
+  if (spawn_error == 0) {
+    spawn_error = posix_spawn_file_actions_adddup2(&actions, descriptors[1],
+                                                   STDERR_FILENO);
+  }
+  if (spawn_error == 0) {
+    spawn_error = posix_spawn_file_actions_addclose(&actions, descriptors[1]);
+  }
+  pid_t child = -1;
+  if (spawn_error == 0) {
+    spawn_error = posix_spawn(&child, argv.front(), &actions, nullptr,
+                              argv.data(), environ);
+  }
+  posix_spawn_file_actions_destroy(&actions);
+  if (spawn_error != 0) {
+    close(descriptors[0]);
+    close(descriptors[1]);
+    return {.exit_code = -1, .output = std::strerror(spawn_error)};
+  }
+#else
   const auto child = fork();
   if (child == -1) {
     close(descriptors[0]);
@@ -90,6 +150,8 @@ auto run_command(const std::vector<std::string> &arguments) -> CommandResult {
     _exit(127);
   }
 
+#endif
+
   close(descriptors[1]);
   std::string output;
   std::array<char, 4096> buffer{};
@@ -107,17 +169,29 @@ auto run_command(const std::vector<std::string> &arguments) -> CommandResult {
   close(descriptors[0]);
 
   int status = 0;
+#if defined(__APPLE__)
+  pid_t waited;
+  do {
+    waited = waitpid(child, &status, 0);
+  } while (waited == -1 && errno == EINTR);
+  if (waited == -1) {
+    return {.exit_code = -1, .output = std::strerror(errno)};
+  }
+#else
   while (waitpid(child, &status, 0) == -1 && errno == EINTR) {
   }
+#endif
   const auto exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
   return {.exit_code = exit_code, .output = std::move(output)};
 }
 
+#if !defined(__APPLE__)
 auto patchelf(std::initializer_list<std::string> arguments) -> CommandResult {
   std::vector<std::string> command{OBCX_PATCHELF_EXECUTABLE};
   command.insert(command.end(), arguments.begin(), arguments.end());
   return run_command(command);
 }
+#endif
 
 auto trim(std::string value) -> std::string {
   while (!value.empty() &&
@@ -219,12 +293,20 @@ auto file_stamp(const fs::path &path) -> std::optional<FileStamp> {
   return FileStamp{.device = metadata.st_dev,
                    .inode = metadata.st_ino,
                    .size = metadata.st_size,
+#if defined(__APPLE__)
+                   .modified_seconds = metadata.st_mtimespec.tv_sec,
+                   .modified_nanoseconds = metadata.st_mtimespec.tv_nsec,
+                   .changed_seconds = metadata.st_ctimespec.tv_sec,
+                   .changed_nanoseconds = metadata.st_ctimespec.tv_nsec};
+#else
                    .modified_seconds = metadata.st_mtim.tv_sec,
                    .modified_nanoseconds = metadata.st_mtim.tv_nsec,
                    .changed_seconds = metadata.st_ctim.tv_sec,
                    .changed_nanoseconds = metadata.st_ctim.tv_nsec};
+#endif
 }
 
+#if !defined(__APPLE__)
 auto print_needed(const fs::path &path)
     -> std::optional<std::vector<std::string>> {
   auto result = patchelf({"--print-needed", path.string()});
@@ -324,6 +406,342 @@ auto is_intrinsically_process_owned(std::string_view identity) -> bool {
     return identity.starts_with(prefix);
   });
 }
+
+#endif
+
+#if defined(__APPLE__)
+struct MachODependency {
+  std::string kind;
+  std::string identity;
+  std::string current_version;
+  std::string compatibility_version;
+
+  auto operator==(const MachODependency &) const -> bool = default;
+};
+
+struct MachOInfo {
+  std::optional<MachODependency> id;
+  std::vector<MachODependency> dependencies;
+  std::vector<std::string> rpaths;
+};
+
+auto macho_dependency_command(std::string_view command) -> bool {
+  return command == "LC_LOAD_DYLIB" || command == "LC_LOAD_WEAK_DYLIB" ||
+         command == "LC_REEXPORT_DYLIB" || command == "LC_LOAD_UPWARD_DYLIB" ||
+         command == "LC_LAZY_LOAD_DYLIB";
+}
+
+auto inspect_macho(const fs::path &path) -> std::optional<MachOInfo> {
+  mach_header_64 header{};
+  std::ifstream input(path, std::ios::binary);
+  input.read(reinterpret_cast<char *>(&header), sizeof(header));
+  // Editing all slices requires inspecting them all. Only native thin images
+  // are supported here; reject universal files rather than editing unseen code.
+  if (!input || header.magic != MH_MAGIC_64 ||
+      header.cputype != CPU_TYPE_ARM64 ||
+      (header.filetype != MH_DYLIB && header.filetype != MH_BUNDLE &&
+       header.filetype != MH_EXECUTE)) {
+    return std::nullopt;
+  }
+  const auto commands =
+      run_command({OBCX_OTOOL_EXECUTABLE, "-l", path.string()});
+  if (commands.exit_code != 0) {
+    return std::nullopt;
+  }
+  MachOInfo info;
+  MachODependency command;
+  std::string rpath;
+  std::size_t count = 0;
+  const auto finish_command = [&]() {
+    if (command.kind.empty()) {
+      return false;
+    }
+    if (command.kind == "LC_ID_DYLIB" ||
+        macho_dependency_command(command.kind)) {
+      if (command.identity.empty() || command.current_version.empty() ||
+          command.compatibility_version.empty()) {
+        return false;
+      }
+      if (command.kind == "LC_ID_DYLIB") {
+        if (info.id) {
+          return false;
+        }
+        info.id = command;
+      } else {
+        info.dependencies.push_back(command);
+      }
+    } else if (command.kind == "LC_RPATH") {
+      if (rpath.empty()) {
+        return false;
+      }
+      info.rpaths.push_back(rpath);
+    }
+    return true;
+  };
+  for (const auto &line : lines(commands.output)) {
+    if (line.starts_with("Load command ")) {
+      if (line != "Load command " + std::to_string(count) ||
+          (count != 0 && !finish_command())) {
+        return std::nullopt;
+      }
+      ++count;
+      command = {};
+      rpath.clear();
+    } else if (count != 0 && line.starts_with("cmd ")) {
+      if (!command.kind.empty()) {
+        return std::nullopt;
+      }
+      command.kind = trim(line.substr(4));
+    } else if ((command.kind == "LC_ID_DYLIB" ||
+                macho_dependency_command(command.kind)) &&
+               line.starts_with("name ")) {
+      const auto offset = line.rfind(" (offset ");
+      if (offset == std::string::npos || !line.ends_with(')') ||
+          !command.identity.empty()) {
+        return std::nullopt;
+      }
+      command.identity = line.substr(5, offset - 5);
+    } else if (command.kind == "LC_RPATH" && line.starts_with("path ")) {
+      const auto offset = line.rfind(" (offset ");
+      if (offset == std::string::npos || !line.ends_with(')') ||
+          !rpath.empty()) {
+        return std::nullopt;
+      }
+      rpath = line.substr(5, offset - 5);
+    } else if (line.starts_with("current version ")) {
+      command.current_version = line.substr(16);
+    } else if (line.starts_with("compatibility version ")) {
+      command.compatibility_version = line.substr(22);
+    }
+  }
+  const auto valid = count == header.ncmds && count != 0 && finish_command();
+  if (!valid || (header.filetype == MH_DYLIB) != info.id.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto libraries =
+      run_command({OBCX_OTOOL_EXECUTABLE, "-L", path.string()});
+  if (libraries.exit_code != 0) {
+    return std::nullopt;
+  }
+  std::vector<std::string> observed;
+  auto library_lines = lines(libraries.output);
+  if (library_lines.empty() || !library_lines.front().ends_with(':')) {
+    return std::nullopt;
+  }
+  for (std::size_t index = 1; index < library_lines.size(); ++index) {
+    const auto &line = library_lines[index];
+    const auto version = line.rfind(" (compatibility version ");
+    if (version == std::string::npos) {
+      return std::nullopt;
+    }
+    observed.push_back(line.substr(0, version));
+  }
+  std::vector<std::string> expected;
+  if (info.id) {
+    expected.push_back(info.id->identity);
+  }
+  for (const auto &dependency : info.dependencies) {
+    expected.push_back(dependency.identity);
+  }
+  std::ranges::sort(expected);
+  std::ranges::sort(observed);
+  if (observed != expected) {
+    return std::nullopt;
+  }
+  return info;
+}
+
+auto apple_system_library(std::string_view identity) -> bool {
+  return identity.starts_with("/usr/lib/") ||
+         identity.starts_with("/System/Library/");
+}
+
+auto macho_process_owned(std::string_view identity) -> bool {
+  if (apple_system_library(identity)) {
+    return true;
+  }
+  const auto name = fs::path{identity}.filename().string();
+  static constexpr std::array<std::string_view, 6> runtimes = {
+      "libobcx_core", "libstdc++", "libgcc_s",
+      "libc++",       "libc++abi", "libSystem"};
+  return std::ranges::any_of(runtimes, [&name](std::string_view runtime) {
+    return name == std::string{runtime} + ".so" ||
+           (name.starts_with(std::string{runtime} + ".") &&
+            (name.ends_with(".dylib") ||
+             name.find(".so.") != std::string::npos));
+  });
+}
+
+auto executable_path() -> std::optional<fs::path> {
+  std::uint32_t size = 0;
+  _NSGetExecutablePath(nullptr, &size);
+  std::vector<char> buffer(size);
+  if (buffer.empty() || _NSGetExecutablePath(buffer.data(), &size) != 0) {
+    return std::nullopt;
+  }
+  return canonical_existing(buffer.data());
+}
+
+auto expand_macho_path(std::string_view identity, const fs::path &consumer,
+                       const fs::path &executable) -> std::optional<fs::path> {
+  if (identity == "@loader_path") {
+    return consumer.parent_path();
+  }
+  if (identity.starts_with("@loader_path/")) {
+    return (consumer.parent_path() / identity.substr(13)).lexically_normal();
+  }
+  if (identity == "@executable_path") {
+    return executable;
+  }
+  if (identity.starts_with("@executable_path/")) {
+    return (executable / identity.substr(17)).lexically_normal();
+  }
+  const fs::path path{identity};
+  if (path.is_absolute()) {
+    return path.lexically_normal();
+  }
+  return std::nullopt;
+}
+
+void append_runpath(std::vector<fs::path> &paths, const fs::path &path) {
+  if (std::ranges::find(paths, path) == paths.end()) {
+    paths.push_back(path);
+  }
+}
+
+auto macho_runpaths(const MachOInfo &info, const fs::path &consumer,
+                    const fs::path &executable,
+                    const std::vector<fs::path> &inherited)
+    -> std::optional<std::vector<fs::path>> {
+  std::vector<fs::path> result;
+  for (const auto &rpath : info.rpaths) {
+    if (const auto expanded = expand_macho_path(rpath, consumer, executable)) {
+      append_runpath(result, *expanded);
+    } else {
+      return std::nullopt;
+    }
+  }
+  for (const auto &parent : inherited) {
+    append_runpath(result, parent);
+  }
+  return result;
+}
+
+auto resolve_macho_dependency(const fs::path &consumer,
+                              const std::string &identity,
+                              const fs::path &executable,
+                              const std::vector<fs::path> &runpaths)
+    -> std::optional<fs::path> {
+  const auto existing = [](const fs::path &path) -> std::optional<fs::path> {
+    if (const auto canonical = canonical_existing(path)) {
+      return canonical;
+    }
+    if (apple_system_library(path.string())) {
+      return path;
+    }
+    return std::nullopt;
+  };
+  if (const auto expanded = expand_macho_path(identity, consumer, executable)) {
+    return existing(*expanded);
+  }
+  if (identity.starts_with("@rpath/")) {
+    for (const auto &directory : runpaths) {
+      if (const auto found = existing(directory / identity.substr(7))) {
+        return found;
+      }
+    }
+  } else if (!identity.starts_with('@') && fs::path{identity}.is_relative()) {
+    return existing(consumer.parent_path() / identity);
+  }
+  return std::nullopt;
+}
+
+auto uuid_identity(const unsigned char *uuid) -> std::string {
+  static constexpr char hexadecimal[] = "0123456789abcdef";
+  std::string result;
+  for (std::size_t index = 0; index < 16; ++index) {
+    result.push_back(hexadecimal[uuid[index] >> 4U]);
+    result.push_back(hexadecimal[uuid[index] & 15U]);
+  }
+  return result;
+}
+
+auto shared_cache_identity(const std::string &identity)
+    -> std::optional<ProcessOwnedDependencyIdentity> {
+  task_dyld_info_data_t task{};
+  mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
+  if (task_info(mach_task_self(), TASK_DYLD_INFO,
+                reinterpret_cast<task_info_t>(&task), &count) != KERN_SUCCESS ||
+      task.all_image_info_addr == 0) {
+    return std::nullopt;
+  }
+  const auto *images =
+      reinterpret_cast<const dyld_all_image_infos *>(task.all_image_info_addr);
+  if (images->version < 15 || images->sharedCacheBaseAddress == 0) {
+    return std::nullopt;
+  }
+  // Cache-only images may not be loaded yet. The immutable cache UUID gives
+  // them a stable identity before and after the actor's normal dlopen.
+  return ProcessOwnedDependencyIdentity{
+      .path = identity,
+      .digest = "macho-shared-cache-arm64:" +
+                uuid_identity(images->sharedCacheUUID) + ":" + identity};
+}
+
+auto macho_loaded_path(const std::string &identity,
+                       const std::optional<fs::path> &resolved)
+    -> std::optional<fs::path> {
+  for (std::uint32_t index = 0; index < _dyld_image_count(); ++index) {
+    const auto *name = _dyld_get_image_name(index);
+    const auto *header = _dyld_get_image_header(index);
+    if (name == nullptr || header == nullptr || header->magic != MH_MAGIC_64) {
+      continue;
+    }
+    auto path = canonical_existing(name);
+    bool matches = identity == name || (resolved && path && *resolved == *path);
+    const auto *header64 = reinterpret_cast<const mach_header_64 *>(header);
+    const auto *cursor = reinterpret_cast<const char *>(header64 + 1);
+    const auto *end = cursor + header64->sizeofcmds;
+    for (std::uint32_t command_index = 0;
+         command_index < header64->ncmds &&
+         static_cast<std::size_t>(end - cursor) >= sizeof(load_command);
+         ++command_index) {
+      const auto *command = reinterpret_cast<const load_command *>(cursor);
+      if (command->cmdsize < sizeof(load_command) ||
+          command->cmdsize > static_cast<std::size_t>(end - cursor)) {
+        break;
+      }
+      if (command->cmd == LC_ID_DYLIB &&
+          command->cmdsize >= sizeof(dylib_command)) {
+        const auto *dylib = reinterpret_cast<const dylib_command *>(command);
+        const auto offset = dylib->dylib.name.offset;
+        if (offset < command->cmdsize &&
+            std::memchr(cursor + offset, '\0', command->cmdsize - offset)) {
+          matches = matches || identity == cursor + offset;
+        }
+      }
+      cursor += command->cmdsize;
+    }
+    if (matches && path) {
+      return path;
+    }
+  }
+  return std::nullopt;
+}
+
+struct MachOObject {
+  fs::path source;
+  fs::path staged;
+  std::string digest;
+  MachOInfo info;
+  std::vector<std::optional<fs::path>> resolved;
+  std::vector<std::string> replacements;
+  std::vector<std::string> staged_rpaths;
+  std::vector<std::vector<fs::path>> contexts;
+  bool discovered = false;
+};
+#endif
 
 auto safe_component(std::string value) -> std::string {
   for (auto &character : value) {
@@ -456,6 +874,319 @@ auto ActorPackageStager::stage(const ActorPackageStageRequest &request) const
 auto ActorPackageStager::stage(const ActorPackageStageRequest &request,
                                ActorPackageStagingContext &context) const
     -> ActorPackageStageResult {
+#if defined(__APPLE__)
+  const auto actor_library = canonical_existing(request.actor_library);
+  const auto executable = executable_path();
+  if (!actor_library || !executable) {
+    return failure("cannot resolve actor library or executable path");
+  }
+  const auto executable_info = inspect_macho(*executable);
+  if (!executable_info) {
+    return failure("cannot inspect native thin arm64 executable");
+  }
+  const auto executable_runpaths = macho_runpaths(
+      *executable_info, *executable, executable->parent_path(), {});
+  if (!executable_runpaths) {
+    return failure("unsupported or cyclic executable runpath");
+  }
+  const auto package_root = actor_library->parent_path();
+  static std::atomic_uint64_t sequence = 0;
+  const auto staging_base =
+      request.staging_root.empty()
+          ? fs::temp_directory_path() / "obcx-actor-generations"
+          : request.staging_root;
+  auto stage_root =
+      staging_base /
+      (safe_component(request.actor_name) + "-g" +
+       std::to_string(request.generation_id) + "-" +
+       std::string{detail::process_staging_uuid()} + "-" +
+       std::to_string(sequence.fetch_add(1, std::memory_order_relaxed)));
+  std::error_code error;
+  if (!fs::create_directories(stage_root, error) || error) {
+    return failure("cannot create actor staging directory");
+  }
+  const auto fail_stage = [&stage_root](std::string message) {
+    std::error_code cleanup_error;
+    fs::remove_all(stage_root, cleanup_error);
+    return failure(std::move(message));
+  };
+  const auto canonical_root = fs::canonical(stage_root, error);
+  if (error) {
+    return fail_stage("cannot canonicalize actor staging directory");
+  }
+  stage_root = canonical_root;
+
+  std::vector<MachOObject> objects;
+  objects.push_back(MachOObject{.source = *actor_library});
+  std::unordered_map<std::string, std::size_t> object_by_source;
+  object_by_source.emplace(actor_library->string(), 0);
+  struct WorkItem {
+    std::size_t index;
+    std::vector<fs::path> inherited;
+  };
+  std::vector<WorkItem> work{{0, *executable_runpaths}};
+  std::map<std::string, ProcessOwnedDependencyIdentity> process_owned;
+  for (std::size_t work_index = 0; work_index < work.size(); ++work_index) {
+    const auto [object_index, inherited] = work[work_index];
+    if (std::ranges::find(objects[object_index].contexts, inherited) !=
+        objects[object_index].contexts.end()) {
+      continue;
+    }
+    objects[object_index].contexts.push_back(inherited);
+    if (!objects[object_index].discovered) {
+      auto info = inspect_macho(objects[object_index].source);
+      if (!info) {
+        return fail_stage("cannot inspect native thin arm64 Mach-O image: " +
+                          objects[object_index].source.string());
+      }
+      objects[object_index].info = std::move(*info);
+    }
+    // Keep local copies: discovering another image may reallocate objects.
+    const auto source = objects[object_index].source;
+    const auto info = objects[object_index].info;
+    const auto runpaths =
+        macho_runpaths(info, source, executable->parent_path(), inherited);
+    if (!runpaths) {
+      return fail_stage("unsupported or cyclic Mach-O runpath in " +
+                        source.string());
+    }
+    std::vector<std::string> staged_rpaths;
+    for (const auto &rpath : info.rpaths) {
+      if (rpath.starts_with("@loader_path")) {
+        const auto expanded =
+            expand_macho_path(rpath, source, executable->parent_path());
+        if (!expanded) {
+          return fail_stage("unsupported loader-relative runpath: " + rpath);
+        }
+        staged_rpaths.push_back(expanded->string());
+      } else {
+        staged_rpaths.push_back(rpath);
+      }
+    }
+    std::vector<std::optional<fs::path>> resolved_entries;
+    std::vector<std::string> replacements;
+    for (const auto &dependency : info.dependencies) {
+      const auto &needed = dependency.identity;
+      auto resolved = resolve_macho_dependency(
+          source, needed, executable->parent_path(), *runpaths);
+      if (!resolved) {
+        resolved = macho_loaded_path(needed, std::nullopt);
+      }
+      resolved_entries.push_back(resolved);
+      replacements.emplace_back();
+      if (!resolved) {
+        if (dependency.kind != "LC_LOAD_WEAK_DYLIB") {
+          return fail_stage("cannot resolve Mach-O dependency " + needed +
+                            " from " + source.string());
+        }
+        if (const auto expanded =
+                expand_macho_path(needed, source, executable->parent_path())) {
+          replacements.back() = expanded->string();
+        }
+        continue;
+      }
+      const auto private_candidate = is_within(package_root, *resolved) &&
+                                     !macho_process_owned(needed) &&
+                                     !macho_process_owned(resolved->string());
+      if (private_candidate) {
+        const auto key = resolved->string();
+        auto found = object_by_source.find(key);
+        if (found == object_by_source.end()) {
+          found = object_by_source.emplace(key, objects.size()).first;
+          objects.push_back(MachOObject{.source = *resolved});
+        }
+        work.push_back({found->second, *runpaths});
+        continue;
+      }
+
+      auto identity_path = macho_loaded_path(needed, resolved);
+      if (!identity_path) {
+        identity_path = resolved;
+      }
+      ProcessOwnedDependencyIdentity identity;
+      identity.path = identity_path->string();
+      if (auto digest = context.impl_->digest(*identity_path)) {
+        identity.digest = std::move(*digest);
+      } else if (apple_system_library(identity.path)) {
+        if (const auto cache = shared_cache_identity(identity.path)) {
+          identity = *cache;
+        }
+      }
+      if (identity.digest.empty()) {
+        return fail_stage("cannot fingerprint process-owned dependency: " +
+                          needed);
+      }
+      if (const auto expected =
+              request.expected_process_owned_dependencies.find(needed);
+          expected != request.expected_process_owned_dependencies.end() &&
+          identity.digest != expected->second.digest) {
+        return fail_stage("process-owned dependency identity changed: " +
+                          needed);
+      }
+      const auto [existing, inserted] = process_owned.emplace(needed, identity);
+      if (!inserted && existing->second != identity) {
+        return fail_stage("conflicting process-owned dependency identity: " +
+                          needed);
+      }
+      replacements.back() = identity.path;
+    }
+    auto &object = objects[object_index];
+    if (object.discovered && (object.resolved != resolved_entries ||
+                              object.staged_rpaths != staged_rpaths ||
+                              object.replacements != replacements)) {
+      return fail_stage("ambiguous Mach-O dependency loading context: " +
+                        source.string());
+    }
+    object.resolved = std::move(resolved_entries);
+    object.replacements = std::move(replacements);
+    object.staged_rpaths = std::move(staged_rpaths);
+    object.discovered = true;
+  }
+
+  for (std::size_t index = 0; index < objects.size(); ++index) {
+    auto &object = objects[index];
+    auto digest = file_digest(object.source);
+    if (!digest) {
+      return fail_stage("cannot fingerprint actor dependency closure");
+    }
+    object.digest = std::move(*digest);
+    auto relative = object.source.lexically_relative(package_root);
+    if (relative.empty() || *relative.begin() == "..") {
+      return fail_stage("actor dependency escapes its package root");
+    }
+    if (index != 0) {
+      relative.replace_filename(
+          versioned_identity(object.source, object.digest));
+    }
+    object.staged = stage_root / relative;
+    fs::create_directories(object.staged.parent_path(), error);
+    if (error) {
+      return fail_stage("cannot create staged dependency layout");
+    }
+    fs::copy_file(object.source, object.staged, fs::copy_options::none, error);
+    if (error) {
+      return fail_stage("cannot copy actor dependency closure");
+    }
+    fs::permissions(object.staged, fs::perms::owner_write,
+                    fs::perm_options::add, error);
+    if (error) {
+      return fail_stage("cannot make staged Mach-O image writable");
+    }
+  }
+
+  std::vector<StagedPrivateDependency> private_dependencies;
+  for (std::size_t object_index = 0; object_index < objects.size();
+       ++object_index) {
+    auto &object = objects[object_index];
+    auto expected = object.info;
+    if (expected.id) {
+      expected.id->identity = object.staged.string();
+      const auto result =
+          run_command({OBCX_INSTALL_NAME_TOOL_EXECUTABLE, "-id",
+                       expected.id->identity, object.staged.string()});
+      if (result.exit_code != 0) {
+        return fail_stage(
+            "cannot assign generation-unique Mach-O install id: " +
+            object.staged.string() + ": " + trim(result.output));
+      }
+    }
+    std::map<std::string, std::string> changes;
+    for (std::size_t index = 0; index < expected.dependencies.size(); ++index) {
+      auto &dependency = expected.dependencies[index];
+      auto replacement = object.replacements[index];
+      if (object.resolved[index]) {
+        const auto target =
+            object_by_source.find(object.resolved[index]->string());
+        if (target != object_by_source.end()) {
+          replacement = objects[target->second].staged.string();
+        }
+      }
+      if (replacement.empty() || replacement == dependency.identity) {
+        continue;
+      }
+      const auto [change, inserted] =
+          changes.emplace(dependency.identity, replacement);
+      if (!inserted && change->second != replacement) {
+        return fail_stage("conflicting Mach-O install-name rewrites");
+      }
+      dependency.identity = std::move(replacement);
+    }
+    for (const auto &[original, replacement] : changes) {
+      const auto result =
+          run_command({OBCX_INSTALL_NAME_TOOL_EXECUTABLE, "-change", original,
+                       replacement, object.staged.string()});
+      if (result.exit_code != 0) {
+        return fail_stage("cannot rewrite Mach-O dependency: " + original +
+                          ": " + trim(result.output));
+      }
+    }
+    if (object.info.rpaths != object.staged_rpaths) {
+      std::vector<std::string> deleted;
+      for (const auto &rpath : object.info.rpaths) {
+        if (std::ranges::find(deleted, rpath) != deleted.end()) {
+          continue;
+        }
+        const auto result =
+            run_command({OBCX_INSTALL_NAME_TOOL_EXECUTABLE, "-delete_rpath",
+                         rpath, object.staged.string()});
+        if (result.exit_code != 0) {
+          return fail_stage("cannot rebase Mach-O runpath: " + rpath + ": " +
+                            trim(result.output));
+        }
+        deleted.push_back(rpath);
+      }
+      expected.rpaths.clear();
+      for (const auto &rpath : object.staged_rpaths) {
+        if (std::ranges::find(expected.rpaths, rpath) !=
+            expected.rpaths.end()) {
+          continue;
+        }
+        const auto result =
+            run_command({OBCX_INSTALL_NAME_TOOL_EXECUTABLE, "-add_rpath", rpath,
+                         object.staged.string()});
+        if (result.exit_code != 0) {
+          return fail_stage("cannot add rebased Mach-O runpath: " + rpath +
+                            ": " + trim(result.output));
+        }
+        expected.rpaths.push_back(rpath);
+      }
+    }
+    auto sign = run_command({OBCX_CODESIGN_EXECUTABLE, "--force", "--sign", "-",
+                             object.staged.string()});
+    if (sign.exit_code == 0) {
+      sign = run_command({OBCX_CODESIGN_EXECUTABLE, "--verify", "--strict",
+                          object.staged.string()});
+    }
+    if (sign.exit_code != 0) {
+      return fail_stage("cannot ad-hoc sign staged Mach-O image: " +
+                        object.staged.string() + ": " + trim(sign.output));
+    }
+    const auto observed = inspect_macho(object.staged);
+    if (!observed || observed->id != expected.id ||
+        observed->dependencies != expected.dependencies ||
+        observed->rpaths != expected.rpaths) {
+      return fail_stage("staged Mach-O identity verification failed: " +
+                        object.staged.string());
+    }
+    if (object_index != 0) {
+      private_dependencies.push_back(
+          {.source_path = object.source,
+           .staged_path = object.staged,
+           .original_identity = object.info.id
+                                    ? object.info.id->identity
+                                    : object.source.filename().string(),
+           .staged_identity = object.staged.string(),
+           .digest = object.digest});
+    }
+  }
+  OBCX_INFO("Staged actor {} generation {} with {} private dependencies",
+            request.actor_name, request.generation_id,
+            private_dependencies.size());
+  auto package = std::make_unique<StagedActorPackage>(
+      stage_root, objects.front().staged, std::move(private_dependencies),
+      std::move(process_owned));
+  return {.package = std::move(package)};
+#else
   const auto actor_library = canonical_existing(request.actor_library);
   if (!actor_library) {
     return failure("actor library is not a regular file");
@@ -651,6 +1382,7 @@ auto ActorPackageStager::stage(const ActorPackageStageRequest &request,
       stage_root, objects.front().staged, std::move(private_dependencies),
       std::move(process_owned));
   return {.package = std::move(package)};
+#endif
 }
 
 } // namespace obcx::core

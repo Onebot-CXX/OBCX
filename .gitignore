@@ -99,6 +99,7 @@ actors.toml
 local_plugin/
 plugins.toml
 config.toml
+secrets.toml
 AGENTS.md
 CLAUDE.md
 PROGRESS.md

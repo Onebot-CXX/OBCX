@@ -39,7 +39,8 @@ cmake -S . -B "$PROFILE_BUILD" -G Ninja \
   -DOBCX_PACKAGES_WORKSPACE="$PWD/packages.toml" \
   -DOBCX_PACKAGES_CACHE="$PROFILE_BUILD/package-cache" \
   -DOBCX_PACKAGES_STATE_DIR="$PROFILE_BUILD/package-state" \
-  -DOBCX_PACKAGES_MODE=development
+  -DOBCX_PACKAGES_MODE=development \
+  -DOBCX_PACKAGES_NETWORK=allow
 JOBS=$(nproc)
 [ "$JOBS" -ge 6 ] || JOBS=6
 cmake --build "$PROFILE_BUILD" --target obcx --parallel "$JOBS"

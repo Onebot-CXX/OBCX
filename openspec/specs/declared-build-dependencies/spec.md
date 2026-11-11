@@ -64,7 +64,7 @@ reported as a passed generated audit.
 - **THEN** compulsory audit rejects it rather than issuing optional lint only
 
 #### Scenario: A library is header-only
-- **WHEN** no ELF dependency is emitted for a declared header-only package
+- **WHEN** no native shared-library dependency is emitted for a declared header-only package
 - **THEN** version/owner/include/usage and transitive edges are still audited
 
 ### Requirement: Tests cannot introduce undeclared production dependencies

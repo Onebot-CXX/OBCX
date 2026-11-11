@@ -22,6 +22,7 @@ def main() -> int:
     parser.add_argument("--cache", required=True, type=Path)
     parser.add_argument("--mode", required=True, choices=("development", "release"))
     parser.add_argument("--network", required=True, choices=("allow", "deny"))
+    parser.add_argument("--nix-system", required=True)
     parser.add_argument("--shell", required=True, choices=("workspace", "workspace-ci"))
     parser.add_argument("--print-env", action="store_true",
                         help="emit Bash environment for the automatic flake shell hook")
@@ -50,14 +51,34 @@ def main() -> int:
         # dependencies. In particular, empty roots do not evaluate another flake.
         if args.print_env and not shells:
             return 0
-        system = {"linux-x86_64": "x86_64-linux", "linux-arm64": "aarch64-linux"}[graph["platform"]]
+        expected = {
+            "linux-x86_64": "x86_64-linux",
+            "linux-arm64": "aarch64-linux",
+            "darwin-arm64": "aarch64-darwin",
+        }.get(graph["platform"])
+        if expected is None:
+            raise PackageError(f"unsupported workspace platform {graph['platform']}")
+        # A supported Nix system has to be the workspace target. Other systems
+        # load package shells for the system that is actually entering the shell.
+        if args.nix_system in {"x86_64-linux", "aarch64-linux", "aarch64-darwin"} and args.nix_system != expected:
+            raise PackageError(
+                f"workspace platform {graph['platform']} does not match Nix system {args.nix_system}"
+            )
         env = os.environ.copy()
-        env["OBCX_NIX_SHELL_INPUTS"] = json.dumps({"system": system, "shells": shells})
+        env["OBCX_NIX_SHELL_INPUTS"] = json.dumps(
+            {"system": args.nix_system, "shells": shells}
+        )
         command = args.command
         if command[:1] == ["--"]:
             command = command[1:]
-        invocation = ["nix", "print-dev-env" if args.print_env else "develop",
-                      "--impure", "--no-update-lock-file", f"{ROOT}#{args.shell}"]
+        # direnv enables these only for its own Nix process. This nested
+        # `print-dev-env` / `develop` must request them itself.
+        invocation = [
+            "nix",
+            "--extra-experimental-features", "nix-command flakes",
+            "print-dev-env" if args.print_env else "develop",
+            "--impure", "--no-update-lock-file", f"{ROOT}#{args.shell}",
+        ]
         if command:
             invocation.extend(["--command", *command])
         return subprocess.run(invocation, env=env, check=False).returncode

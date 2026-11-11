@@ -75,14 +75,21 @@ creating runtime instances or rewriting runtime requires.
 - **THEN** T is excluded from the selected production graph
 
 ### Requirement: Network access and source caches are controlled
-Source preparation SHALL use explicit allow/deny policy; offline CMake resolution
-MUST NOT download missing objects. Remote sources SHALL require full commits,
+Source preparation, including CMake configuration, SHALL use an explicit
+allow/deny policy; under `deny` it MUST NOT download missing objects. Remote
+sources SHALL use `https://` or `ssh://` Git URLs without passwords and SHALL
+select exactly one full `commit`, `branch` or `tag` (a ref beside a commit is
+only a label). Under `allow`, branches SHALL be re-resolved on every preparation
+and tags resolved once; under `deny`, only previously resolved commits SHALL be
+used. Release mode SHALL require an explicit commit, and resolved graphs SHALL
+record the commit used. Git failures SHALL report git's diagnostics with URL
+userinfo redacted. Remote sources SHALL require
 restricted subdirectories and verified source/cache identity. Cache publication
 SHALL be synchronized/atomic and reject escape, tampering and implicit unpinned
 submodule/LFS substitution. Nix lockfiles and cache mutexes are not package locks.
 
 #### Scenario: Offline cache is incomplete
-- **WHEN** a required fixed remote source is missing from verified cache
+- **WHEN** a required fixed remote source is missing from verified cache under the `deny` policy
 - **THEN** preparation fails without a download or fallback source
 
 #### Scenario: Cached metadata is altered

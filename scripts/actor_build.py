@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 
@@ -46,6 +47,30 @@ def cache_values(path: Path) -> dict[str, str]:
         if match:
             values[match[1]] = match[2]
     return values
+
+
+def target_artifacts(build: Path, configuration: str, targets: list[str]) -> dict[str, Path]:
+    reply = build / ".cmake/api/v1/reply"
+    indices = sorted(reply.glob("index-*.json"), key=lambda path: path.stat().st_mtime_ns)
+    require(bool(indices), "Missing CMake File API reply; reconfigure the build")
+    index = json.loads(indices[-1].read_bytes())
+    reference = next((item for item in index["objects"] if item["kind"] == "codemodel"), None)
+    require(reference is not None, "Missing CMake File API codemodel")
+    model = json.loads((reply / reference["jsonFile"]).read_bytes())
+    require(Path(model["paths"]["build"]).resolve() == build.resolve(),
+            "CMake File API belongs to a different build directory")
+    config = next((item for item in model["configurations"] if item["name"] == configuration), None)
+    require(config is not None, "CMake File API lacks selected configuration")
+    result = {}
+    for name in targets:
+        reference = next((item for item in config["targets"] if item["name"] == name), None)
+        require(reference is not None, f"Missing CMake target: {name}")
+        target = json.loads((reply / reference["jsonFile"]).read_bytes())
+        require(target["type"] == "SHARED_LIBRARY", f"Expected a shared-library target: {name}")
+        artifacts = target.get("artifacts", [])
+        require(len(artifacts) == 1, f"Expected one shared-library artifact for {name}")
+        result[name] = (build / artifacts[0]["path"]).resolve()
+    return result
 
 
 def run(arguments: list[str], **kwargs) -> None:
@@ -97,7 +122,7 @@ def snapshot_sdk(args) -> None:
         text=True, stderr=subprocess.STDOUT)
     require("ninja: no work to do." in planned and not re.search(r"^\[\d+/", planned, re.M),
             "Core has pending build work. Build/restart it explicitly before snapshotting:\n" + planned)
-    original = build / "src/libobcx_core.so"
+    original = target_artifacts(build, values["CMAKE_BUILD_TYPE"], ["obcx_core"])["obcx_core"]
     before = sha256(original)
     output = args.output.resolve()
     output.mkdir(parents=True)
@@ -131,7 +156,11 @@ def snapshot_sdk(args) -> None:
     configs = list(output.glob("*/cmake/obcx-sdk/obcx-sdk-config.cmake"))
     require(len(configs) == 1, "Expected exactly one installed SDK config")
     manifest["sdk_dir"] = configs[0].parent.relative_to(output).as_posix()
-    installed = configs[0].parents[2] / "libobcx_core.so"
+    installed = configs[0].parents[2] / original.name
+    require(sha256(original) == before, "Built core changed during SDK installation")
+    if original.suffix == ".dylib":
+        # Installation may edit Mach-O rpaths/signatures; freeze the live bytes instead.
+        shutil.copy2(original, installed)
     require(sha256(original) == before == sha256(installed),
             "Installed SDK core differs from the built core; do not use this snapshot for reload")
     manifest["files"] = inventory(output)
@@ -159,7 +188,7 @@ def configure(args) -> None:
     output = args.output.resolve()
     require(not output.exists() and not args.output.is_symlink(),
             f"Configure requires a new actor build directory: {output}")
-    resolver = Resolver(workspace, args.cache.resolve(), args.mode, "deny")
+    resolver = Resolver(workspace, args.cache.resolve(), args.mode, args.network)
     resolver.options["roots"] = sorted(set(args.actors))
     graph = resolver.resolve()
     nodes = {node["id"]: node for node in graph["packages"]}
@@ -190,18 +219,22 @@ def configure(args) -> None:
                  "".join(k + " = " + inline(v) + "\n" for k, v in document.items()).encode())
     actors = [node["metadata"]["artifact"] for node in graph["packages"] if node["kind"] == "actor"]
     state = {"sdk": str(sdk), "sdk_manifest_sha256": sha256(sdk / "sdk-snapshot.json"),
-             "targets": sorted(actor["target"] for actor in actors),
-             "artifacts": sorted(actor["name"] + ".so" for actor in actors)}
+             "targets": sorted(actor["target"] for actor in actors)}
     run([manifest["cmake"], "-S", str(REPO / "cmake/actors"), "-B", str(output / "cmake"), "-G", "Ninja",
          f"-Dobcx-sdk_DIR={sdk / manifest['sdk_dir']}",
          f"-DCMAKE_CXX_COMPILER={manifest['compiler']}", f"-DCMAKE_MAKE_PROGRAM={manifest['ninja']}",
          f"-DCMAKE_BUILD_TYPE={args.configuration}", f"-DENABLE_DEBUG_TRACE={args.debug_trace}",
          f"-DOBCX_PACKAGES_WORKSPACE={generated / 'packages.toml'}",
          f"-DOBCX_PACKAGES_CACHE={args.cache.resolve()}", f"-DOBCX_PACKAGES_MODE={args.mode}",
+         f"-DOBCX_PACKAGES_NETWORK={args.network}",
          f"-DOBCX_PACKAGES_STATE_DIR={output / 'package-state'}",
          *[f"-D{name}={value}" for name, value in manifest["cache"].items()]],
         env=build_environment(manifest))
     verify_imported_sdk(output, sdk)
+    artifacts = target_artifacts(output / "cmake", args.configuration, state["targets"])
+    require(all(path.parent == output / "cmake/actors" for path in artifacts.values()),
+            "Actor artifacts must stay in the configured actor output directory")
+    state["artifacts"] = sorted(path.name for path in artifacts.values())
     atomic_write(output / "actor-build.json", encoded(state))
     print(f"Isolated actors: {', '.join(state['targets'])}\nBuild directory: {output}")
 
@@ -247,6 +280,7 @@ def main() -> None:
         command.add_argument("--" + option, type=Path, required=True)
     command.add_argument("--actors", nargs="+", required=True)
     command.add_argument("--mode", choices=("development", "release"), required=True)
+    command.add_argument("--network", choices=("allow", "deny"), required=True)
     command.add_argument("--configuration", choices=("Debug", "Release", "RelWithDebInfo", "MinSizeRel"), required=True)
     command.add_argument("--debug-trace", choices=("ON", "OFF"), required=True)
     command = commands.add_parser("build", help="Incrementally rebuild only the isolated actor closure")

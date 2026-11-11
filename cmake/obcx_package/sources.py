@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -13,7 +14,7 @@ import tarfile
 import tempfile
 
 from . import PackageError
-from .io import digest, encoded, exclusive
+from .io import atomic_write, digest, encoded, exclusive
 
 
 def contained(root: Path, path: Path) -> Path:
@@ -30,21 +31,38 @@ def contained(root: Path, path: Path) -> Path:
     return resolved
 
 
+def git_diagnostic(stderr: bytes) -> str:
+    text = stderr.decode("utf-8", "replace")
+    # Remote messages may echo URLs; never print URL userinfo.
+    text = re.sub(r"([A-Za-z][A-Za-z0-9+.-]*://)[^/\s@]+@", r"\1<redacted>@", text)
+    lines = [re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", line).rstrip() for line in text.splitlines()]
+    lines = [line for line in lines if line][-20:]
+    return "\n".join("  " + line for line in lines)[-4000:] or "  (no diagnostics)"
+
+
 def git(args: list[str], cwd: Path) -> bytes:
     env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    # SSH authenticates through the caller's agent and ~/.ssh/config; BatchMode
+    # turns passphrase or host-key prompts into failures inside CMake.
     env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null",
-               GIT_TERMINAL_PROMPT="0", GIT_LFS_SKIP_SMUDGE="1")
+               GIT_TERMINAL_PROMPT="0", GIT_LFS_SKIP_SMUDGE="1",
+               GIT_SSH_COMMAND="ssh -o BatchMode=yes")
     try:
         result = subprocess.run(
             ["git", "-c", "protocol.allow=never", "-c", "protocol.https.allow=always",
+             "-c", "protocol.ssh.allow=always",
              "-c", "core.hooksPath=/dev/null", "-c", "core.autocrlf=false",
              "-c", "core.fsmonitor=false", "-c", "fetch.fsckObjects=true",
              "-c", "fetch.recurseSubmodules=false", *args],
-            cwd=cwd, env=env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cwd=cwd, env=env, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             timeout=120)
-    except (OSError, subprocess.SubprocessError):
-        # Git diagnostics may contain credentials supplied by host configuration.
-        raise PackageError("fixed-source Git operation failed (raw transport diagnostics suppressed)") from None
+    except subprocess.TimeoutExpired:
+        raise PackageError(f"git {args[0]} timed out after 120 s") from None
+    except OSError as error:
+        raise PackageError(f"git {args[0]} could not start: {error.strerror}") from None
+    if result.returncode != 0:
+        raise PackageError(f"git {args[0]} failed with exit code {result.returncode}:\n"
+                           + git_diagnostic(result.stderr))
     return result.stdout
 
 
@@ -191,7 +209,11 @@ class Sources:
                 self.cache.mkdir(parents=True, exist_ok=True)
                 temporary = Path(tempfile.mkdtemp(prefix=".prepare-", dir=self.cache))
                 try:
-                    self.fetch_git(source, temporary)
+                    try:
+                        self.fetch_git(source, temporary)
+                    except PackageError as error:
+                        raise PackageError(f"source {source['id']}: cannot fetch {source['repository']} "
+                                           f"commit {source['commit']}: {error}") from None
                     self.verify_git(source, temporary)
                     self.freeze(temporary)
                     os.replace(temporary, checkout)
@@ -271,10 +293,68 @@ class Sources:
             raise PackageError(f"source {source['id']}: subdir does not exist")
         return root
 
-    def prepare(self, source: dict) -> tuple[Path, dict, dict]:
+    def commit_of(self, source: dict) -> str:
+        if "commit" in source:
+            return source["commit"]
+        kind = "branch" if "branch" in source else "tag"
+        name = source[kind]
+        if self.mode == "release":
+            raise PackageError(f"source {source['id']}: release needs an explicit commit, not only {kind} {name}")
+        key = digest(encoded({"repository": source["repository"], kind: name}))
+        record = self.cache / "refs" / f"{key}.json"
+        # The record is cache state for offline reuse, not a package lock.
+        with exclusive(self.cache / "refs" / f"{key}.guard"):
+            recorded = self.recorded_commit(record, source, kind)
+            # Tags are treated as immutable; branches follow the remote head.
+            if recorded and (kind == "tag" or self.network == "deny"):
+                return recorded
+            if self.network == "deny":
+                raise PackageError(f"offline: {kind} {name} of source {source['id']} was never resolved; "
+                                   "configure once with network allow")
+            commit = self.remote_commit(source, kind, name)
+            atomic_write(record, encoded({"repository": source["repository"], "kind": kind,
+                                          "name": name, "commit": commit}))
+        return commit
+
+    @staticmethod
+    def recorded_commit(record: Path, source: dict, kind: str) -> str | None:
+        try:
+            value = json.loads(record.read_bytes())
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError):
+            raise PackageError(f"source {source['id']}: unreadable cached {kind} record {record}") from None
+        if (not isinstance(value, dict) or value.get("repository") != source["repository"] or
+                value.get("kind") != kind or value.get("name") != source[kind] or
+                not re.fullmatch(r"[0-9a-f]{40}", str(value.get("commit")))):
+            raise PackageError(f"source {source['id']}: corrupt cached {kind} record {record}")
+        return value["commit"]
+
+    def remote_commit(self, source: dict, kind: str, name: str) -> str:
+        ref = f"refs/{'heads' if kind == 'branch' else 'tags'}/{name}"
+        self.cache.mkdir(parents=True, exist_ok=True)
+        try:
+            listing = git(["ls-remote", source["repository"], ref, ref + "^{}"], self.cache)
+        except PackageError as error:
+            raise PackageError(f"source {source['id']}: cannot resolve {kind} {name} "
+                               f"in {source['repository']}: {error}") from None
+        refs = {}
+        for line in listing.decode("utf-8", "replace").splitlines():
+            oid, _, found = line.partition("\t")
+            refs[found] = oid
+        # An annotated tag peels to its commit; lightweight tags name it directly.
+        commit = refs.get(ref + "^{}", refs.get(ref))
+        if commit is None:
+            raise PackageError(f"source {source['id']}: {kind} {name} not found in {source['repository']}")
+        if not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise PackageError(f"source {source['id']}: {kind} {name} resolved to an unsupported object ID")
+        return commit
+
+    def prepare(self, source: dict) -> tuple[Path, dict, dict, dict]:
         if source["kind"] == "git":
-            root, identity = self.prepare_git(source)
-            return root, identity, {"sha256": tree_digest(root), "dirty": False}
+            pinned = {**source, "commit": self.commit_of(source)}
+            root, identity = self.prepare_git(pinned)
+            return root, identity, {"sha256": tree_digest(root), "dirty": False}, pinned
         root = (self.workspace / source["path"]).resolve()
         if self.cache.resolve().is_relative_to(root):
             raise PackageError("cache must be outside path package roots to keep generated files out of source identity")
@@ -282,7 +362,7 @@ class Sources:
         actual = tree_digest(root)
         if self.mode == "development":
             dirty = self.dirty(root)
-            return root, {"kind": "working-tree", "digest": "metadata-only"}, {"sha256": actual, "dirty": dirty}
+            return root, {"kind": "working-tree", "digest": "metadata-only"}, {"sha256": actual, "dirty": dirty}, source
         if provenance["kind"] == "working-tree":
             raise PackageError(f"source {source['id']}: release needs explicit fixed Git/archive provenance")
         if provenance["kind"] == "git":
@@ -309,7 +389,7 @@ class Sources:
                 if tree_digest(Path(temporary)) != actual:
                     raise PackageError(f"source {source['id']}: release source differs from fixed archive")
             identity = {"kind": "archive", "digest": provenance["sha256"]}
-        return root, identity, {"sha256": actual, "dirty": False}
+        return root, identity, {"sha256": actual, "dirty": False}, source
 
     @staticmethod
     def dirty(root: Path) -> bool:

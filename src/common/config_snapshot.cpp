@@ -406,7 +406,7 @@ auto ActorConfigSnapshotBuilder::build(
     return {.snapshot = std::shared_ptr<const RuntimeConfigSnapshot>(
                 new RuntimeConfigSnapshot(std::move(config_path),
                                           std::move(actor_document),
-                                          std::move(bots), nullptr))};
+                                          std::move(bots), nullptr, nullptr))};
   } catch (const std::exception &) {
     return {.diagnostic = ConfigLoadDiagnostic{
                 .code = "invalid_actor_bot_metadata",
@@ -418,6 +418,28 @@ auto ActorConfigSnapshotBuilder::build(
 auto RuntimeConfigSnapshot::get_bot_configs() const
     -> std::vector<BotInstallationMetadata> {
   return bots_;
+}
+
+auto RuntimeConfigSnapshot::actor_secret(const std::string_view actor,
+                                         const std::string_view name) const
+    -> std::optional<std::string> {
+  const auto *actors = config_data_.get_as<toml::table>("actors");
+  const auto *actor_table =
+      actors == nullptr ? nullptr : actors->get_as<toml::table>(actor);
+  const auto *grants = actor_table == nullptr
+                           ? nullptr
+                           : actor_table->get_as<toml::array>("secrets");
+  if (secrets_ == nullptr || grants == nullptr) {
+    return std::nullopt;
+  }
+  for (const auto &grant : *grants) {
+    if (grant.value<std::string_view>() == name) {
+      const auto *value = secrets_->find(name);
+      return value == nullptr ? std::nullopt
+                              : std::optional<std::string>{*value};
+    }
+  }
+  return std::nullopt;
 }
 
 auto RuntimeConfigSnapshot::get_actor_configs() const

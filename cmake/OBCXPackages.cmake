@@ -191,6 +191,10 @@ function(_obcx_register_target TARGET_NAME ROLE)
       set_target_properties("${TARGET_NAME}" PROPERTIES POSITION_INDEPENDENT_CODE ON
         CXX_STANDARD "${_standard}" CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
       target_compile_features("${TARGET_NAME}" PUBLIC "cxx_std_${_standard}")
+      if(APPLE AND _type MATCHES "^(SHARED_LIBRARY|MODULE_LIBRARY)$")
+        # Hot-reload staging replaces install names with longer generation paths.
+        target_link_options("${TARGET_NAME}" PRIVATE "LINKER:-headerpad_max_install_names")
+      endif()
     endif()
     _obcx_apply_dependencies("${TARGET_NAME}" "${ROLE}")
     string(JSON _kind GET "${_node}" kind)
@@ -387,22 +391,23 @@ endfunction()
 
 # Common entry point for core and a package's top-level installed-SDK build.
 function(obcx_load_configured_workspace)
-  foreach(_name WORKSPACE CACHE MODE STATE_DIR)
+  foreach(_name WORKSPACE CACHE MODE NETWORK STATE_DIR)
     if(NOT DEFINED OBCX_PACKAGES_${_name} OR "${OBCX_PACKAGES_${_name}}" STREQUAL "")
       message(FATAL_ERROR "Explicit OBCX_PACKAGES_${_name} is required; select a preset or supply the option")
     endif()
   endforeach()
   obcx_load_packages(WORKSPACE "${OBCX_PACKAGES_WORKSPACE}"
     CACHE "${OBCX_PACKAGES_CACHE}" MODE "${OBCX_PACKAGES_MODE}"
+    NETWORK "${OBCX_PACKAGES_NETWORK}"
     STATE_DIR "${OBCX_PACKAGES_STATE_DIR}")
 endfunction()
 
 function(obcx_load_packages)
-  cmake_parse_arguments(PARSE_ARGV 0 ARG "" "WORKSPACE;CACHE;MODE;STATE_DIR" "")
+  cmake_parse_arguments(PARSE_ARGV 0 ARG "" "WORKSPACE;CACHE;MODE;NETWORK;STATE_DIR" "")
   if(ARG_UNPARSED_ARGUMENTS OR ARG_KEYWORDS_MISSING_VALUES)
     message(FATAL_ERROR "[OBCX Packages] Unknown or empty loader arguments")
   endif()
-  foreach(_field WORKSPACE CACHE MODE STATE_DIR)
+  foreach(_field WORKSPACE CACHE MODE NETWORK STATE_DIR)
     if(NOT DEFINED ARG_${_field} OR "${ARG_${_field}}" STREQUAL "")
       message(FATAL_ERROR "[OBCX Packages] Explicit ${_field} is required")
     endif()
@@ -414,14 +419,19 @@ function(obcx_load_packages)
   if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     message(FATAL_ERROR "[OBCX Packages] Select a CMake configuration explicitly")
   endif()
-  if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    message(FATAL_ERROR "[OBCX Packages] Unsupported target platform")
-  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
+  if(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND
+     CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+    set(_platform darwin-arm64)
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+         CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
     set(_platform linux-x86_64)
-  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+         CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
     set(_platform linux-arm64)
   else()
-    message(FATAL_ERROR "[OBCX Packages] Unsupported target processor")
+    message(FATAL_ERROR
+      "[OBCX Packages] Supported targets are Linux x86_64/arm64 and Darwin arm64; got "
+      "${CMAKE_SYSTEM_NAME} ${CMAKE_SYSTEM_PROCESSOR}")
   endif()
   find_package(Python3 3.11 COMPONENTS Interpreter REQUIRED)
   # Needed by the root-directory deferred callback as well as this function.
@@ -442,7 +452,7 @@ function(obcx_load_packages)
   set_property(GLOBAL PROPERTY OBCX_PACKAGE_WORKSPACE "${_workspace}")
   cmake_file_api(QUERY API_VERSION 1 CODEMODEL 2 TOOLCHAINS 1)
   _obcx_package_command(plan --workspace "${_manifest}"
-    --cache "${ARG_CACHE}" --mode "${ARG_MODE}" --build-dir "${CMAKE_BINARY_DIR}"
+    --cache "${ARG_CACHE}" --mode "${ARG_MODE}" --network "${ARG_NETWORK}" --build-dir "${CMAKE_BINARY_DIR}"
     --platform "${_platform}" --compiler-id "${CMAKE_CXX_COMPILER_ID}" --compiler-version "${CMAKE_CXX_COMPILER_VERSION}"
     --output "${_state}/plan.cmake" --current-graph "${_state}/current-graph.json")
   include("${_state}/plan.cmake")

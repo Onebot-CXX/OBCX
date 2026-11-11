@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/bot_installation_metadata.hpp"
+#include "common/secret_store.hpp"
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -258,6 +259,10 @@ public:
   [[nodiscard]] auto get_actor_section(std::string_view actor,
                                        std::string_view section_name = {}) const
       -> std::optional<toml::table>;
+  // Only names listed in actors.<actor>.secrets resolve.
+  [[nodiscard]] auto actor_secret(std::string_view actor,
+                                  std::string_view name) const
+      -> std::optional<std::string>;
   [[nodiscard]] auto process_owned_fingerprint(
       RuntimeThreadFingerprintInput thread_budget) const
       -> ProcessOwnedConfigFingerprint;
@@ -273,15 +278,18 @@ private:
   RuntimeConfigSnapshot(
       std::string config_path, toml::table config_data,
       std::vector<BotInstallationMetadata> bots,
-      std::shared_ptr<const core::ProcessConfiguration> process_configuration)
+      std::shared_ptr<const core::ProcessConfiguration> process_configuration,
+      std::shared_ptr<const SecretStore> secrets)
       : config_path_(std::move(config_path)),
         config_data_(std::move(config_data)), bots_(std::move(bots)),
-        process_configuration_(std::move(process_configuration)) {}
+        process_configuration_(std::move(process_configuration)),
+        secrets_(std::move(secrets)) {}
 
   std::string config_path_;
   toml::table config_data_;
   std::vector<BotInstallationMetadata> bots_;
   std::shared_ptr<const core::ProcessConfiguration> process_configuration_;
+  std::shared_ptr<const SecretStore> secrets_;
 };
 
 struct RuntimeConfigBuildResult {
@@ -334,6 +342,15 @@ public:
       -> std::optional<toml::table> {
     return snapshot_ == nullptr ? std::nullopt
                                 : snapshot_->get_section(section_name);
+  }
+
+  // Resolves a `{ secret = "<name>" }` reference granted to this actor.
+  [[nodiscard]] auto secret(const toml::node *reference) const
+      -> std::optional<std::string> {
+    const auto name = secret_reference_name(reference);
+    return snapshot_ == nullptr || !name
+               ? std::nullopt
+               : snapshot_->actor_secret(actor_, *name);
   }
 
 private:

@@ -18,20 +18,28 @@ Actor 看不到 installation、transport、token 或进程 capability registry�
 nix develop
 # 首次创建显式 workspace；不要覆盖已有的本地选择。
 cp packages-example.toml packages.toml
+# macOS arm64: 将 packages.toml 的 workspace.platform 显式改为 darwin-arm64。
 cmake --preset actor-dev
-cmake --build --preset actor-dev --parallel "$(nproc)"
+cmake --build --preset actor-dev --parallel "$(nproc)" # macOS: "$(sysctl -n hw.ncpu)"
 ```
 
-也可以在系统环境中构建；需要 Linux x86_64/arm64、CMake 3.30、GCC 16.1+
+支持 Linux x86_64/arm64 和 macOS arm64；macOS 的 Nix shell 同样使用 GCC 16
+（不是 Apple Clang）。也可以在系统环境中构建；需要 CMake 3.30、GCC 16.1+
 和 `-std=c++26 -freflection`（`__cpp_impl_reflection >= 202506L`），以及
 `vcpkg-base.json` 中列出的依赖。Linux 默认在检测到 liburing 时启用 Asio 的
-io_uring reactor，可用 `-DOBCX_ENABLE_IO_URING=OFF` 关闭。
+io_uring reactor，可用 `-DOBCX_ENABLE_IO_URING=OFF` 关闭；macOS 使用 Asio 的 kqueue。
+Linux 需要 `patchelf`；macOS 需要 `otool`、`install_name_tool` 和 `codesign`，
+热重载副本在修改 Mach-O 后会进行 ad-hoc 签名。
+macOS shell 会以 GCC 16 重建 C++ ABI 相关依赖，首次进入可能需要较长时间。
+若宿主环境设置了 Homebrew 的 `LDFLAGS` / `CPPFLAGS`，请在首次配置前执行
+`unset LDFLAGS CPPFLAGS`，避免混入另一套 C++ 运行库；已有缓存需用
+`cmake --fresh --preset actor-dev` 重新配置。
 
 以上是 **core + actor 的完整 workspace 构建**，不是热重载隔离构建。
 即使指定单个 actor target，过期的 core 依赖仍会被重新编译。
 只修改 actor 并准备热重载时，请使用
 [固定 SDK 的隔离构建流程](packaging/actors/README.md)，不要覆盖运行中进程的
-`libobcx_core.so`。现有 `actor-dev` / `actor-release` preset 名称保留兼容，
+`libobcx_core.so`（macOS 为 `libobcx_core.dylib`）。现有 `actor-dev` / `actor-release` preset 名称保留兼容，
 不代表它们只构建 actor。
 
 安装 SDK 与运行时：
@@ -49,7 +57,7 @@ cmake --install build/actor-dev --prefix "$HOME/.local/obcx"
 
 ## 选择 actor package
 
-根构建在 CMake configure 内离线解析 v2 `packages.toml`；包内
+根构建在 CMake configure 内解析 v2 `packages.toml`；包内
 `package.toml` 是身份、artifact、依赖和兼容范围的唯一声明。
 依赖图是构建目录内自动生成的中间产物，不需要锁文件或手动 Python 准备步骤；
 删除构建目录后重新执行同一 configure 命令即可。示例
@@ -72,13 +80,33 @@ Nix store 路径变化不需要更新 workspace；构建目录内的观测记录
 此处是本地开发目录约定，尚未配置远程发行地址。
 
 configure 每次检查当前声明的依赖关系、版本、来源及实际 CMake targets。
-Git 来源必须绑定完整 commit；所需源码必须已在本地或已校验缓存中，configure
-不下载、不重新选版本，也不读取旧 `actors.toml`。`package_tool.py resolve` 仍可
+Git 来源的 `repository` 可用 `https://` 或 `ssh://`（例如
+`ssh://git@github.com/Onebot-CXX/obcx-message-store.git`；不接受 `git@host:path`
+简写），并用以下之一指定版本，对应 Cargo 的 `rev`/`branch`/`tag`：
+
+```toml
+commit = "5648e9a996d1e6836244ad9d273332c96a6de8f6" # 固定 commit
+branch = "main"                                     # 跟随分支
+tag = "v0.2.1"                                      # 固定 tag
+```
+
+`branch`/`tag` 也可与 `commit` 同时写，此时以 `commit` 为准，ref 只作标注。
+`OBCX_PACKAGES_NETWORK=allow` 时 configure 会抓取缓存中缺失的 Git 来源，校验后
+放入 `OBCX_PACKAGES_CACHE`：`branch` 每次 configure 都重新查询远端最新 commit，
+`tag` 首次解析后视为不可变并复用缓存记录；`deny` 时只使用缓存中已解析过的
+commit，缺失即报错。`release` 模式要求显式 `commit`。依赖图中的 Git 来源总是
+带有实际使用的 `commit`。缓存的 ref 记录只供离线复用，不是锁文件。
+
+私有仓库请用 `ssh://`：抓取复用当前 ssh-agent 与 `~/.ssh/config`，以 BatchMode
+运行，不弹出口令提示；HTTPS 只支持匿名访问，不读取 git 全局配置或凭据助手。
+抓取失败时直接输出 git 的原始报错（如 `Permission denied (publickey)`、
+`Repository not found`），URL 中的用户信息会被替换为 `<redacted>`。
+configure 不重新选版本，也不读取旧 `actors.toml`。`package_tool.py resolve` 仍可
 按需导出依赖图用于诊断，但不是构建前提。
 
-CMake presets 明确选择 development 来源模式；`actor-release` 仅选择优化的
+CMake presets 明确选择 development 来源模式和 `allow` 源码联网策略；`actor-release` 仅选择优化的
 编译配置，不代表已完成正式发行验证。非 preset 构建必须显式传入
-`OBCX_PACKAGES_WORKSPACE/CACHE/MODE/STATE_DIR` 和构建配置。
+`OBCX_PACKAGES_WORKSPACE/CACHE/MODE/NETWORK/STATE_DIR` 和构建配置。
 详见 [CMake 接入](docs/architecture/package-cmake.md) 与
 [provider 发现声明](schemas/workspace.schema.json)。
 
@@ -88,7 +116,7 @@ CMake presets 明确选择 development 来源模式；`actor-release` 仅选择�
 
 ### Actor 的 Nix 开发依赖
 
-在 Linux 的 OBCX checkout 根目录或其子目录运行普通 `nix develop` 即可：
+在 OBCX checkout 根目录或其子目录运行普通 `nix develop` 即可：
 
 - 没有 `packages.toml`，或 `workspace.roots` 为空：只提供 core 开发环境。
 - 配置了 roots：自动合并所选 actor/library 及传递依赖的 `shell.nix`（如果有）。
@@ -97,8 +125,8 @@ CMake presets 明确选择 development 来源模式；`actor-release` 仅选择�
 
 `nix develop --command ...`、`nix develop .#ci` 和 `.envrc` 使用同样的自动加载逻辑。
 由于本地 workspace/actor 被 Git 忽略，加载在 shellHook 阶段执行，而不是纯 flake
-求值阶段；无需手动传 `--impure`。自动入口显式采用 development 模式、离线源码
-策略，并复用 `actor-dev` 的 `build/actor-dev/package-state/sources` 缓存路径。
+求值阶段；无需手动传 `--impure`。自动入口显式采用 development 模式、`allow` 源码
+联网策略（缺失的 Git 来源在进入 shell 时抓取），并复用 `actor-dev` 的 `build/actor-dev/package-state/sources` 缓存路径。
 
 需要自定义 workspace、缓存或源码联网策略时，仍可使用 Python 3.11+ 运行显式
 入口（以下选项都必须传入）：
@@ -109,6 +137,7 @@ python3 scripts/nix_develop.py \
   --cache .cache/obcx/packages \
   --mode development \
   --network deny \
+  --nix-system x86_64-linux \
   --shell workspace
 ```
 
@@ -116,8 +145,8 @@ python3 scripts/nix_develop.py \
 省略根环境的 clang tooling。入口每次复用 CMake 的包解析器，从当前
 `workspace.roots` 沿 actor/library 依赖解析；`profile = "tests"` 时也包含测试依赖。
 仅加载选中包根目录的 `shell.nix`，不扫描未选中包，不加载 `flake.nix`。
-包没有 `shell.nix` 时不增加 Nix 依赖。远程源码必须已在缓存中；如需准备源码，
-显式选择 `--network allow`（该选项只控制包源码获取，不限制 Nix 下载）。
+包没有 `shell.nix` 时不增加 Nix 依赖。`--network allow` 时抓取缓存中缺失的远程
+源码，`deny` 时远程源码必须已在缓存中（该选项只控制包源码获取，不限制 Nix 下载）。
 
 Actor 或 library 可提供以下 `shell.nix`：
 
@@ -132,7 +161,7 @@ pkgs.mkShell {
 文件必须是接收 `pkgs` 并返回 `mkShell` derivation 的函数。根 flake 统一传入其
 锁定的 nixpkgs 包集，通过 `inputsFrom` 合并 `packages`、`buildInputs`、
 `nativeBuildInputs` 及 propagated inputs；不继承包的 `shellHook`、环境变量或
-stdenv，Linux 根环境仍使用 GCC 16。不要在包的输入列表中另加冲突的编译器。
+stdenv。根环境使用 GCC 16。不要在包的输入列表中另加冲突的编译器。
 
 内部启动器显式提供 `OBCX_NIX_SHELL_INPUTS` 并使用 `--impure` 求值
 `.#workspace` / `.#workspace-ci`，自动入口通过 `nix print-dev-env` 将结果加载到
@@ -140,8 +169,10 @@ stdenv，Linux 根环境仍使用 GCC 16。不要在包的输入列表中另加�
 环境变量。变更 roots、依赖或 `shell.nix` 后重新进入 shell；direnv 用户可执行
 `direnv reload`（`.envrc` 也会监视根 `packages.toml` 的变化）。只应加载可信包，
 `shell.nix` 是可执行的 Nix 表达式，依赖自身的 setup hooks 仍可执行。
-workspace shell 仅支持 Linux，且 Nix system 必须匹配 workspace 声明的平台；
-macOS 仍为 tooling-only。
+`--nix-system` 是正在进入的 Nix system。Linux/macOS 上它必须与 workspace 声明的平台一致：
+`linux-x86_64` 对应 `x86_64-linux`，`linux-arm64` 对应 `aarch64-linux`，
+`darwin-arm64` 对应 `aarch64-darwin`。每个选中包（包括传递依赖）都必须显式声明
+对应的 `artifact.platforms`；core 支持 macOS 不代表所有包都自动支持。
 
 Nix 负责提供并锁定开发依赖，不会自动放宽 actor 的版本要求。例如 `chat_llm`
 要求 ICU 76.x，其 `shell.nix` 显式使用 `pkgs.icu76`，不能直接以 `pkgs.icu`（78.x）
@@ -157,7 +188,25 @@ installation id。当前只接受 `onebot11.qq + websocket`、`onebot11.qq + htt
 `telegram.bot_api + http`。缺失、未知或不支持的 `surface`/`transport` 组合直接
 报错，不存在 provider 或 transport 回退。
 
+配置文件不保存任何密钥值。`global.secrets_file`（必填，相对路径以配置文件所在目录
+为基准）指向一个只含顶层 `名称 = "值"` 的 TOML 文件；该文件必须是普通文件且不能
+被 group/others 访问（`chmod 600`），每次加载和 `reload` 都会重新读取。密钥字段
+（bot 的 `access_token`、`proxy_password`，以及 actor 自己声明的密钥字段如
+chat_llm 的 `api_key`）只接受 `{ secret = "名称" }` 引用，直接写字符串会被拒绝。
+Actor 只能解析在 `actors.<name>.secrets` 中授权的名称，引用未授权或不存在的名称
+在加载时报错；诊断只给出配置路径和名称，不输出值。值可以是空字符串，是否允许为空
+由引用它的字段决定（例如 QQ `access_token` 允许为空，Telegram 不允许）。
+
 ```toml
+# secrets.toml（chmod 600，不要提交）
+qq_access_token = ""
+telegram_bot_token = "123456:ABC..."
+```
+
+```toml
+[global]
+secrets_file = "secrets.toml"
+
 [bots.qq_bot]
 enabled = true
 surface = "onebot11.qq"
@@ -166,7 +215,7 @@ transport = "websocket"
 [bots.qq_bot.connection]
 host = "127.0.0.1"
 port = 3001
-access_token = ""
+access_token = { secret = "qq_access_token" }
 connect_timeout_ms = 5000
 action_timeout_ms = 30000
 
@@ -178,7 +227,7 @@ transport = "http"
 [bots.telegram_bot.connection]
 host = "api.telegram.org"
 port = 443
-access_token = "YOUR_TELEGRAM_BOT_TOKEN"
+access_token = { secret = "telegram_bot_token" }
 bot_username = "your_bot_username"
 use_tls = true
 connect_timeout_ms = 5000
@@ -359,7 +408,7 @@ if(NOT DEFINED OBCX_CURRENT_PACKAGE)
   project(example_actor LANGUAGES CXX)
   find_package(obcx-sdk CONFIG REQUIRED GLOBAL)
   include(OBCXPackages)
-  obcx_load_configured_workspace() # 六个 OBCX_PACKAGES_* 参数全部显式提供
+  obcx_load_configured_workspace() # WORKSPACE/CACHE/MODE/NETWORK/STATE_DIR 全部显式提供
   return()
 endif()
 

@@ -41,6 +41,8 @@ def cmake_list(value: str) -> list[str]:
 class Audit:
     def __init__(self, graph: dict, snapshot: dict, evaluated: Path | None):
         self.graph = graph
+        self.darwin = graph["platform"] == "darwin-arm64"
+        self.dependency_suffix = r"\.(a|so|o|dylib|tbd)(\.|$)" if self.darwin else r"\.(a|so|o)(\.|$)"
         self.snapshot = snapshot
         self.nodes = {n["id"]: n for n in graph["packages"]}
         self.targets = snapshot["targets"]
@@ -230,7 +232,7 @@ class Audit:
                     raise PackageError(f"{name}.{field}: raw link directories are unsupported; use declared targets")
             for field in ("LINK_OPTIONS", "INTERFACE_LINK_OPTIONS", "COMPILE_OPTIONS", "INTERFACE_COMPILE_OPTIONS"):
                 for option in self.values(name, field):
-                    if re.search(r"(^|[ :])(-[ILlF]|-isystem|-iquote|-idirafter|-include|-imacros|--sysroot|-Wl,|-Xlinker|@)", option) or re.search(r"\.(a|so|o)(\.|$)", option):
+                    if re.search(r"(^|[ :])(-[ILlF]|-isystem|-iquote|-idirafter|-include|-imacros|--sysroot|-Wl,|-Xlinker|@)", option) or re.search(self.dependency_suffix, option):
                         raise PackageError(f"{name}.{field}: unsupported raw dependency flag {option}")
             abi = self.nodes[record["owner"]]["metadata"]["compatibility"]["cxx11_abi"]
             for field in ("COMPILE_DEFINITIONS", "INTERFACE_COMPILE_DEFINITIONS"):
@@ -356,11 +358,21 @@ class Audit:
                     # Native CMake pads installable build-tree RPATHs for its
                     # later RPATH_CHANGE. This is not an explicit search path
                     # grant or an acceptance check for the installed ELF.
-                    if cmake_padding and token.startswith("-Wl,-rpath,"):
+                    if not self.darwin and cmake_padding and token.startswith("-Wl,-rpath,"):
                         value = value.rstrip(":")
-                    paths = value.split(":")
-                    if not paths or any(not path or link_path(path) not in allowed_directories for path in paths):
-                        raise PackageError(f"{name}: generated runtime search path outside declared closure")
+                    paths = [value] if self.darwin else value.split(":")
+                    for path in paths:
+                        if self.darwin and (path == "@loader_path" or path.startswith("@loader_path/")):
+                            resolved = {(artifact.parent / path[len("@loader_path"):].lstrip("/")).resolve()
+                                        for artifact in artifacts[name]}
+                        elif self.darwin and (path == "@executable_path" or path.startswith("@executable_path/")):
+                            resolved = {(artifact.parent / path[len("@executable_path"):].lstrip("/")).resolve()
+                                        for artifact in artifacts[name] if record["TYPE"] == "EXECUTABLE"}
+                        else:
+                            resolved = ({link_path(path)} if path and (not self.darwin or not path.startswith("@"))
+                                        else set())
+                        if not resolved or not resolved <= allowed_directories:
+                            raise PackageError(f"{name}: generated runtime search path outside declared closure")
                     return True
                 if token.startswith("-L"):
                     if link_path(token[2:]) not in allowed_directories:
@@ -380,11 +392,26 @@ class Audit:
                     if not all(search_flag(token) for token in shlex.split(value)):
                         raise PackageError(f"{name}: unsupported generated library search expression")
                 elif fragment["role"] == "flags":
-                    for token in shlex.split(value):
+                    tokens = iter(shlex.split(value))
+                    for token in tokens:
+                        if self.darwin and token in {"-install_name", "-Wl,-install_name"}:
+                            identity = next(tokens, None)
+                            expected = {str(path) for path in artifacts[name]}
+                            expected.update("@rpath/" + path.name for path in artifacts[name])
+                            if record["TYPE"] != "SHARED_LIBRARY" or identity not in expected:
+                                raise PackageError(f"{name}: generated install name differs from owning artifact")
+                            continue
+                        if self.darwin and token == "-isysroot":
+                            sysroot = target.get("link", {}).get("sysroot", {}).get("path")
+                            if sysroot is None or next(tokens, None) != sysroot:
+                                raise PackageError(f"{name}: generated sysroot differs from File API toolchain evidence")
+                            continue
+                        if self.darwin and token in {"-Wl,-headerpad_max_install_names", "-Wl,-search_paths_first"}:
+                            continue
                         if search_flag(token):
                             continue
                         if (re.match(r"(-[LlF]|-Wl,|-Xlinker|@)", token) or
-                                re.search(r"\.(a|so|o)(\.|$)", token) or Path(token).is_absolute()) and token not in provider_literals:
+                                re.search(self.dependency_suffix, token) or Path(token).is_absolute()) and token not in provider_literals:
                             raise PackageError(f"{name}: generated raw dependency flag {token}")
             compatibility = self.nodes[record["owner"]]["metadata"]["compatibility"]
             for group in target.get("compileGroups", []):

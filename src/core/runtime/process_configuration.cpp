@@ -4,6 +4,9 @@
 #include "core/bot/configuration_fingerprint.hpp"
 #include "core/bot/configuration_validation.hpp"
 
+#include <algorithm>
+#include <array>
+#include <filesystem>
 #include <stdexcept>
 
 namespace obcx::core {
@@ -28,8 +31,123 @@ auto ProcessConfigAccess::catalog(const common::RuntimeConfigSnapshot &snapshot)
 namespace obcx::common {
 namespace {
 
+constexpr std::array<std::string_view, 2> kBotSecretFields = {"access_token",
+                                                              "proxy_password"};
+
+auto load_secrets(const toml::table &document, const std::string &config_path)
+    -> std::shared_ptr<const SecretStore> {
+  using core::configuration::bot_configuration_error;
+  const auto *global = document.get_as<toml::table>("global");
+  const auto *file =
+      global == nullptr ? nullptr : global->get_as<std::string>("secrets_file");
+  if (file == nullptr || file->get().empty()) {
+    bot_configuration_error(
+        "missing_secrets_file", "global.secrets_file",
+        "global.secrets_file must name the secrets file explicitly");
+  }
+  std::filesystem::path path{file->get()};
+  if (path.is_relative()) {
+    path = std::filesystem::absolute(config_path).parent_path() / path;
+  }
+  return std::make_shared<const SecretStore>(SecretStore::load(path));
+}
+
+auto resolve_secret(const toml::node *node, const SecretStore &secrets,
+                    const std::string &field) -> std::string {
+  using core::configuration::bot_configuration_error;
+  const auto name = secret_reference_name(node);
+  if (!name) {
+    bot_configuration_error("inline_secret_rejected", field,
+                            field +
+                                " must be a { secret = \"<name>\" } reference");
+  }
+  const auto *value = secrets.find(*name);
+  if (value == nullptr) {
+    bot_configuration_error("unknown_secret", field,
+                            field + " references secret " + *name +
+                                ", which global.secrets_file does not define");
+  }
+  return *value;
+}
+
+auto resolve_connection_secrets(toml::table connection,
+                                const SecretStore &secrets,
+                                const std::string &path) -> toml::table {
+  for (const auto field : kBotSecretFields) {
+    if (const auto *node = connection.get(field)) {
+      connection.insert_or_assign(
+          field, resolve_secret(node, secrets,
+                                path + ".connection." + std::string{field}));
+    }
+  }
+  return connection;
+}
+
+void validate_reference_grants(const toml::node &node,
+                               const std::vector<std::string> &grants,
+                               const std::string &path) {
+  using core::configuration::bot_configuration_error;
+  if (const auto name = secret_reference_name(&node)) {
+    if (std::ranges::find(grants, *name) == grants.end()) {
+      bot_configuration_error("ungranted_secret", path,
+                              path + " references secret " + *name +
+                                  ", which this actor's secrets list omits");
+    }
+    return;
+  }
+  if (const auto *table = node.as_table()) {
+    for (const auto &[key, child] : *table) {
+      validate_reference_grants(child, grants,
+                                path + "." + std::string{key.str()});
+    }
+  } else if (const auto *array = node.as_array()) {
+    for (std::size_t index = 0; index < array->size(); ++index) {
+      validate_reference_grants(*array->get(index), grants,
+                                path + "[" + std::to_string(index) + "]");
+    }
+  }
+}
+
+void validate_actor_secrets(const toml::table &document,
+                            const SecretStore &secrets) {
+  using core::configuration::bot_configuration_error;
+  const auto *actors = document.get_as<toml::table>("actors");
+  if (actors == nullptr) {
+    return;
+  }
+  for (const auto &[key, node] : *actors) {
+    const auto *actor = node.as_table();
+    if (actor == nullptr) {
+      continue;
+    }
+    const auto path = "actors." + std::string{key.str()};
+    std::vector<std::string> grants;
+    if (const auto *list = actor->get("secrets")) {
+      const auto *array = list->as_array();
+      if (array == nullptr) {
+        bot_configuration_error("invalid_secret_grant", path + ".secrets",
+                                path + ".secrets must be an array of names");
+      }
+      for (const auto &entry : *array) {
+        const auto name = entry.value<std::string>();
+        if (!name || secrets.find(*name) == nullptr) {
+          bot_configuration_error(
+              "unknown_secret", path + ".secrets",
+              path + ".secrets entries must name secrets defined in "
+                     "global.secrets_file");
+        }
+        grants.push_back(*name);
+      }
+    }
+    if (const auto *config = actor->get("config")) {
+      validate_reference_grants(*config, grants, path + ".config");
+    }
+  }
+}
+
 auto parse_bot_plans(const toml::table &document,
-                     const core::BotPlatformCatalog &catalog)
+                     const core::BotPlatformCatalog &catalog,
+                     const SecretStore &secrets)
     -> std::vector<std::shared_ptr<const core::BotInstallationPlan>> {
   using core::configuration::bot_configuration_error;
   using core::configuration::required_bool;
@@ -68,7 +186,8 @@ auto parse_bot_plans(const toml::table &document,
                               path + ".connection must be a table");
     }
     plans.push_back(catalog.parse(
-        {id, enabled, bot::SurfaceId{surface}, transport}, *connection, path));
+        {id, enabled, bot::SurfaceId{surface}, transport},
+        resolve_connection_secrets(*connection, secrets, path), path));
   }
   return plans;
 }
@@ -97,7 +216,9 @@ auto ConfigLoader::build_snapshot(
   }
   try {
     auto document = toml::parse_file(config_path);
-    auto plans = parse_bot_plans(document, *catalog);
+    auto secrets = load_secrets(document, config_path);
+    validate_actor_secrets(document, *secrets);
+    auto plans = parse_bot_plans(document, *catalog, *secrets);
     std::vector<BotInstallationMetadata> metadata;
     nlohmann::json fingerprints = nlohmann::json::array();
     for (const auto &plan : plans) {
@@ -111,9 +232,9 @@ auto ConfigLoader::build_snapshot(
             std::move(catalog), std::move(plans),
             core::configuration_digest(fingerprints.dump())});
     return {.snapshot = std::shared_ptr<const RuntimeConfigSnapshot>(
-                new RuntimeConfigSnapshot(config_path, std::move(document),
-                                          std::move(metadata),
-                                          std::move(process)))};
+                new RuntimeConfigSnapshot(
+                    config_path, std::move(document), std::move(metadata),
+                    std::move(process), std::move(secrets)))};
   } catch (const core::BotConfigurationError &error) {
     return {.diagnostic = ConfigLoadDiagnostic{.code = error.code(),
                                                .path = error.path(),

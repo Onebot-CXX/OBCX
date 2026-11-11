@@ -54,7 +54,7 @@ class Resolver:
         source = self.sources[package_id]
         chain = " -> ".join([*self.active, package_id])
         try:
-            directory, identity, receipt = self.store.prepare(source)
+            directory, identity, receipt, source = self.store.prepare(source)
             document = metadata(directory / "package.toml", "package")
         except PackageError as error:
             raise PackageError(f"{error}\nchain: {chain}") from None

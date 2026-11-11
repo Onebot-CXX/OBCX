@@ -30,6 +30,7 @@ def main(argv=None) -> int:
     for name in ("workspace", "cache", "build-dir", "output", "current-graph"):
         command.add_argument("--" + name, required=True, type=Path)
     command.add_argument("--mode", required=True, choices=("development", "release"))
+    command.add_argument("--network", required=True, choices=("allow", "deny"))
     for name in ("platform", "compiler-id", "compiler-version"):
         command.add_argument("--" + name, required=True)
     for name in ("audit", "audit-generated"):

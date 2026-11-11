@@ -27,6 +27,7 @@
 #include <cctype>
 #include <cerrno>
 #include <csignal>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fmt/format.h>
@@ -45,6 +46,10 @@
 #include <utility>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+
 namespace po = boost::program_options;
 
 namespace {
@@ -55,12 +60,26 @@ std::condition_variable g_stop_cv;
 
 constexpr int BOT_SHUTDOWN_TIMEOUT_SECONDS = 5;
 
+[[noreturn]] void exit_without_cleanup(int status) {
+#if defined(__APPLE__)
+  std::_Exit(status);
+#else
+  std::quick_exit(status);
+#endif
+}
+
 class SignalMonitor final {
 public:
   SignalMonitor() {
+#if defined(__APPLE__)
+    sigemptyset(&signals_);
+    sigaddset(&signals_, SIGINT);
+    sigaddset(&signals_, SIGTERM);
+#else
     ::sigemptyset(&signals_);
     ::sigaddset(&signals_, SIGINT);
     ::sigaddset(&signals_, SIGTERM);
+#endif
     error_ = pthread_sigmask(SIG_BLOCK, &signals_, nullptr);
     if (error_ != 0) {
       return;
@@ -68,11 +87,25 @@ public:
 
     thread_ = std::jthread([this](const std::stop_token stop) {
       while (!stop.stop_requested()) {
+#if defined(__APPLE__)
+        int signal = 0;
+        const auto wait_error = ::sigwait(&signals_, &signal);
+        if (stop.stop_requested()) {
+          return;
+        }
+        if (wait_error != 0) {
+          if (wait_error == EINTR) {
+            continue;
+          }
+          return;
+        }
+#else
         constexpr timespec timeout{
             .tv_sec = 0,
             .tv_nsec = 100'000'000,
         };
         const auto signal = ::sigtimedwait(&signals_, nullptr, &timeout);
+#endif
         if (signal == SIGINT || signal == SIGTERM) {
           bool expected = false;
           if (g_should_stop.compare_exchange_strong(expected, true)) {
@@ -80,9 +113,11 @@ public:
           }
           return;
         }
+#if !defined(__APPLE__)
         if (signal < 0 && errno != EAGAIN && errno != EINTR) {
           return;
         }
+#endif
       }
     });
   }
@@ -90,6 +125,10 @@ public:
   ~SignalMonitor() {
     thread_.request_stop();
     if (thread_.joinable()) {
+#if defined(__APPLE__)
+      // sigwait has no timeout; wake it after requesting cancellation.
+      ::pthread_kill(thread_.native_handle(), SIGINT);
+#endif
       thread_.join();
     }
   }
@@ -128,6 +167,13 @@ auto actor_search_directories(const char *argv0)
   fs::path executable;
 #if defined(__linux__)
   executable = fs::read_symlink("/proc/self/exe", error);
+#elif defined(__APPLE__)
+  std::uint32_t size = 0;
+  ::_NSGetExecutablePath(nullptr, &size);
+  std::vector<char> buffer(size);
+  if (size != 0 && ::_NSGetExecutablePath(buffer.data(), &size) == 0) {
+    executable = buffer.data();
+  }
 #endif
   if (executable.empty()) {
     error.clear();
@@ -431,7 +477,7 @@ public:
         if (bot_shutdown_timed_out) {
           OBCX_ERROR("Bot shutdown timed out; terminating to avoid running "
                      "threads outliving their bot instances");
-          std::quick_exit(EXIT_FAILURE);
+          exit_without_cleanup(EXIT_FAILURE);
         }
         for (auto &bot_thread : bot_threads) {
           if (bot_thread.joinable()) {
@@ -444,7 +490,7 @@ public:
       } catch (...) {
         OBCX_ERROR("Runtime cleanup failed; terminating before dependencies "
                    "can be destroyed with work still running");
-        std::quick_exit(EXIT_FAILURE);
+        exit_without_cleanup(EXIT_FAILURE);
       }
     };
     // Covers startup failure and exception unwinding after observer
@@ -723,7 +769,7 @@ public:
                                []() -> std::error_code {
                                  // SignalMonitor owns SIGINT and all workers
                                  // inherit its blocked mask. Deliver to the
-                                 // process so its sigtimedwait thread receives
+                                 // process so its waiting thread receives
                                  // the same graceful-shutdown request as an
                                  // external SIGINT.
                                  if (::kill(::getpid(), SIGINT) == 0) {

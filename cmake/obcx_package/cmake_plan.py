@@ -1,4 +1,4 @@
-"""Resolve explicit package declarations into an offline CMake plan."""
+"""Resolve explicit package declarations into a CMake plan."""
 from . import PackageError
 from .build_inputs import validate_outputs
 from .io import atomic_write, encoded, exclusive
@@ -14,7 +14,7 @@ def quote(value: str) -> str:
 
 
 def plan(args) -> None:
-    graph = Resolver(args.workspace, args.cache, args.mode, "deny").resolve()
+    graph = Resolver(args.workspace, args.cache, args.mode, args.network).resolve()
     validate_outputs(args.workspace, graph, [args.output, args.current_graph])
     if graph["platform"] != args.platform:
         raise PackageError("workspace platform differs from actual CMake target platform")

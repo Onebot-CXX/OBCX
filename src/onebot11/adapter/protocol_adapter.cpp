@@ -37,7 +37,7 @@ auto ProtocolAdapter::serialize_delete_message_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -51,7 +51,7 @@ auto ProtocolAdapter::serialize_get_self_info_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -80,7 +80,7 @@ auto ProtocolAdapter::serialize_get_user_info_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -100,7 +100,7 @@ auto ProtocolAdapter::serialize_get_chat_info_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -121,7 +121,7 @@ auto ProtocolAdapter::serialize_get_chat_member_info_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -142,7 +142,7 @@ auto ProtocolAdapter::serialize_get_chat_admins_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -164,7 +164,7 @@ auto ProtocolAdapter::serialize_kick_chat_member_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -185,7 +185,7 @@ auto ProtocolAdapter::serialize_ban_chat_member_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -207,7 +207,7 @@ auto ProtocolAdapter::serialize_unban_chat_member_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -227,7 +227,7 @@ auto ProtocolAdapter::serialize_ban_all_members_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -265,7 +265,7 @@ auto ProtocolAdapter::serialize_leave_chat_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -313,7 +313,7 @@ auto ProtocolAdapter::serialize_send_private_message_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized private message request: segments={}", message.size());
+  OBCX_TRACE("Serialized private message request: segments={}", message.size());
   return j.dump();
 }
 
@@ -334,7 +334,7 @@ auto ProtocolAdapter::serialize_send_group_message_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized group message request: segments={}", message.size());
+  OBCX_TRACE("Serialized group message request: segments={}", message.size());
   return j.dump();
 }
 
@@ -353,7 +353,7 @@ auto ProtocolAdapter::serialize_get_message_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -372,7 +372,7 @@ auto ProtocolAdapter::serialize_get_forward_msg_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized get_forward_msg request");
+  OBCX_TRACE("Serialized get_forward_msg request");
   return j.dump();
 }
 
@@ -386,7 +386,7 @@ auto ProtocolAdapter::serialize_get_friend_list_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -400,7 +400,7 @@ auto ProtocolAdapter::serialize_get_group_list_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -414,7 +414,7 @@ auto ProtocolAdapter::serialize_get_status_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -428,7 +428,7 @@ auto ProtocolAdapter::serialize_get_version_info_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -444,7 +444,7 @@ auto ProtocolAdapter::serialize_set_group_name_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -461,7 +461,7 @@ auto ProtocolAdapter::serialize_set_group_admin_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -478,7 +478,7 @@ auto ProtocolAdapter::serialize_set_group_anonymous_ban_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -494,7 +494,7 @@ auto ProtocolAdapter::serialize_set_group_anonymous_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -511,7 +511,7 @@ auto ProtocolAdapter::serialize_set_group_portrait_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -527,7 +527,7 @@ auto ProtocolAdapter::serialize_get_group_honor_info_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -550,7 +550,7 @@ auto ProtocolAdapter::serialize_set_friend_add_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -575,7 +575,7 @@ auto ProtocolAdapter::serialize_set_group_add_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -589,7 +589,7 @@ auto ProtocolAdapter::serialize_get_image_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized get_image request");
+  OBCX_TRACE("Serialized get_image request");
   return j.dump();
 }
 
@@ -601,7 +601,7 @@ auto ProtocolAdapter::serialize_get_image_request(
   if (echo) {
     j["echo"] = *echo;
   }
-  OBCX_DEBUG("Serialized get_image request with explicit download policy");
+  OBCX_TRACE("Serialized get_image request with explicit download policy");
   return j.dump();
 }
 
@@ -617,7 +617,7 @@ auto ProtocolAdapter::serialize_get_record_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -631,7 +631,7 @@ auto ProtocolAdapter::serialize_can_send_image_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -645,7 +645,7 @@ auto ProtocolAdapter::serialize_can_send_record_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -664,7 +664,7 @@ auto ProtocolAdapter::serialize_get_cookies_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -678,7 +678,7 @@ auto ProtocolAdapter::serialize_get_csrf_token_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -697,7 +697,7 @@ auto ProtocolAdapter::serialize_get_credentials_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -713,7 +713,7 @@ auto ProtocolAdapter::serialize_get_group_file_url_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -729,7 +729,7 @@ auto ProtocolAdapter::serialize_get_private_file_url_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -759,7 +759,7 @@ auto ProtocolAdapter::serialize_group_poke_request(
     j["echo"] = echo.value();
   }
 
-  OBCX_DEBUG("Serialized action request");
+  OBCX_TRACE("Serialized action request");
   return j.dump();
 }
 
@@ -777,7 +777,7 @@ auto ProtocolAdapter::serialize_send_group_forward_msg_request(
 
   // Forward nodes can contain private descriptions and complete base64 images.
   // Keep their content out of diagnostics even when trace logging is enabled.
-  OBCX_DEBUG("Serialized group forward request: nodes={}", messages.size());
+  OBCX_TRACE("Serialized group forward request: nodes={}", messages.size());
   return j.dump();
 }
 

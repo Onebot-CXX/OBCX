@@ -20,9 +20,9 @@
 
 ## Commit Checks
 
-- Before every commit, run `treefmt` from the repository root. This formats the
-  core repository and every repository under `local_actor/` with the root
-  `.clang-format`.
+- Before every commit, run `treefmt` from the repository root. This formats
+  C++ (`.cpp`/`.hpp`) with the root `.clang-format`, plus Nix and TOML, in the
+  core repository and every repository under `local_actor/` and `local_library/`.
 
 ## Commit message
 

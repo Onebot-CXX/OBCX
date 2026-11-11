@@ -163,7 +163,8 @@
                         "items": {
                           "enum": [
                             "linux-x86_64",
-                            "linux-arm64"
+                            "linux-arm64",
+                            "darwin-arm64"
                           ],
                           "type": "string"
                         },
@@ -585,7 +586,8 @@
                         "items": {
                           "enum": [
                             "linux-x86_64",
-                            "linux-arm64"
+                            "linux-arm64",
+                            "darwin-arm64"
                           ],
                           "type": "string"
                         },
@@ -1078,43 +1080,215 @@
                 "type": "object"
               },
               {
-                "additionalProperties": false,
-                "properties": {
-                  "commit": {
-                    "minLength": 1,
-                    "pattern": "^[0-9a-f]{40}$",
-                    "type": "string"
-                  },
-                  "id": {
-                    "minLength": 1,
-                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
-                    "type": "string"
-                  },
-                  "kind": {
-                    "enum": [
-                      "git"
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "commit": {
+                        "minLength": 1,
+                        "pattern": "^[0-9a-f]{40}$",
+                        "type": "string"
+                      },
+                      "id": {
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "git"
+                        ],
+                        "type": "string"
+                      },
+                      "repository": {
+                        "format": "git-url",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "subdir": {
+                        "format": "subdir",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "repository",
+                      "commit",
+                      "subdir"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "repository": {
-                    "format": "https",
-                    "minLength": 1,
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "branch": {
+                        "format": "git-ref",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "id": {
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "git"
+                        ],
+                        "type": "string"
+                      },
+                      "repository": {
+                        "format": "git-url",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "subdir": {
+                        "format": "subdir",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "repository",
+                      "branch",
+                      "subdir"
+                    ],
+                    "type": "object"
                   },
-                  "subdir": {
-                    "format": "subdir",
-                    "minLength": 1,
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "git"
+                        ],
+                        "type": "string"
+                      },
+                      "repository": {
+                        "format": "git-url",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "subdir": {
+                        "format": "subdir",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "tag": {
+                        "format": "git-ref",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "repository",
+                      "tag",
+                      "subdir"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "branch": {
+                        "format": "git-ref",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "commit": {
+                        "minLength": 1,
+                        "pattern": "^[0-9a-f]{40}$",
+                        "type": "string"
+                      },
+                      "id": {
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "git"
+                        ],
+                        "type": "string"
+                      },
+                      "repository": {
+                        "format": "git-url",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "subdir": {
+                        "format": "subdir",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "repository",
+                      "branch",
+                      "commit",
+                      "subdir"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "commit": {
+                        "minLength": 1,
+                        "pattern": "^[0-9a-f]{40}$",
+                        "type": "string"
+                      },
+                      "id": {
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "git"
+                        ],
+                        "type": "string"
+                      },
+                      "repository": {
+                        "format": "git-url",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "subdir": {
+                        "format": "subdir",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "tag": {
+                        "format": "git-ref",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "repository",
+                      "tag",
+                      "commit",
+                      "subdir"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "id",
-                  "kind",
-                  "repository",
-                  "commit",
-                  "subdir"
-                ],
-                "type": "object"
+                ]
               }
             ]
           },
@@ -1188,7 +1362,8 @@
     "platform": {
       "enum": [
         "linux-x86_64",
-        "linux-arm64"
+        "linux-arm64",
+        "darwin-arm64"
       ],
       "type": "string"
     },

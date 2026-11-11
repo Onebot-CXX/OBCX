@@ -6,19 +6,21 @@ tree-root-file = "flake.nix"
 # walker cannot discover its C++ sources.
 walk = "filesystem"
 
+# "**/" needs at least one parent directory, so root entries are listed too.
 excludes = [
   ".git/**",
   ".cache/**",
+  ".worktrees/**",
   "build*/**",
-  "local_actor/**/.git/**",
-  "local_actor/**/.cache/**",
-  "local_actor/**/build*/**",
-  "local_actor/**/vcpkg_installed/**",
+  "**/.git/**",
+  "**/.cache/**",
+  "**/.worktrees/**",
+  "**/build*/**",
 ]
 
 [formatter.clang-format]
 command = "clang-format"
-options = [ "-i", "--style=file:.clang-format" ]
+options = ["-i", "--style=file:.clang-format"]
 includes = [
   "benchmarks/**/*.cpp",
   "benchmarks/**/*.hpp",
@@ -28,3 +30,12 @@ includes = [
   "local_actor/**/*.cpp",
   "local_actor/**/*.hpp",
 ]
+
+[formatter.nixfmt]
+command = "nixfmt"
+includes = ["*.nix", "**/*.nix"]
+
+[formatter.taplo]
+command = "taplo"
+options = ["fmt"]
+includes = ["*.toml", "**/*.toml"]

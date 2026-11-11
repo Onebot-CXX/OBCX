@@ -147,12 +147,13 @@ python3 "$REPO/scripts/actor_build.py" configure \
   --cache "$REPO/build/actor-dev/package-state/sources" \
   --output "$ACTOR_BUILD" \
   --actors vollate.exhentai-fetch \
-  --mode development --configuration Debug --debug-trace OFF
+  --mode development --network allow --configuration Debug --debug-trace OFF
 ```
 
-The existing resolver selects the transitive actor/library closure offline.
-For example, selecting `vollate.bridge` also includes Message Store. Missing
-cached Git sources are errors, not an implicit download. Use a production-profile
+The existing resolver selects the transitive actor/library closure.
+For example, selecting `vollate.bridge` also includes Message Store. With
+`--network allow`, missing Git sources are fetched at their pinned commit into
+the cache; with `--network deny` they are errors. Use a production-profile
 workspace. Nix/vcpkg own system dependency locking; no provider receipts or
 installation-prefix allowlists are required.
 
