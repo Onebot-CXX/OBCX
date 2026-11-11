@@ -1,6 +1,0 @@
-/.env
-/QQ/
-/llonebot/
-/llbot_config/
-/config/*.toml
-!/config/*.example.toml

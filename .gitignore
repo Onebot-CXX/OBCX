@@ -86,6 +86,7 @@ logs/
 vcpkg_installed/
 vcpkg.json
 .direnv/
+dev/
 
 # Local config and independent package repositories
 local_actor/
