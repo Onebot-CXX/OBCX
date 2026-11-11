@@ -24,13 +24,18 @@ def main() -> int:
     parser.add_argument("--network", required=True, choices=("allow", "deny"))
     parser.add_argument("--nix-system", required=True)
     parser.add_argument("--shell", required=True, choices=("workspace", "workspace-ci"))
-    parser.add_argument("--print-env", action="store_true",
+    output = parser.add_mutually_exclusive_group()
+    output.add_argument("--print-inputs", action="store_true",
+                        help="emit workspace shell inputs as JSON without invoking Nix")
+    output.add_argument("--print-env", action="store_true",
                         help="emit Bash environment for the automatic flake shell hook")
     parser.add_argument("command", nargs=argparse.REMAINDER,
                         help="optional command after --, instead of an interactive shell")
     args = parser.parse_args()
     if args.print_env and args.command:
         parser.error("--print-env cannot be combined with a command")
+    if args.print_inputs and args.command:
+        parser.error("--print-inputs cannot be combined with a command")
     try:
         # Reuse the same graph/validation as CMake, including test-profile edges,
         # pinned remote sources and version constraints. Never scan local_actor.
@@ -49,7 +54,10 @@ def main() -> int:
             print(f"nix-develop: {package_id}: {entry}", file=sys.stderr)
         # Keep the existing core environment when no selected package adds Nix
         # dependencies. In particular, empty roots do not evaluate another flake.
-        if args.print_env and not shells:
+        inputs = json.dumps({"system": args.nix_system, "shells": shells})
+        if (args.print_env or args.print_inputs) and not shells:
+            if args.print_inputs:
+                print(inputs)
             return 0
         expected = {
             "linux-x86_64": "x86_64-linux",
@@ -64,10 +72,11 @@ def main() -> int:
             raise PackageError(
                 f"workspace platform {graph['platform']} does not match Nix system {args.nix_system}"
             )
+        if args.print_inputs:
+            print(inputs)
+            return 0
         env = os.environ.copy()
-        env["OBCX_NIX_SHELL_INPUTS"] = json.dumps(
-            {"system": args.nix_system, "shells": shells}
-        )
+        env["OBCX_NIX_SHELL_INPUTS"] = inputs
         command = args.command
         if command[:1] == ["--"]:
             command = command[1:]

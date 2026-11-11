@@ -123,10 +123,18 @@ CMake presets 明确选择 development 来源模式和 `allow` 源码联网策�
 - workspace 无效、依赖解析失败或 `shell.nix` 求值失败：明确报错并停止进入 shell，
   不会静默退回 core-only。
 
-`nix develop --command ...`、`nix develop .#ci` 和 `.envrc` 使用同样的自动加载逻辑。
-由于本地 workspace/actor 被 Git 忽略，加载在 shellHook 阶段执行，而不是纯 flake
-求值阶段；无需手动传 `--impure`。自动入口显式采用 development 模式、`allow` 源码
-联网策略（缺失的 Git 来源在进入 shell 时抓取），并复用 `actor-dev` 的 `build/actor-dev/package-state/sources` 缓存路径。
+`nix develop --command ...`、`nix develop .#ci` 和 `.envrc` 都会自动加载这些依赖。
+由于本地 workspace/actor 被 Git 忽略，普通 `nix develop` 在 shellHook 阶段加载，
+而不是纯 flake 求值阶段；无需手动传 `--impure`。自动入口显式采用 development
+模式、`allow` 源码联网策略（缺失的 Git 来源在进入 shell 时抓取），并复用 `actor-dev` 的 `build/actor-dev/package-state/sources` 缓存路径。
+
+使用 direnv 时，首次执行 `direnv allow`。宿主 `python3` 为 3.11+ 且所选包有
+`shell.nix` 时，`.envrc` 先解析依赖再直接加载 workspace shell，避免嵌套 Nix 求值；
+没有合适的 Python、没有包级 shell 或解析失败时，仍使用普通 flake 的自动 hook。
+[nix-direnv](https://github.com/nix-community/nix-direnv) 是可选加速项，可缓存环境以
+加快重载；不安装也可正常使用。装有 nix-direnv 时，首次加载自动建立缓存，之后
+`packages.toml`、解析器或所选 `shell.nix` 变化只提示缓存过期，不自动重新求值；
+需要更新时执行 `nix-direnv-reload`。重新求值失败会直接报错，不退回旧环境。
 
 需要自定义 workspace、缓存或源码联网策略时，仍可使用 Python 3.11+ 运行显式
 入口（以下选项都必须传入）：
@@ -164,10 +172,10 @@ pkgs.mkShell {
 stdenv。根环境使用 GCC 16。不要在包的输入列表中另加冲突的编译器。
 
 内部启动器显式提供 `OBCX_NIX_SHELL_INPUTS` 并使用 `--impure` 求值
-`.#workspace` / `.#workspace-ci`，自动入口通过 `nix print-dev-env` 将结果加载到
+`.#workspace` / `.#workspace-ci`，普通 flake 的自动 hook 通过 `nix print-dev-env` 将结果加载到
 当前 shell，不重新启动交互 shell 或丢失 `--command` 参数。不要手动复用该内部
 环境变量。变更 roots、依赖或 `shell.nix` 后重新进入 shell；direnv 用户可执行
-`direnv reload`（`.envrc` 也会监视根 `packages.toml` 的变化）。只应加载可信包，
+`direnv reload`，使用 nix-direnv 时执行 `nix-direnv-reload`。只应加载可信包，
 `shell.nix` 是可执行的 Nix 表达式，依赖自身的 setup hooks 仍可执行。
 `--nix-system` 是正在进入的 Nix system。Linux/macOS 上它必须与 workspace 声明的平台一致：
 `linux-x86_64` 对应 `x86_64-linux`，`linux-arm64` 对应 `aarch64-linux`，
