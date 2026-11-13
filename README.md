@@ -323,7 +323,16 @@ stealing/sharing 行为，`workers = 0` 与 `blocking_workers = 0` 由统一线�
 ./build/actor-dev/src/app/obcx --no-tui config.toml
 ```
 
-运行中可在 TUI 命令框或 `--no-tui` 的标准输入中输入 `reload`。命令接收后立即
+`--enable-pipe` 额外在 `/tmp` 创建两条权限 `0600` 的 FIFO（Linux 与 macOS
+使用同一路径规则）。agent 向 `/tmp/obcx-read-pipe-<pid>` 写入一行一条命令，从
+`/tmp/obcx-write-pipe-<pid>` 读取回复。回复帧是 `status <nbytes>\n` 后紧跟正好
+`nbytes` 字节的 UTF-8 正文。这一帧必须能放进管道缓冲区，否则丢弃并记日志，
+不堵住后续命令。命令与下面的交互式命令相同；未知命令回复
+`unknown_command`。`exit` 先写回复，再请求进程关闭。管道不转发日志。进程正常
+退出时删除本次创建的 FIFO；异常退出留下的管道不会被下一个 pid 复用。
+
+运行中可在 TUI 命令框、`--no-tui` 的标准输入，或 `--enable-pipe` 的请求管道中
+输入 `reload`。命令接收后立即
 返回；运行时会在后台构建完整候选 actor generation，关闭根 ingress、等待旧代已
 接收的路由完成、原子切换并重新开放 ingress。切换不会重连 bot。仅 actor 条目、
 actor 自有配置、pipeline 与路由策略可热更新；bot 定义、数据库实例或解析后的线程

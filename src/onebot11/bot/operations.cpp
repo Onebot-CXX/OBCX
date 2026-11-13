@@ -2819,12 +2819,15 @@ public:
            {bot::MediaSourceKind::Bytes, bot::MediaSourceKind::LocalFile,
             bot::MediaSourceKind::Http})
         result.media.push_back({kind, source, std::nullopt, true});
+    // Owned bytes plus the caller's display filename. No native file-id send.
+    result.media.push_back({bot::MediaKind::File, bot::MediaSourceKind::Bytes,
+                            std::nullopt, true});
     for (auto delivery : {bot::DeliveryPolicy::SingleMessageOnly,
                           bot::DeliveryPolicy::AllowSplit})
       result.combinations.push_back(
           {delivery,
            {bot::MediaKind::Image, bot::MediaKind::Animation,
-            bot::MediaKind::Voice, bot::MediaKind::Video},
+            bot::MediaKind::Voice, bot::MediaKind::Video, bot::MediaKind::File},
            true,
            true,
            true,
@@ -3642,10 +3645,23 @@ private:
             using T = std::remove_cvref_t<decltype(value)>;
             if constexpr (std::same_as<T, bot::RichText>)
               check_text(value);
-            else if constexpr (std::same_as<T, bot::Image> ||
-                               std::same_as<T, bot::Animation> ||
-                               std::same_as<T, bot::Video> ||
-                               std::same_as<T, bot::Audio>) {
+            else if constexpr (std::same_as<T, bot::File>) {
+              check_text(value.caption);
+              if (!limits.maximum_media_item_bytes)
+                throw std::invalid_argument(
+                    "QQ media requires a positive byte budget");
+              if (!std::holds_alternative<bot::BytesSource>(value.source))
+                throw std::invalid_argument(
+                    "QQ file send requires owned bytes");
+              // Same display-name rule as received QQ file segments.
+              if (value.filename == "." || value.filename == ".." ||
+                  value.filename.find_first_of("/\\:?#") != std::string::npos)
+                throw std::invalid_argument(
+                    "QQ file display name is not a single filename");
+            } else if constexpr (std::same_as<T, bot::Image> ||
+                                 std::same_as<T, bot::Animation> ||
+                                 std::same_as<T, bot::Video> ||
+                                 std::same_as<T, bot::Audio>) {
               if constexpr (std::same_as<T, bot::Audio>)
                 if (value.kind != bot::AudioKind::Voice)
                   throw std::invalid_argument(
@@ -3713,6 +3729,25 @@ private:
     for (const auto &block : body) {
       if (const auto *text = std::get_if<bot::RichText>(&block)) {
         append_text(*text);
+        continue;
+      }
+      if (const auto *attachment = std::get_if<bot::File>(&block)) {
+        const auto *owned = std::get_if<bot::BytesSource>(&attachment->source);
+        if (!owned)
+          throw std::invalid_argument("QQ file send requires owned bytes");
+        owned->validate();
+        auto maximum = std::min(limits.maximum_media_item_bytes,
+                                limits.maximum_media_total_bytes - total);
+        if (!maximum || owned->bytes.size() > maximum)
+          throw std::invalid_argument("QQ media exceeds byte budget");
+        if (envelope_budget)
+          envelope_budget->prepared_media(
+              9 + 4 * ((owned->bytes.size() + 2) / 3), owned->bytes.size());
+        total += owned->bytes.size();
+        segments.push_back({"file",
+                            {{"file", "base64://" + base64(owned->bytes)},
+                             {"name", attachment->filename}}});
+        append_text(attachment->caption);
         continue;
       }
       const bool animation = std::holds_alternative<bot::Animation>(block);

@@ -2,6 +2,7 @@
 #include "app/memory_profiler.hpp"
 #include "common/cli_handler.hpp"
 #include "common/config_snapshot.hpp"
+#include "common/control_fifo.hpp"
 #include "common/logger.hpp"
 #include "core/bot/bot_event_components.hpp"
 #include "core/bot/bot_installation_assembler.hpp"
@@ -26,6 +27,7 @@
 #include <boost/scope/scope_exit.hpp>
 #include <cctype>
 #include <cerrno>
+#include <condition_variable>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
@@ -35,6 +37,7 @@
 #include <future>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <pthread.h>
 #include <spdlog/common.h>
@@ -245,6 +248,7 @@ public:
     std::string config_path = "config.toml";
     bool use_tui = true;
     bool validation_only = false;
+    bool enable_pipe = false;
 
     try {
       po::options_description desc("Options");
@@ -255,7 +259,9 @@ public:
           "validate-config", po::value<std::string>(),
           "Validate config and actor contracts without starting runtime "
           "activity")("no-tui",
-                      "Disable TUI, use stdout logging (useful for debuggers)");
+                      "Disable TUI, use stdout logging (useful for debuggers)")(
+          "enable-pipe",
+          "Create /tmp/obcx-read-pipe-<pid> and /tmp/obcx-write-pipe-<pid>");
 
       po::positional_options_description p;
       p.add("config", -1);
@@ -286,6 +292,7 @@ public:
       }
 
       use_tui = !validation_only && !vm.count("no-tui");
+      enable_pipe = vm.count("enable-pipe") != 0;
 
     } catch (const po::error &e) {
       fmt::print(std::cerr, "Error parsing arguments: {}\n", e.what());
@@ -301,498 +308,574 @@ public:
                         boost::posix_time::second_clock::local_time())),
         use_tui);
 
-    if (obcx::app::memory_profiling_enabled()) {
-      OBCX_INFO("Jemalloc diagnostic build enabled. Commands: memory_stats, "
-                "memory_dump=./obcx");
-      OBCX_INFO("{}", obcx::app::memory_profile_stats());
-    }
-
-    const auto platform_catalog =
-        obcx::app::make_builtin_bot_platform_catalog();
-    core::RuntimeGenerationBuilder generation_builder{platform_catalog};
-    auto parsed = generation_builder.parse_config(config_path);
-    if (!parsed) {
-      fmt::print(std::cerr, "Failed to load configuration from: {}\n",
-                 config_path);
-      if (parsed.diagnostic) {
-        const auto &diagnostic = *parsed.diagnostic;
-        // Report location and classification only. Parser descriptions or raw
-        // configuration excerpts can contain credentials.
-        fmt::print(std::cerr,
-                   "Config load failed [{}] path={} line={} column={}\n",
-                   diagnostic.code, diagnostic.path, diagnostic.line,
-                   diagnostic.column);
+    // Headless startup returns as soon as it fails. The TUI path runs this
+    // same body after the first frame and stays open when startup fails.
+    auto execute = [&](const TuiApp::PublishContext *publish) -> int {
+      if (obcx::app::memory_profiling_enabled()) {
+        OBCX_INFO("Jemalloc diagnostic build enabled. Commands: memory_stats, "
+                  "memory_dump=./obcx");
+        OBCX_INFO("{}", obcx::app::memory_profile_stats());
       }
-      return 1;
-    }
-    auto config_snapshot = std::move(parsed.snapshot);
-    auto bot_configs = config_snapshot->get_bot_configs();
-    const auto &bot_plans = core::ProcessConfigAccess::plans(*config_snapshot);
-    try {
-      for (const auto &plan : bot_plans) {
-        (void)core::BotInstallationAssembler::validate(*plan);
+
+      const auto platform_catalog =
+          obcx::app::make_builtin_bot_platform_catalog();
+      core::RuntimeGenerationBuilder generation_builder{platform_catalog};
+      auto parsed = generation_builder.parse_config(config_path);
+      if (!parsed) {
+        OBCX_ERROR("Failed to load configuration from: {}", config_path);
+        if (parsed.diagnostic) {
+          const auto &diagnostic = *parsed.diagnostic;
+          // Report location and classification only. Parser descriptions or raw
+          // configuration excerpts can contain credentials.
+          OBCX_ERROR("Config load failed [{}] path={} line={} column={}",
+                     diagnostic.code, diagnostic.path, diagnostic.line,
+                     diagnostic.column);
+        }
+        return 1;
       }
-    } catch (const std::exception &error) {
-      OBCX_ERROR("Bot installation recipe validation failed: {}", error.what());
-      return 1;
-    }
-
-    std::shared_ptr<core::DbManager> process_db_manager;
-    try {
-      process_db_manager = core::DbManager::shared_manager(
-          config_snapshot->get_db_instance_configs());
-    } catch (...) {
-      OBCX_ERROR("Failed to initialize process-owned database services");
-      return 1;
-    }
-    auto process_bot_installation_directory =
-        std::make_shared<core::BotInstallationDirectory>();
-    auto process_bot_operation_dispatcher =
-        std::make_shared<core::BotOperationDispatcher>(
-            [platform_catalog](const bot::SurfaceId &surface) {
-              return platform_catalog->supports(surface);
-            });
-
-    OBCX_INFO("OBCX Robot Framework starting...");
-    OBCX_INFO("Configuration loaded from: {}", config_path);
-
-    const auto actor_directories = actor_search_directories(argv[0]);
-
-    auto actor_runtime_build = generation_builder.build(
-        {.purpose = validation_only
-                        ? core::RuntimeGenerationBuildPurpose::ValidationOnly
-                        : core::RuntimeGenerationBuildPurpose::Startup,
-         .generation_id = 1,
-         .snapshot = config_snapshot,
-         .actor_search_directories = actor_directories,
-         .configured_io_sources = std::max<size_t>(1, bot_configs.size()),
-         .db_manager = process_db_manager,
-         .bot_installation_directory = process_bot_installation_directory,
-         .bot_operation_client = process_bot_operation_dispatcher});
-    if (actor_runtime_build.status ==
-        core::RuntimeGenerationBuildStatus::Failed) {
-      const auto &failure = *actor_runtime_build.failure;
-      OBCX_ERROR("Actor runtime build failed [{}]: {}", failure.code,
-                 failure.message);
-      return 1;
-    }
-    if (validation_only) {
-      fmt::print("Configuration and actor contracts are valid: {}\n",
-                 config_path);
-      return 0;
-    }
-
-    auto actor_runtime = std::move(actor_runtime_build.generation);
-
-    if (bot_configs.empty()) {
-      OBCX_ERROR("No bot configurations found");
-      return 1;
-    }
-
-    std::vector<std::unique_ptr<core::BotInstallation>> bots;
-    std::vector<std::thread> bot_threads;
-    std::vector<std::future<void>> bot_thread_completions;
-    auto process_blocking_executor =
-        actor_runtime ? actor_runtime->blocking_executor() : nullptr;
-    if (!process_blocking_executor &&
-        actor_runtime_build.status ==
-            core::RuntimeGenerationBuildStatus::NotConfigured) {
-      const auto thread_budget = core::resolve_runtime_thread_budget(
-          config_snapshot->get_actor_runtime_config(), bot_configs.size());
-      process_blocking_executor = std::make_shared<core::BlockingExecutor>(
-          thread_budget.blocking_workers);
-    }
-    auto process_file_reader =
-        std::make_shared<core::BoundedFileReader>(process_blocking_executor);
-    if (process_blocking_executor) {
-      OBCX_INFO("Created process BlockingExecutor with {} threads",
-                process_blocking_executor->worker_count());
-    }
-    auto reload_controller =
-        actor_runtime ? std::make_shared<core::ActorRuntimeReloadController>(
-                            actor_runtime)
-                      : nullptr;
-    std::optional<boost::asio::thread_pool> notification_pool;
-    if (reload_controller) {
-      notification_pool.emplace(1);
-    }
-
-    bool shutdown_started = false;
-    const auto shutdown = [&]() noexcept {
-      if (std::exchange(shutdown_started, true)) {
-        return;
-      }
+      auto config_snapshot = std::move(parsed.snapshot);
+      auto bot_configs = config_snapshot->get_bot_configs();
+      const auto &bot_plans =
+          core::ProcessConfigAccess::plans(*config_snapshot);
       try {
-        OBCX_INFO("Shutting down OBCX Framework...");
-        process_bot_operation_dispatcher->close_success_notifications();
-
-        if (process_blocking_executor) {
-          process_blocking_executor->close_admission();
-          const auto metrics = process_blocking_executor->metrics();
-          OBCX_INFO(
-              "BlockingExecutor lifecycle phase=admission_closed submitted={} "
-              "running={} pending={} completed={} failed={} rejected={}",
-              metrics.submitted, metrics.running, metrics.pending,
-              metrics.completed, metrics.failed, metrics.rejected);
+        for (const auto &plan : bot_plans) {
+          (void)core::BotInstallationAssembler::validate(*plan);
         }
-        if (reload_controller) {
-          reload_controller->begin_shutdown();
-        }
-        if (process_blocking_executor) {
-          process_blocking_executor->shutdown();
-          const auto metrics = process_blocking_executor->metrics();
-          OBCX_INFO(
-              "BlockingExecutor lifecycle phase=joined submitted={} running={} "
-              "pending={} completed={} failed={} rejected={}",
-              metrics.submitted, metrics.running, metrics.pending,
-              metrics.completed, metrics.failed, metrics.rejected);
-        }
-        if (reload_controller) {
-          reload_controller->shutdown();
-        }
-        if (notification_pool) {
-          // Gate waiters and actor completions can run until runtime retirement
-          // finishes. Only this application thread joins the process pool.
-          notification_pool->join();
-        }
-
-        process_bot_operation_dispatcher->clear_endpoints();
-        for (auto &bot : bots) {
-          bot->stop();
-        }
-
-        const auto bot_shutdown_deadline =
-            std::chrono::steady_clock::now() +
-            std::chrono::seconds(BOT_SHUTDOWN_TIMEOUT_SECONDS);
-        bool bot_shutdown_timed_out = false;
-        for (size_t i = 0; i < bot_thread_completions.size(); ++i) {
-          OBCX_INFO("Waiting for bot thread {} to finish...", i);
-          if (bot_thread_completions[i].wait_until(bot_shutdown_deadline) !=
-              std::future_status::ready) {
-            OBCX_ERROR("Bot thread {} did not finish within {} seconds", i,
-                       BOT_SHUTDOWN_TIMEOUT_SECONDS);
-            bot_shutdown_timed_out = true;
-          }
-        }
-        if (bot_shutdown_timed_out) {
-          OBCX_ERROR("Bot shutdown timed out; terminating to avoid running "
-                     "threads outliving their bot instances");
-          exit_without_cleanup(EXIT_FAILURE);
-        }
-        for (auto &bot_thread : bot_threads) {
-          if (bot_thread.joinable()) {
-            bot_thread.join();
-          }
-        }
-
-        process_blocking_executor.reset();
-        OBCX_INFO("OBCX Framework shutdown complete");
-      } catch (...) {
-        OBCX_ERROR("Runtime cleanup failed; terminating before dependencies "
-                   "can be destroyed with work still running");
-        exit_without_cleanup(EXIT_FAILURE);
-      }
-    };
-    // Covers startup failure and exception unwinding after observer
-    // registration, before automatic pool destruction could strand a
-    // closed-gate waiter.
-    boost::scope::scope_exit runtime_cleanup{shutdown};
-
-    if (reload_controller) {
-      process_bot_operation_dispatcher->set_success_handler(
-          notification_pool->get_executor(),
-          [platform_catalog,
-           weak_controller =
-               std::weak_ptr<core::ActorRuntimeReloadController>{
-                   reload_controller}](core::SuccessfulBotOperation operation)
-              -> boost::asio::awaitable<void> {
-            if (!operation.send_receipt) {
-              co_return;
-            }
-            const auto controller = weak_controller.lock();
-            if (!controller) {
-              co_return;
-            }
-            try {
-              const auto result = co_await controller->process(
-                  core::bot_send_succeeded_envelope(
-                      platform_catalog->ingress_platform(
-                          operation.installation.surface),
-                      operation));
-              if (!result.ok()) {
-                const auto &first = result.failures.front();
-                OBCX_ERROR(
-                    "Actor runtime message-sent observation failed bot={} "
-                    "action={} failures={} pipeline={} stage={} actor={} "
-                    "code={} retryable={} message={}",
-                    operation.installation.installation_id,
-                    operation.action.value(), result.failures.size(),
-                    first.pipeline, first.stage, first.actor,
-                    first.failure.code, first.failure.retryable,
-                    first.failure.message);
-              }
-            } catch (const std::exception &error) {
-              OBCX_ERROR("Actor runtime failed to process successful send: "
-                         "{}",
-                         error.what());
-            }
-          });
-    }
-    if (reload_controller) {
-      process_bot_operation_dispatcher->set_confirmation_handler(
-          notification_pool->get_executor(),
-          [platform_catalog,
-           weak_controller =
-               std::weak_ptr<core::ActorRuntimeReloadController>{
-                   reload_controller}](bot::SendConfirmation confirmation)
-              -> boost::asio::awaitable<void> {
-            const auto controller = weak_controller.lock();
-            if (!controller)
-              co_return;
-            try {
-              const auto result = co_await controller->process(
-                  core::bot_send_confirmed_envelope(
-                      platform_catalog->ingress_platform(
-                          confirmation.output.message.conversation.installation
-                              .surface),
-                      confirmation));
-              if (!result.ok())
-                OBCX_ERROR("Actor runtime confirmation observation failed "
-                           "attempt={} failures={}",
-                           confirmation.attempt_id, result.failures.size());
-            } catch (const std::exception &error) {
-              OBCX_ERROR(
-                  "Actor runtime failed to observe send confirmation: {}",
-                  error.what());
-            }
-          });
-    }
-    // From this point the controller is the sole owner of the active slot.
-    // Route leases retain retired generations until their final descendant.
-    actor_runtime.reset();
-
-    for (const auto &plan : bot_plans) {
-      const auto &config = plan->metadata();
-      if (!config.enabled) {
-        OBCX_INFO("Skipping disabled bot installation: {}",
-                  config.installation_id);
-        continue;
-      }
-
-      const auto &bot_platform = config.ingress_platform;
-      const auto bot_instance = config.installation_id;
-      try {
-        auto installation = core::BotInstallationAssembler::assemble(
-            *plan, process_file_reader);
-        auto events = installation->capability<core::BotEventCapability>(
-            core::CapabilityId{"bot.events"});
-        if (reload_controller && !bot_platform.empty()) {
-          auto operations =
-              installation->capability<core::BotOperationEndpoint>(
-                  core::CapabilityId{"bot.operations"});
-          const auto binding =
-              platform_catalog->platform_adapter(config.surface);
-          events->set_origin_capture_handler(
-              [operations] { return operations->capture_origin(); });
-          events->set_message_admission_handler(
-              [operations, binding](const core::BotEventContext &context,
-                                    const common::MessageEvent &event)
-                  -> core::MessageAdmissionResult {
-                if (!context.source_origin)
-                  return {{core::SelfObservationStatus::RejectedOrigin,
-                           std::nullopt},
-                          std::nullopt};
-                const bot::BotInstallationRef owner{context.installation_id,
-                                                    context.surface};
-                auto captured =
-                    operations->capture_message_admission_generation(
-                        *context.source_origin,
-                        binding->observed_self(owner, event));
-                if (!captured.evidence_generation)
-                  return {std::move(captured.observation), std::nullopt};
-                return {std::move(captured.observation),
-                        core::MessageIngressAdmission{
-                            *captured.evidence_generation,
-                            bot::TimePoint{std::chrono::duration_cast<
-                                               std::chrono::milliseconds>(
-                                               std::chrono::system_clock::now()
-                                                   .time_since_epoch())
-                                               .count()}}};
-              });
-          auto process_actor_event =
-              [reload_controller, bot_platform, bot_instance](
-                  std::string ingress_type, core::MessageEnvelope envelope)
-              -> boost::asio::awaitable<void> {
-            try {
-              const auto result =
-                  co_await reload_controller->process(std::move(envelope));
-              if (!result.ok()) {
-                const auto &first = result.failures.front();
-                OBCX_ERROR(
-                    "Actor runtime event ingress failed event_type={} "
-                    "platform={} bot={} failures={} pipeline={} stage={} "
-                    "actor={} code={} retryable={} message={}",
-                    ingress_type, bot_platform, bot_instance,
-                    result.failures.size(), first.pipeline, first.stage,
-                    first.actor, first.failure.code, first.failure.retryable,
-                    first.failure.message);
-              }
-            } catch (const std::exception &error) {
-              OBCX_ERROR("Actor runtime failed to process {} event: {}",
-                         ingress_type, error.what());
-            }
-            co_return;
-          };
-          events->subscribe_messages(
-              [process_actor_event, process_bot_operation_dispatcher,
-               platform_catalog](const core::BotEventContext &context,
-                                 const common::MessageEvent &event)
-                  -> boost::asio::awaitable<void> {
-                co_await process_actor_event(
-                    "message",
-                    core::message_envelope_from_event(
-                        context, event,
-                        *platform_catalog->platform_adapter(context.surface),
-                        *process_bot_operation_dispatcher));
-              });
-          events->subscribe_notices([process_actor_event, platform_catalog](
-                                        const core::BotEventContext &context,
-                                        const common::NoticeEvent &event)
-                                        -> boost::asio::awaitable<void> {
-            co_await process_actor_event(
-                "notice",
-                core::notice_envelope_from_event(
-                    context, event,
-                    *platform_catalog->platform_adapter(context.surface)));
-          });
-          events->subscribe_heartbeats(
-              [process_actor_event](const core::BotEventContext &context,
-                                    const common::HeartbeatEvent &event)
-                  -> boost::asio::awaitable<void> {
-                co_await process_actor_event(
-                    "heartbeat",
-                    core::raw_heartbeat_envelope_from_event(
-                        context.platform, context.installation_id, event));
-              });
-        }
-
-        OBCX_INFO("Starting bot installation: {}", config.installation_id);
-        installation->start();
-        process_bot_installation_directory->register_installation(
-            *installation, plan->recipe().command_publisher);
-        process_bot_operation_dispatcher->register_endpoint(
-            installation->capability<core::BotOperationEndpoint>(
-                core::CapabilityId{"bot.operations"}));
-
-        auto *installation_ptr = installation.get();
-        bots.push_back(std::move(installation));
-        auto thread_completion = std::make_shared<std::promise<void>>();
-        bot_thread_completions.push_back(thread_completion->get_future());
-        bot_threads.emplace_back([installation_ptr,
-                                  thread_completion]() -> void {
-          try {
-            installation_ptr->run();
-          } catch (const std::exception &error) {
-            OBCX_ERROR("Bot installation runtime error: {}", error.what());
-          } catch (...) {
-            OBCX_ERROR(
-                "Bot installation runtime failed with an unknown exception");
-          }
-          thread_completion->set_value();
-        });
       } catch (const std::exception &error) {
-        process_bot_installation_directory->unregister_installation(
-            bot_instance);
-        OBCX_ERROR("Failed to start bot installation {}: {}", bot_instance,
+        OBCX_ERROR("Bot installation recipe validation failed: {}",
                    error.what());
+        return 1;
       }
-    }
 
-    process_bot_operation_dispatcher->seal_registrations();
-    if (bots.empty()) {
-      OBCX_ERROR("No bot components started successfully");
-      return 1;
-    }
+      std::shared_ptr<core::DbManager> process_db_manager;
+      try {
+        process_db_manager = core::DbManager::shared_manager(
+            config_snapshot->get_db_instance_configs());
+      } catch (...) {
+        OBCX_ERROR("Failed to initialize process-owned database services");
+        return 1;
+      }
+      auto process_bot_installation_directory =
+          std::make_shared<core::BotInstallationDirectory>();
+      auto process_bot_operation_dispatcher =
+          std::make_shared<core::BotOperationDispatcher>(
+              [platform_catalog](const bot::SurfaceId &surface) {
+                return platform_catalog->supports(surface);
+              });
 
-    if (reload_controller) {
-      reload_controller->activate_command_catalogs();
-    }
+      OBCX_INFO("OBCX Robot Framework starting...");
+      OBCX_INFO("Configuration loaded from: {}", config_path);
 
-    OBCX_INFO("All components started successfully. OBCX Framework running...");
+      const auto actor_directories = actor_search_directories(argv[0]);
 
-    {
-      common::CliHandler::Context ctx{
-          .should_stop = g_should_stop,
-          .stop_cv = g_stop_cv,
-          .memory_stats_cb = obcx::app::memory_profile_stats,
-          .memory_dump_cb = obcx::app::memory_profile_dump,
+      auto actor_runtime_build = generation_builder.build(
+          {.purpose = validation_only
+                          ? core::RuntimeGenerationBuildPurpose::ValidationOnly
+                          : core::RuntimeGenerationBuildPurpose::Startup,
+           .generation_id = 1,
+           .snapshot = config_snapshot,
+           .actor_search_directories = actor_directories,
+           .configured_io_sources = std::max<size_t>(1, bot_configs.size()),
+           .db_manager = process_db_manager,
+           .bot_installation_directory = process_bot_installation_directory,
+           .bot_operation_client = process_bot_operation_dispatcher});
+      if (actor_runtime_build.status ==
+          core::RuntimeGenerationBuildStatus::Failed) {
+        const auto &failure = *actor_runtime_build.failure;
+        OBCX_ERROR("Actor runtime build failed [{}]: {}", failure.code,
+                   failure.message);
+        return 1;
+      }
+      if (validation_only) {
+        fmt::print("Configuration and actor contracts are valid: {}\n",
+                   config_path);
+        return 0;
+      }
+
+      auto actor_runtime = std::move(actor_runtime_build.generation);
+
+      if (bot_configs.empty()) {
+        OBCX_ERROR("No bot configurations found");
+        return 1;
+      }
+
+      std::vector<std::unique_ptr<core::BotInstallation>> bots;
+      std::vector<std::thread> bot_threads;
+      std::vector<std::future<void>> bot_thread_completions;
+      auto process_blocking_executor =
+          actor_runtime ? actor_runtime->blocking_executor() : nullptr;
+      if (!process_blocking_executor &&
+          actor_runtime_build.status ==
+              core::RuntimeGenerationBuildStatus::NotConfigured) {
+        const auto thread_budget = core::resolve_runtime_thread_budget(
+            config_snapshot->get_actor_runtime_config(), bot_configs.size());
+        process_blocking_executor = std::make_shared<core::BlockingExecutor>(
+            thread_budget.blocking_workers);
+      }
+      auto process_file_reader =
+          std::make_shared<core::BoundedFileReader>(process_blocking_executor);
+      if (process_blocking_executor) {
+        OBCX_INFO("Created process BlockingExecutor with {} threads",
+                  process_blocking_executor->worker_count());
+      }
+      auto reload_controller =
+          actor_runtime ? std::make_shared<core::ActorRuntimeReloadController>(
+                              actor_runtime)
+                        : nullptr;
+      std::optional<boost::asio::thread_pool> notification_pool;
+      if (reload_controller) {
+        notification_pool.emplace(1);
+      }
+
+      std::unique_ptr<common::ControlFifo> control_fifo;
+      bool shutdown_started = false;
+      const auto shutdown = [&]() noexcept {
+        if (std::exchange(shutdown_started, true)) {
+          return;
+        }
+        try {
+          if (control_fifo) {
+            control_fifo->stop();
+          }
+          OBCX_INFO("Shutting down OBCX Framework...");
+          process_bot_operation_dispatcher->close_success_notifications();
+
+          if (process_blocking_executor) {
+            process_blocking_executor->close_admission();
+            const auto metrics = process_blocking_executor->metrics();
+            OBCX_INFO(
+                "BlockingExecutor lifecycle phase=admission_closed "
+                "submitted={} "
+                "running={} pending={} completed={} failed={} rejected={}",
+                metrics.submitted, metrics.running, metrics.pending,
+                metrics.completed, metrics.failed, metrics.rejected);
+          }
+          if (reload_controller) {
+            reload_controller->begin_shutdown();
+          }
+          if (process_blocking_executor) {
+            process_blocking_executor->shutdown();
+            const auto metrics = process_blocking_executor->metrics();
+            OBCX_INFO("BlockingExecutor lifecycle phase=joined submitted={} "
+                      "running={} "
+                      "pending={} completed={} failed={} rejected={}",
+                      metrics.submitted, metrics.running, metrics.pending,
+                      metrics.completed, metrics.failed, metrics.rejected);
+          }
+          if (reload_controller) {
+            reload_controller->shutdown();
+          }
+          if (notification_pool) {
+            // Gate waiters and actor completions can run until runtime
+            // retirement finishes. Only this application thread joins the
+            // process pool.
+            notification_pool->join();
+          }
+
+          process_bot_operation_dispatcher->clear_endpoints();
+          for (auto &bot : bots) {
+            bot->stop();
+          }
+
+          const auto bot_shutdown_deadline =
+              std::chrono::steady_clock::now() +
+              std::chrono::seconds(BOT_SHUTDOWN_TIMEOUT_SECONDS);
+          bool bot_shutdown_timed_out = false;
+          for (size_t i = 0; i < bot_thread_completions.size(); ++i) {
+            OBCX_INFO("Waiting for bot thread {} to finish...", i);
+            if (bot_thread_completions[i].wait_until(bot_shutdown_deadline) !=
+                std::future_status::ready) {
+              OBCX_ERROR("Bot thread {} did not finish within {} seconds", i,
+                         BOT_SHUTDOWN_TIMEOUT_SECONDS);
+              bot_shutdown_timed_out = true;
+            }
+          }
+          if (bot_shutdown_timed_out) {
+            OBCX_ERROR(
+                "Bot shutdown timed out; bot instances must remain alive "
+                "until their threads finish");
+            if (!use_tui) {
+              exit_without_cleanup(EXIT_FAILURE);
+            }
+            OBCX_ERROR(
+                "Waiting for remaining bot threads without closing the TUI");
+          }
+          for (auto &bot_thread : bot_threads) {
+            if (bot_thread.joinable()) {
+              bot_thread.join();
+            }
+          }
+
+          process_blocking_executor.reset();
+          OBCX_INFO("OBCX Framework shutdown complete");
+        } catch (...) {
+          OBCX_ERROR("Runtime cleanup failed; stopping remaining bot threads "
+                     "before destroying their dependencies");
+          if (!use_tui) {
+            exit_without_cleanup(EXIT_FAILURE);
+          }
+          for (auto &bot : bots) {
+            try {
+              bot->stop();
+            } catch (...) {
+              OBCX_ERROR("Failed to stop bot during cleanup");
+            }
+          }
+          for (auto &thread : bot_threads) {
+            if (thread.joinable()) {
+              thread.join();
+            }
+          }
+        }
       };
+      // Covers startup failure and exception unwinding after observer
+      // registration, before automatic pool destruction could strand a
+      // closed-gate waiter.
+      boost::scope::scope_exit runtime_cleanup{shutdown};
 
       if (reload_controller) {
-        ctx.reload_cb = [reload_controller, config_path, actor_directories,
-                         configured_io_sources =
-                             std::max<size_t>(1, bot_configs.size())] {
-          const auto active = reload_controller->active_generation();
-          if (!active) {
-            return common::CliHandler::ReloadRequestStatus::Unavailable;
+        process_bot_operation_dispatcher->set_success_handler(
+            notification_pool->get_executor(),
+            [platform_catalog,
+             weak_controller =
+                 std::weak_ptr<core::ActorRuntimeReloadController>{
+                     reload_controller}](core::SuccessfulBotOperation operation)
+                -> boost::asio::awaitable<void> {
+              if (!operation.send_receipt) {
+                co_return;
+              }
+              const auto controller = weak_controller.lock();
+              if (!controller) {
+                co_return;
+              }
+              try {
+                const auto result = co_await controller->process(
+                    core::bot_send_succeeded_envelope(
+                        platform_catalog->ingress_platform(
+                            operation.installation.surface),
+                        operation));
+                if (!result.ok()) {
+                  const auto &first = result.failures.front();
+                  OBCX_ERROR(
+                      "Actor runtime message-sent observation failed bot={} "
+                      "action={} failures={} pipeline={} stage={} actor={} "
+                      "code={} retryable={} message={}",
+                      operation.installation.installation_id,
+                      operation.action.value(), result.failures.size(),
+                      first.pipeline, first.stage, first.actor,
+                      first.failure.code, first.failure.retryable,
+                      first.failure.message);
+                }
+              } catch (const std::exception &error) {
+                OBCX_ERROR("Actor runtime failed to process successful send: "
+                           "{}",
+                           error.what());
+              }
+            });
+      }
+      if (reload_controller) {
+        process_bot_operation_dispatcher->set_confirmation_handler(
+            notification_pool->get_executor(),
+            [platform_catalog,
+             weak_controller =
+                 std::weak_ptr<core::ActorRuntimeReloadController>{
+                     reload_controller}](bot::SendConfirmation confirmation)
+                -> boost::asio::awaitable<void> {
+              const auto controller = weak_controller.lock();
+              if (!controller)
+                co_return;
+              try {
+                const auto result = co_await controller->process(
+                    core::bot_send_confirmed_envelope(
+                        platform_catalog->ingress_platform(
+                            confirmation.output.message.conversation
+                                .installation.surface),
+                        confirmation));
+                if (!result.ok())
+                  OBCX_ERROR("Actor runtime confirmation observation failed "
+                             "attempt={} failures={}",
+                             confirmation.attempt_id, result.failures.size());
+              } catch (const std::exception &error) {
+                OBCX_ERROR(
+                    "Actor runtime failed to observe send confirmation: {}",
+                    error.what());
+              }
+            });
+      }
+      // From this point the controller is the sole owner of the active slot.
+      // Route leases retain retired generations until their final descendant.
+      actor_runtime.reset();
+
+      for (const auto &plan : bot_plans) {
+        const auto &config = plan->metadata();
+        if (!config.enabled) {
+          OBCX_INFO("Skipping disabled bot installation: {}",
+                    config.installation_id);
+          continue;
+        }
+
+        const auto &bot_platform = config.ingress_platform;
+        const auto bot_instance = config.installation_id;
+        try {
+          auto installation = core::BotInstallationAssembler::assemble(
+              *plan, process_file_reader);
+          auto events = installation->capability<core::BotEventCapability>(
+              core::CapabilityId{"bot.events"});
+          if (reload_controller && !bot_platform.empty()) {
+            auto operations =
+                installation->capability<core::BotOperationEndpoint>(
+                    core::CapabilityId{"bot.operations"});
+            const auto binding =
+                platform_catalog->platform_adapter(config.surface);
+            events->set_origin_capture_handler(
+                [operations] { return operations->capture_origin(); });
+            events->set_message_admission_handler(
+                [operations, binding](const core::BotEventContext &context,
+                                      const common::MessageEvent &event)
+                    -> core::MessageAdmissionResult {
+                  if (!context.source_origin)
+                    return {{core::SelfObservationStatus::RejectedOrigin,
+                             std::nullopt},
+                            std::nullopt};
+                  const bot::BotInstallationRef owner{context.installation_id,
+                                                      context.surface};
+                  auto captured =
+                      operations->capture_message_admission_generation(
+                          *context.source_origin,
+                          binding->observed_self(owner, event));
+                  if (!captured.evidence_generation)
+                    return {std::move(captured.observation), std::nullopt};
+                  return {
+                      std::move(captured.observation),
+                      core::MessageIngressAdmission{
+                          *captured.evidence_generation,
+                          bot::TimePoint{std::chrono::duration_cast<
+                                             std::chrono::milliseconds>(
+                                             std::chrono::system_clock::now()
+                                                 .time_since_epoch())
+                                             .count()}}};
+                });
+            auto process_actor_event =
+                [reload_controller, bot_platform, bot_instance](
+                    std::string ingress_type, core::MessageEnvelope envelope)
+                -> boost::asio::awaitable<void> {
+              try {
+                const auto result =
+                    co_await reload_controller->process(std::move(envelope));
+                if (!result.ok()) {
+                  const auto &first = result.failures.front();
+                  OBCX_ERROR(
+                      "Actor runtime event ingress failed event_type={} "
+                      "platform={} bot={} failures={} pipeline={} stage={} "
+                      "actor={} code={} retryable={} message={}",
+                      ingress_type, bot_platform, bot_instance,
+                      result.failures.size(), first.pipeline, first.stage,
+                      first.actor, first.failure.code, first.failure.retryable,
+                      first.failure.message);
+                }
+              } catch (const std::exception &error) {
+                OBCX_ERROR("Actor runtime failed to process {} event: {}",
+                           ingress_type, error.what());
+              }
+              co_return;
+            };
+            events->subscribe_messages(
+                [process_actor_event, process_bot_operation_dispatcher,
+                 platform_catalog](const core::BotEventContext &context,
+                                   const common::MessageEvent &event)
+                    -> boost::asio::awaitable<void> {
+                  co_await process_actor_event(
+                      "message",
+                      core::message_envelope_from_event(
+                          context, event,
+                          *platform_catalog->platform_adapter(context.surface),
+                          *process_bot_operation_dispatcher));
+                });
+            events->subscribe_notices([process_actor_event, platform_catalog](
+                                          const core::BotEventContext &context,
+                                          const common::NoticeEvent &event)
+                                          -> boost::asio::awaitable<void> {
+              co_await process_actor_event(
+                  "notice",
+                  core::notice_envelope_from_event(
+                      context, event,
+                      *platform_catalog->platform_adapter(context.surface)));
+            });
+            events->subscribe_heartbeats(
+                [process_actor_event](const core::BotEventContext &context,
+                                      const common::HeartbeatEvent &event)
+                    -> boost::asio::awaitable<void> {
+                  co_await process_actor_event(
+                      "heartbeat",
+                      core::raw_heartbeat_envelope_from_event(
+                          context.platform, context.installation_id, event));
+                });
           }
-          const auto timeout =
-              std::chrono::milliseconds{active->config_snapshot()
-                                            ->get_actor_runtime_config()
-                                            .reload_drain_timeout_ms};
-          const auto status = reload_controller->start_reload(
-              {.purpose = core::RuntimeGenerationBuildPurpose::ReloadCandidate,
-               .generation_id = 0,
-               .config_path = config_path,
-               .actor_search_directories = actor_directories,
-               .configured_io_sources = configured_io_sources},
-              timeout);
-          switch (status) {
-          case core::RuntimeReloadStartStatus::Accepted:
-            return common::CliHandler::ReloadRequestStatus::Accepted;
-          case core::RuntimeReloadStartStatus::Busy:
-            return common::CliHandler::ReloadRequestStatus::Busy;
-          case core::RuntimeReloadStartStatus::Shutdown:
-            return common::CliHandler::ReloadRequestStatus::Unavailable;
-          }
-          return common::CliHandler::ReloadRequestStatus::Unavailable;
+
+          OBCX_INFO("Starting bot installation: {}", config.installation_id);
+          installation->start();
+          process_bot_installation_directory->register_installation(
+              *installation, plan->recipe().command_publisher);
+          process_bot_operation_dispatcher->register_endpoint(
+              installation->capability<core::BotOperationEndpoint>(
+                  core::CapabilityId{"bot.operations"}));
+
+          auto *installation_ptr = installation.get();
+          bots.push_back(std::move(installation));
+          auto thread_completion = std::make_shared<std::promise<void>>();
+          bot_thread_completions.push_back(thread_completion->get_future());
+          bot_threads.emplace_back([installation_ptr,
+                                    thread_completion]() -> void {
+            try {
+              installation_ptr->run();
+            } catch (const std::exception &error) {
+              OBCX_ERROR("Bot installation runtime error: {}", error.what());
+            } catch (...) {
+              OBCX_ERROR(
+                  "Bot installation runtime failed with an unknown exception");
+            }
+            thread_completion->set_value();
+          });
+        } catch (const std::exception &error) {
+          process_bot_installation_directory->unregister_installation(
+              bot_instance);
+          OBCX_ERROR("Failed to start bot installation {}: {}", bot_instance,
+                     error.what());
+        }
+      }
+
+      process_bot_operation_dispatcher->seal_registrations();
+      if (bots.empty()) {
+        OBCX_ERROR("No bot components started successfully");
+        return 1;
+      }
+
+      if (reload_controller) {
+        reload_controller->activate_command_catalogs();
+      }
+
+      OBCX_INFO(
+          "All components started successfully. OBCX Framework running...");
+
+      {
+        common::CliHandler::Context ctx{
+            .should_stop = g_should_stop,
+            .stop_cv = g_stop_cv,
+            .memory_stats_cb = obcx::app::memory_profile_stats,
+            .memory_dump_cb = obcx::app::memory_profile_dump,
         };
-      }
 
-      // Shutdown callback runs while the TUI is still alive so the user can
-      // see the shutdown log lines in the pane.
-      ctx.shutdown_cb = shutdown;
+        if (reload_controller) {
+          ctx.reload_cb = [reload_controller, config_path, actor_directories,
+                           configured_io_sources =
+                               std::max<size_t>(1, bot_configs.size())] {
+            const auto active = reload_controller->active_generation();
+            if (!active) {
+              return common::CliHandler::ReloadRequestStatus::Unavailable;
+            }
+            const auto timeout =
+                std::chrono::milliseconds{active->config_snapshot()
+                                              ->get_actor_runtime_config()
+                                              .reload_drain_timeout_ms};
+            const auto status = reload_controller->start_reload(
+                {.purpose =
+                     core::RuntimeGenerationBuildPurpose::ReloadCandidate,
+                 .generation_id = 0,
+                 .config_path = config_path,
+                 .actor_search_directories = actor_directories,
+                 .configured_io_sources = configured_io_sources},
+                timeout);
+            switch (status) {
+            case core::RuntimeReloadStartStatus::Accepted:
+              return common::CliHandler::ReloadRequestStatus::Accepted;
+            case core::RuntimeReloadStartStatus::Busy:
+              return common::CliHandler::ReloadRequestStatus::Busy;
+            case core::RuntimeReloadStartStatus::Shutdown:
+              return common::CliHandler::ReloadRequestStatus::Unavailable;
+            }
+            return common::CliHandler::ReloadRequestStatus::Unavailable;
+          };
+        }
 
-      if (use_tui) {
-        auto tui_sink = common::Logger::get_tui_sink();
-        common::TuiApp tui_app(tui_sink, std::move(ctx),
-                               []() -> std::error_code {
-                                 // SignalMonitor owns SIGINT and all workers
-                                 // inherit its blocked mask. Deliver to the
-                                 // process so its waiting thread receives
-                                 // the same graceful-shutdown request as an
-                                 // external SIGINT.
-                                 if (::kill(::getpid(), SIGINT) == 0) {
-                                   return {};
-                                 }
-                                 return {errno, std::generic_category()};
-                               });
-        tui_app.run();
-      } else {
-        common::CliHandler cli_handler(ctx);
-        cli_handler.run();
-        // Block on signal in case stdin closed before SIGINT.
-        {
+        if (enable_pipe) {
+          auto pipe_context = ctx;
+          pipe_context.output_cb = nullptr;
+          pipe_context.shutdown_cb = nullptr;
+          try {
+            control_fifo = common::ControlFifo::start(std::move(pipe_context));
+          } catch (const std::exception &error) {
+            OBCX_ERROR("Failed to create control pipes: {}", error.what());
+            return 1;
+          }
+        }
+
+        // Shutdown callback runs while the TUI is still alive so the user can
+        // see the shutdown log lines in the pane.
+        ctx.shutdown_cb = shutdown;
+
+        if (publish) {
+          // Publish only owning callbacks, never references to worker locals.
+          (*publish)([&](CliHandler::Context &target) {
+            target.reload_cb = ctx.reload_cb;
+            target.memory_stats_cb = ctx.memory_stats_cb;
+            target.memory_dump_cb = ctx.memory_dump_cb;
+            target.shutdown_cb = [] {
+              g_should_stop.store(true, std::memory_order_release);
+              g_stop_cv.notify_all();
+            };
+          });
+          // Keep all runtime owners alive until the user requests shutdown.
           std::unique_lock lock(g_stop_mtx);
-          g_stop_cv.wait(lock, []() -> bool { return g_should_stop.load(); });
-        }
-        if (ctx.shutdown_cb) {
-          ctx.shutdown_cb();
+          // SignalMonitor updates an atomic without taking this mutex. A
+          // bounded wait also handles a notification racing with wait entry.
+          while (!g_should_stop.load(std::memory_order_acquire)) {
+            g_stop_cv.wait_for(lock, std::chrono::milliseconds(100));
+          }
+          lock.unlock();
+          shutdown();
+        } else {
+          common::CliHandler cli_handler(ctx);
+          cli_handler.run();
+          // Block on signal in case stdin closed before SIGINT.
+          {
+            std::unique_lock lock(g_stop_mtx);
+            g_stop_cv.wait(lock, []() -> bool { return g_should_stop.load(); });
+          }
+          if (ctx.shutdown_cb) {
+            ctx.shutdown_cb();
+          }
         }
       }
-    }
 
-    return 0;
+      return 0;
+    };
+    if (!use_tui) {
+      return execute(nullptr);
+    }
+    int exit_code = 0; // Read after the TUI joins the startup worker.
+    CliHandler::Context ctx{.should_stop = g_should_stop, .stop_cv = g_stop_cv};
+    TuiApp tui_app(
+        Logger::get_tui_sink(), std::move(ctx),
+        []() -> std::error_code {
+          // Ctrl+D still uses the process-owned SIGINT path.
+          if (::kill(::getpid(), SIGINT) == 0) {
+            return {};
+          }
+          return {errno, std::generic_category()};
+        },
+        [&](const TuiApp::PublishContext &publish) {
+          try {
+            exit_code = execute(&publish);
+          } catch (const std::exception &error) {
+            OBCX_ERROR("Startup failed: {}", error.what());
+            exit_code = 1;
+          } catch (...) {
+            OBCX_ERROR("Startup failed with an unknown exception");
+            exit_code = 1;
+          }
+        });
+    tui_app.run();
+    return exit_code;
   }
 };
 

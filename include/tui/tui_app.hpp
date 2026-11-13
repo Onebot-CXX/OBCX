@@ -38,8 +38,13 @@ public:
    */
   // The process owns signal delivery; the TUI only requests an interrupt.
   using InterruptRequest = std::function<std::error_code()>;
+  // Called once the first frame is on screen. The argument publishes callback
+  // updates into the context the command line copies under a lock.
+  using PublishContext =
+      std::function<void(std::function<void(CliHandler::Context &)>)>;
+  using BackgroundTask = std::function<void(const PublishContext &)>;
   TuiApp(std::shared_ptr<tui_sink_mt> tui_sink, CliHandler::Context cli_ctx,
-         InterruptRequest request_interrupt);
+         InterruptRequest request_interrupt, BackgroundTask background = {});
 
   /**
    * \if CHINESE
@@ -55,6 +60,7 @@ private:
   std::shared_ptr<tui_sink_mt> tui_sink_;
   CliHandler::Context cli_ctx_;
   InterruptRequest request_interrupt_;
+  BackgroundTask background_task_;
   std::vector<std::string> console_lines_;
   std::atomic_bool running_{true};
   std::atomic_bool shutdown_started_{false};

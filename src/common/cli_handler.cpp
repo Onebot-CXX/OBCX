@@ -23,16 +23,16 @@ void CliHandler::register_default_handlers() {
   handlers_["memory_stats"] = handle_memory_stats;
 }
 
-auto CliHandler::process_command(const std::string &line) -> bool {
+auto CliHandler::dispatch(const std::string &line) -> CommandDisposition {
   if (line.empty()) {
-    return true;
+    return CommandDisposition::Continue;
   }
 
-  // Check for log_level=xxx pattern
   constexpr std::string_view loglevel_prefix = "log_level=";
   if (line.starts_with(loglevel_prefix)) {
     std::string level_str = line.substr(loglevel_prefix.length());
-    return handle_log_level(ctx_, level_str);
+    return handle_log_level(ctx_, level_str) ? CommandDisposition::Continue
+                                             : CommandDisposition::Stop;
   }
 
   constexpr std::string_view memory_dump_prefix = "memory_dump=";
@@ -41,17 +41,20 @@ auto CliHandler::process_command(const std::string &line) -> bool {
            ctx_.memory_dump_cb
                ? ctx_.memory_dump_cb(line.substr(memory_dump_prefix.size()))
                : "memory_profile_unavailable: no memory profiler attached");
-    return true;
+    return CommandDisposition::Continue;
   }
 
-  // Check for exact command match
   auto it = handlers_.find(line);
   if (it != handlers_.end()) {
-    return it->second(ctx_, "");
+    return it->second(ctx_, "") ? CommandDisposition::Continue
+                                : CommandDisposition::Stop;
   }
+  return CommandDisposition::Unknown;
+}
 
-  // Unknown command - just ignore
-  return true;
+auto CliHandler::process_command(const std::string &line) -> bool {
+  // Stdin and the TUI keep ignoring unrecognized lines.
+  return dispatch(line) != CommandDisposition::Stop;
 }
 
 void CliHandler::run() {
@@ -76,6 +79,7 @@ void CliHandler::run() {
         line.pop_back();
       }
       if (!process_command(line)) {
+        request_stop(ctx_);
         return false;
       }
     }
@@ -109,8 +113,8 @@ void CliHandler::run() {
       }
       if (count < 0) {
         OBCX_WARN("CLI input read failed; stopping command input");
-      } else if (!buffered_input.empty()) {
-        static_cast<void>(process_command(buffered_input));
+      } else if (!buffered_input.empty() && !process_command(buffered_input)) {
+        request_stop(ctx_);
       }
       break;
     }
@@ -122,14 +126,17 @@ void CliHandler::run() {
   }
 }
 
-auto CliHandler::handle_exit(Context &ctx,
-                             [[maybe_unused]] const std::string &args) -> bool {
+void CliHandler::request_stop(Context &ctx) {
   bool expected = false;
   if (ctx.should_stop.compare_exchange_strong(expected, true)) {
     OBCX_INFO("Received signal {}, shutting down gracefully...", 0);
     ctx.stop_cv.notify_one();
   }
-  return false; // Stop the CLI loop
+}
+
+auto CliHandler::handle_exit([[maybe_unused]] Context &ctx,
+                             [[maybe_unused]] const std::string &args) -> bool {
+  return false; // Caller commits shutdown after its own reply.
 }
 
 void CliHandler::output(Context &ctx, const std::string &msg) {
@@ -147,6 +154,7 @@ auto CliHandler::handle_log_level([[maybe_unused]] Context &ctx,
     Logger::set_level(*level);
     output(ctx, fmt::format("Log level changed to: {}", level_str));
   } else {
+    output(ctx, fmt::format("invalid_log_level: {}", level_str));
     OBCX_WARN("Invalid log level: {}. Valid levels: trace, debug, info, warn, "
               "error, critical, off",
               level_str);

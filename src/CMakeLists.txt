@@ -1,6 +1,7 @@
 set(OBCX_GENERIC_RUNTIME_SOURCES
     common/logger.cpp
     common/cli_handler.cpp
+    common/control_fifo.cpp
     tui/tui_app.cpp
     tui/tui_layout.cpp
     tui/tui_selection.cpp

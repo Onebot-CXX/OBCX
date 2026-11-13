@@ -15,6 +15,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace obcx::common {
@@ -50,9 +51,11 @@ auto level_decorator(spdlog::level::level_enum level) -> ftxui::Decorator {
 } // namespace
 
 TuiApp::TuiApp(std::shared_ptr<tui_sink_mt> tui_sink,
-               CliHandler::Context cli_ctx, InterruptRequest request_interrupt)
+               CliHandler::Context cli_ctx, InterruptRequest request_interrupt,
+               BackgroundTask background)
     : tui_sink_(std::move(tui_sink)), cli_ctx_(std::move(cli_ctx)),
-      request_interrupt_(std::move(request_interrupt)) {}
+      request_interrupt_(std::move(request_interrupt)),
+      background_task_(std::move(background)) {}
 
 void TuiApp::run() {
   auto screen = ftxui::ScreenInteractive::Fullscreen();
@@ -128,7 +131,21 @@ void TuiApp::run() {
     console_lines_.push_back(strip_ansi(msg));
   };
 
-  CliHandler cli_handler(cli_ctx_);
+  std::mutex callback_mu;
+  std::thread background_thread;
+  std::once_flag background_once;
+  std::atomic_bool background_complete{false};
+  struct JoinBackground {
+    std::thread &thread;
+    CliHandler::Context &ctx;
+    ~JoinBackground() {
+      ctx.should_stop.store(true, std::memory_order_release);
+      ctx.stop_cv.notify_one();
+      if (thread.joinable() && thread.get_id() != std::this_thread::get_id()) {
+        thread.join();
+      }
+    }
+  } join_background{background_thread, cli_ctx_};
 
   auto input_options = ftxui::InputOption::Default();
   input_options.cursor_position = &input_cursor;
@@ -146,10 +163,15 @@ void TuiApp::run() {
               std::scoped_lock lock(console_mutex);
               console_lines_.push_back(strip_ansi("> " + cmd));
             }
-            if (!cli_handler.process_command(cmd)) {
-              // Don't exit immediately — signal shutdown and let it complete
-              cli_ctx_.should_stop.store(true, std::memory_order_release);
-              cli_ctx_.stop_cv.notify_one();
+            auto command_ctx = [&] {
+              std::scoped_lock lock(callback_mu);
+              return cli_ctx_;
+            }();
+            // Exit only requests process stop. The TUI leaves after shutdown.
+            command_ctx.shutdown_cb = nullptr;
+            CliHandler command_handler(std::move(command_ctx));
+            if (!command_handler.process_command(cmd)) {
+              CliHandler::request_stop(cli_ctx_);
             }
           }
           return true;
@@ -159,22 +181,30 @@ void TuiApp::run() {
 
   // Background thread to refresh the TUI periodically for new log lines
   // Also monitors should_stop and runs shutdown callback before exiting
-  std::thread refresh_thread([&screen, this]() -> void {
+  std::thread refresh_thread([&screen, &background_complete, this]() -> void {
     while (running_.load()) {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
       if (cli_ctx_.should_stop.load(std::memory_order_acquire)) {
-        bool expected = false;
-        if (shutdown_started_.compare_exchange_strong(expected, true)) {
-          // Run shutdown callback in a separate thread so TUI keeps refreshing
-          if (cli_ctx_.shutdown_cb) {
-            std::thread shutdown_thread([this]() -> void {
-              cli_ctx_.shutdown_cb();
+        if (background_task_) {
+          // The worker owns runtime cleanup, including partial-start failures.
+          shutdown_complete_.store(
+              background_complete.load(std::memory_order_acquire),
+              std::memory_order_release);
+        } else {
+          bool expected = false;
+          if (shutdown_started_.compare_exchange_strong(expected, true)) {
+            // Run shutdown callback in a separate thread so TUI keeps
+            // refreshing
+            if (cli_ctx_.shutdown_cb) {
+              std::thread shutdown_thread([this]() -> void {
+                cli_ctx_.shutdown_cb();
+                shutdown_complete_.store(true, std::memory_order_release);
+              });
+              shutdown_thread.detach();
+            } else {
               shutdown_complete_.store(true, std::memory_order_release);
-            });
-            shutdown_thread.detach();
-          } else {
-            shutdown_complete_.store(true, std::memory_order_release);
+            }
           }
         }
       }
@@ -353,6 +383,23 @@ void TuiApp::run() {
   // Update all geometry before child renderers consume it. SplitState observes
   // FTXUI mouse changes and translates absolute rows back into a ratio.
   auto inner = ftxui::Renderer(container, [&]() -> ftxui::Element {
+    if (background_task_) {
+      // A task posted during rendering runs after this frame is displayed.
+      std::call_once(background_once, [&] {
+        screen.Post([&, this] {
+          background_thread =
+              std::thread([this, &callback_mu, &background_complete] {
+                background_task_(
+                    [this, &callback_mu](
+                        std::function<void(CliHandler::Context &)> change) {
+                      std::scoped_lock lock(callback_mu);
+                      change(cli_ctx_);
+                    });
+                background_complete.store(true, std::memory_order_release);
+              });
+        });
+      });
+    }
     const auto terminal = ftxui::Terminal::Size();
     layout_ = split_state_.snapshot(terminal.dimx, terminal.dimy);
     return container->Render();
@@ -630,7 +677,7 @@ void TuiApp::run() {
 
   // If shutdown didn't start (e.g., SIGINT interrupted screen.Loop()
   // before the refresh thread could start the callback), run it now.
-  if (cli_ctx_.shutdown_cb) {
+  if (!background_task_ && cli_ctx_.shutdown_cb) {
     bool expected = false;
     if (shutdown_started_.compare_exchange_strong(expected, true)) {
       cli_ctx_.shutdown_cb();

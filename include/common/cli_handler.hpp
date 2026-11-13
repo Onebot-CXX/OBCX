@@ -75,6 +75,16 @@ public:
    */
   explicit CliHandler(Context ctx);
 
+  enum class CommandDisposition { Continue, Stop, Unknown };
+
+  // Unknown stays silent for stdin and the TUI. Callers that need a reply,
+  // such as the control pipes, inspect the disposition themselves.
+  // dispatch does not signal process shutdown. After any reply that must be
+  // delivered first, the caller commits a Stop disposition with request_stop.
+  auto dispatch(const std::string &line) -> CommandDisposition;
+
+  static void request_stop(Context &ctx);
+
   /**
    * \if CHINESE
    * @brief 处理一行输入命令
