@@ -11,7 +11,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
     target_compile_options(obcx PRIVATE -fno-omit-frame-pointer)
     set_target_properties(obcx PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
   endif()
-  target_link_libraries(obcx PRIVATE obcx_core tomlplusplus::tomlplusplus
+  target_link_libraries(obcx PRIVATE obcx_core obcx::tomlplusplus
                                      Boost::program_options)
 
   # Keep the installed application relocatable: the runtime library is

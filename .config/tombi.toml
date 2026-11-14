@@ -1,0 +1,14 @@
+# Match the editor's TOML 1.1 formatting, including multiline inline tables.
+toml-version = "v1.1.0"
+
+# Package tooling still uses Python's TOML 1.0-only tomllib. Keep manifests
+# compatible while runtime configuration files can use TOML 1.1 syntax.
+[[schemas]]
+toml-version = "v1.0.0"
+path = "schemas/package.schema.json"
+include = ["package.toml", "**/package.toml"]
+
+[[schemas]]
+toml-version = "v1.0.0"
+path = "schemas/workspace.schema.json"
+include = ["packages.toml", "**/packages.toml"]

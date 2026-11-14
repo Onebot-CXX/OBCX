@@ -82,7 +82,7 @@
           name = "treefmt";
           runtimeInputs = [
             pkgs.nixfmt
-            pkgs.taplo
+            pkgs.tombi
             pkgs.treefmt
           ]
           ++ pkgs.lib.optional includeClangTools pkgs.clang-tools;

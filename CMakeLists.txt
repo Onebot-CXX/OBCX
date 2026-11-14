@@ -181,6 +181,7 @@ else()
 endif()
 
 find_package(tomlplusplus CONFIG REQUIRED)
+include(cmake/OBCXToml.cmake)
 find_package(ftxui CONFIG REQUIRED)
 find_package(re2 CONFIG REQUIRED)
 

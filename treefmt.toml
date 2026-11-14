@@ -35,7 +35,8 @@ includes = [
 command = "nixfmt"
 includes = ["*.nix", "**/*.nix"]
 
-[formatter.taplo]
-command = "taplo"
-options = ["fmt"]
+# TOML 1.1 syntax is selected explicitly in .config/tombi.toml.
+[formatter.tombi]
+command = "tombi"
+options = ["format", "--offline"]
 includes = ["*.toml", "**/*.toml"]

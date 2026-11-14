@@ -143,7 +143,7 @@ target_link_libraries(
         OpenSSL::SSL
         OpenSSL::Crypto
         ${OBCX_SQLITE_TARGET}
-        tomlplusplus::tomlplusplus
+        obcx::tomlplusplus
         ftxui::screen
         ftxui::dom
         ftxui::component
@@ -166,7 +166,7 @@ foreach(_runtime IN ITEMS obcx_generic_runtime_objects obcx_onebot11_runtime_obj
         OpenSSL::SSL
         OpenSSL::Crypto
         ${OBCX_SQLITE_TARGET}
-        tomlplusplus::tomlplusplus
+        obcx::tomlplusplus
         ftxui::screen
         ftxui::dom
         ftxui::component
@@ -403,6 +403,7 @@ install(FILES
 # Install build helper modules alongside the SDK
 install(FILES
     ${CMAKE_SOURCE_DIR}/cmake/OBCXPackages.cmake
+    ${CMAKE_SOURCE_DIR}/cmake/OBCXToml.cmake
     ${CMAKE_SOURCE_DIR}/cmake/OBCXActorIdentity.cmake
     ${CMAKE_SOURCE_DIR}/cmake/OBCXPackageProviders.cmake
     ${CMAKE_SOURCE_DIR}/cmake/package_cmake.py
