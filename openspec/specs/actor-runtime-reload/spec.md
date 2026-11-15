@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change restore-actor-runtime-reload. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Operators can request an actor-runtime reload
 OBCX SHALL expose a `reload` command through both the TUI and `--no-tui`
 operator command interfaces. The command MUST reload the root configuration
@@ -110,6 +112,10 @@ MUST be rejected without changing the active generation.
 #### Scenario: Suspended actor work still references old code
 - **WHEN** an old-generation actor task is suspended on Asio during reload
 - **THEN** OBCX does not unload that actor library until the task reaches a terminal state and releases its generation reference
+
+#### Scenario: Actor I/O services retain actor code
+- **WHEN** an actor created Asio I/O objects on the generation's actor I/O executor
+- **THEN** OBCX MUST keep that actor's image loaded until the actor I/O execution context and its services have been destroyed, on every platform
 
 ### Requirement: Process-owned configuration changes require restart
 The initial reload contract SHALL support actor entries, actor-owned

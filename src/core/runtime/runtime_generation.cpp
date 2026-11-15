@@ -796,14 +796,9 @@ void RuntimeGeneration::shutdown() {
     // already-admitted blocking work before unloading actor code.
     actor_io_pool_->join();
   }
-#if !defined(__APPLE__)
-  if (actor_manager_) {
-    actor_manager_->finish_actor_retirement();
-  }
-#else
-  // Mach-O Asio service vtables can live in the actor image. The manager is
-  // destroyed after the I/O pool and retains those images until then.
-#endif
+  // Asio services registered on the actor I/O pool can have vtables in actor
+  // images. The manager is destroyed after the pool and retains those images
+  // until the execution context and its services have been destroyed.
 }
 
 RuntimeGenerationBuilder::RuntimeGenerationBuilder(
