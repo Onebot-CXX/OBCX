@@ -36,3 +36,9 @@
 ## Unit test rule
 
 - Do not write any unit test unless i asked
+
+## User-Facing Messages
+
+- Use plain language in replies, command output, and error messages. State the result first, then give the next step if the user needs to act.
+- For a known outcome, say “It worked” or “It failed.” If the outcome is unknown, say so rather than reporting a failure.
+- Keep internal state and diagnostic details in logs. Omit counts that do not help the user understand the result.

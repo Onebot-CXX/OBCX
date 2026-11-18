@@ -62,6 +62,7 @@ set(OBCX_ONEBOT11_RUNTIME_SOURCES
     onebot11/bot/operations.cpp
     onebot11/bot/platform_adapter.cpp
     onebot11/bot/received_media.cpp
+    onebot11/bot/qq_face_catalog.cpp
     onebot11/bot/special_content.cpp
     onebot11/bot/content_observations.cpp
     onebot11/bot/user_target.cpp
@@ -96,6 +97,8 @@ set(OBCX_ONEBOT11_RUNTIME_SOURCES
     onebot11/bot/event_ingress.cpp
     onebot11/bot/command_adapter.cpp
 )
+set_source_files_properties(onebot11/bot/qq_face_catalog.cpp
+                            PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 add_library(obcx_onebot11_runtime_objects OBJECT ${OBCX_ONEBOT11_RUNTIME_SOURCES})
 
 set(OBCX_TELEGRAM_RUNTIME_SOURCES

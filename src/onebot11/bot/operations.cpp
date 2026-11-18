@@ -2730,6 +2730,16 @@ public:
       return ready_media_read(bot::failed_operation<bot::MediaBlob>(
           Code::InvalidRequest, "QQ media installation mismatch"));
     const auto parts = codec().unpack(request.media.id);
+    const bool animated_face =
+        parts.kind == onebot11::bot::detail::catalog_face_gif_kind;
+    if (animated_face ||
+        parts.kind == onebot11::bot::detail::catalog_face_media_kind) {
+      if (parts.components[0] != installation_.installation_id)
+        return ready_media_read(bot::failed_operation<bot::MediaBlob>(
+            Code::InvalidRequest, "QQ catalog face installation mismatch"));
+      return onebot11::bot::detail::read_catalog_face(
+          parts.components[1], animated_face, request.maximum_bytes, deadline);
+    }
     if (onebot11::bot::detail::is_received_media_kind(parts.kind)) {
       if (!received_media_)
         return ready_media_read(bot::failed_operation<bot::MediaBlob>(
@@ -3282,7 +3292,8 @@ public:
         std::vector<std::size_t> positions;
         const auto &native_event = std::get<common::MessageEvent>(*event);
         auto normalized = qq_binding->normalize_with_positions(
-            installation, native_event, received, "forward", positions);
+            installation, native_event, received, "forward", positions,
+            onebot11::bot::QqPlatformAdapter::MessageContent::ForwardNode);
         for (std::size_t ordinal = 0; ordinal < native_event.message.size();
              ++ordinal) {
           const auto &segment = native_event.message[ordinal];

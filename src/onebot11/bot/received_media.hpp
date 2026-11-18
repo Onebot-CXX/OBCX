@@ -19,6 +19,16 @@ namespace obcx::onebot11::bot::detail {
 [[nodiscard]] auto is_received_media_kind(std::string_view kind) -> bool;
 void validate_received_media_token(std::string_view token);
 
+// This separate vocabulary addresses public, bundled bytes, not an expiring
+// receipt, a provider locator, or evidence about the source message.
+inline constexpr char catalog_face_media_kind[] = "catalog-face";
+inline constexpr char catalog_face_gif_kind[] = "catalog-face-gif";
+auto read_catalog_face(std::string id, bool animated,
+                       std::uint64_t maximum_bytes,
+                       network::detail::HttpDeadline deadline)
+    -> boost::asio::awaitable<
+        obcx::bot::BotOperationResult<obcx::bot::MediaBlob>>;
+
 // Installation-local FIFO indexed payload bound, not an outstanding-I/O or RSS
 // bound. Readers own retired entries while draining, but cannot return success.
 class ReceivedMediaStore final {

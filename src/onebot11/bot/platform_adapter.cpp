@@ -1,6 +1,7 @@
 #include "onebot11/bot/platform_adapter.hpp"
 #include "onebot11/adapter/message_converter.hpp"
 #include "onebot11/adapter/native_fields.hpp"
+#include "qq_face_catalog.hpp"
 #include "received_media.hpp"
 #include <charconv>
 #include <limits>
@@ -36,6 +37,70 @@ void locator(std::string_view s) {
       s.find_first_of("/\\:?#&=%") != std::string_view::npos)
     throw std::invalid_argument("QQ media locator cannot be a path or URL");
 }
+auto canonical_face_id(std::string_view id) -> std::string_view {
+  if (id.empty() || id.size() > 20 ||
+      !std::ranges::all_of(id, [](char c) { return c >= '0' && c <= '9'; }))
+    return {};
+  const auto first = id.find_first_not_of('0');
+  return first == std::string_view::npos ? id.substr(id.size() - 1)
+                                         : id.substr(first);
+}
+
+auto normalize_face(const QqNativeReferenceCodec &codec,
+                    const bot_model::BotInstallationRef &installation,
+                    const bot_model::Json &data) -> bot_model::ReceivedBlock {
+  std::string_view text;
+  if (const auto label = data.find("text");
+      label != data.end() && label->is_string()) {
+    const auto &value = label->get_ref<const std::string &>();
+    try {
+      bot_model::validate_observation_text(value, 2048);
+      text = value;
+    } catch (const std::invalid_argument &) {
+      // An invalid display label must not block a known catalog face.
+    }
+  }
+
+  std::string number;
+  std::string_view native_id;
+  if (const auto id = data.find("id"); id != data.end()) {
+    if (id->is_string())
+      native_id = id->get_ref<const std::string &>();
+    else if (id->is_number_integer()) {
+      number = id->dump();
+      native_id = number;
+    }
+  }
+  const auto catalog_id = canonical_face_id(native_id);
+  if (!catalog_id.empty()) {
+    if (const auto asset = find_qq_face(catalog_id)) {
+      bot_model::ReceivedRichText caption;
+      const auto label = text.empty() ? asset->name : text;
+      caption.emplace_back(bot_model::Text{
+          label.empty() ? "[face:" + std::string(native_id) + ']'
+                        : std::string(label),
+          {}});
+      bot_model::MediaMetadata metadata;
+      metadata.mime_type = asset->animated ? "image/gif" : "image/png";
+      metadata.size_bytes = asset->bytes.size();
+      return bot_model::ReceivedMedia{
+          {installation,
+           codec.make<bot_model::MediaId>(
+               asset->animated ? detail::catalog_face_gif_kind
+                               : detail::catalog_face_media_kind,
+               {installation.installation_id, std::string(catalog_id)})},
+          bot_model::MediaKind::Image,
+          std::move(metadata),
+          std::nullopt,
+          std::move(caption)};
+    }
+  }
+  auto label = !text.empty()         ? std::string(text)
+               : !catalog_id.empty() ? "[face:" + std::string(native_id) + ']'
+                                     : "[face]";
+  return bot_model::ReceivedRichText{bot_model::Text{std::move(label), {}}};
+}
+
 auto media_metadata(const bot_model::Json &j) -> bot_model::MediaMetadata {
   bot_model::MediaMetadata result;
   for (auto key : {"file_size", "size"})
@@ -162,6 +227,16 @@ void QqNativeReferenceCodec::validate_native(
     return;
   }
   if (tag == "media" &&
+      (kind == detail::catalog_face_media_kind ||
+       kind == detail::catalog_face_gif_kind) &&
+      c.size() == 2) {
+    bot_model::BotInstallationRef{c[0], surface()}.validate();
+    const auto canonical = canonical_face_id(c[1]);
+    if (canonical.empty() || canonical != c[1])
+      throw std::invalid_argument("noncanonical QQ catalog face identifier");
+    return;
+  }
+  if (tag == "media" &&
       (kind == "forward-image" || kind == "forward-video" ||
        kind == "forward-record" || kind == "forward-file" ||
        kind == "forward-file-id") &&
@@ -279,12 +354,14 @@ auto QqPlatformAdapter::normalize_message(
     bot_model::TimePoint received, std::string_view observation) const
     -> bot_model::MessageReceived {
   std::vector<std::size_t> ignored;
-  return normalize_with_positions(i, event, received, observation, ignored);
+  return normalize_with_positions(i, event, received, observation, ignored,
+                                  MessageContent::Inbound);
 }
 auto QqPlatformAdapter::normalize_with_positions(
     const bot_model::BotInstallationRef &i, const common::MessageEvent &event,
     bot_model::TimePoint received, std::string_view observation,
-    std::vector<std::size_t> &positions) const -> bot_model::MessageReceived {
+    std::vector<std::size_t> &positions, MessageContent content) const
+    -> bot_model::MessageReceived {
   positions.clear();
   if (event.message.size() > bot_model::detail::bot_maximum_items)
     throw std::invalid_argument("QQ content count exceeds bound");
@@ -326,11 +403,12 @@ auto QqPlatformAdapter::normalize_with_positions(
       throw std::invalid_argument("QQ time overflow");
     result.sent_at = bot_model::TimePoint{seconds * 1000};
   }
+  std::optional<std::size_t> text_block;
   const auto append = [&](bot_model::ReceivedRichText::value_type value) {
-    if (result.body.empty() ||
-        !std::holds_alternative<bot_model::ReceivedRichText>(
-            result.body.back()))
+    if (!text_block || *text_block + 1 != result.body.size()) {
       result.body.emplace_back(bot_model::ReceivedRichText{});
+      text_block = result.body.size() - 1;
+    }
     std::get<bot_model::ReceivedRichText>(result.body.back())
         .push_back(std::move(value));
   };
@@ -371,6 +449,12 @@ auto QqPlatformAdapter::normalize_with_positions(
             message, ref, std::nullopt,
             bot_model::ReplyRelation::SameConversation,
             bot_model::ReplyAvailability::ReferenceOnly);
+        continue;
+      }
+      if (content == MessageContent::Inbound && segment.type == "face") {
+        // Keep each face in its own block even when projected as text, so
+        // its original observation is attached to exactly that face.
+        result.body.emplace_back(normalize_face(codec_, i, segment.data));
         continue;
       }
       if (segment.type == "image" || segment.type == "video" ||

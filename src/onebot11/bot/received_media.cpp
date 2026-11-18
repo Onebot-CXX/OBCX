@@ -1,7 +1,9 @@
 #include "received_media.hpp"
 #include "network/detail/media_fetch.hpp"
 #include "network/image_fetch.hpp"
+#include "qq_face_catalog.hpp"
 #include <boost/asio/error.hpp>
+#include <boost/asio/this_coro.hpp>
 #include <boost/system/system_error.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -99,6 +101,36 @@ void validate_received_media_token(std::string_view token) {
       error != std::errc{} || end != sequence.data() + sequence.size() ||
       !value)
     throw std::invalid_argument("invalid received media sequence");
+}
+
+auto read_catalog_face(std::string id, bool animated,
+                       std::uint64_t maximum_bytes,
+                       network::detail::HttpDeadline deadline)
+    -> boost::asio::awaitable<Result> {
+  const auto cancellation = co_await boost::asio::this_coro::cancellation_state;
+  if (cancellation.cancelled() != boost::asio::cancellation_type::none)
+    co_return failure(Code::Cancelled);
+  if (std::chrono::steady_clock::now() >= deadline)
+    co_return failure(Code::TransportFailure);
+  if (!maximum_bytes || maximum_bytes > bot_model::detail::bot_maximum_bytes)
+    co_return failure(Code::InvalidRequest);
+  const auto asset = find_qq_face(id);
+  // Persisted handles identify the format; never return GIF bytes as a PNG.
+  if (!asset || asset->animated != animated)
+    co_return failure(Code::CacheUnavailable);
+  const auto content = asset->bytes;
+  if (content.size() > maximum_bytes)
+    co_return failure(Code::MediaTooLarge);
+
+  bot_model::BytesSource bytes{{content.begin(), content.end()}, {}};
+  bytes.metadata.mime_type = animated ? "image/gif" : "image/png";
+  bytes.metadata.size_bytes = bytes.bytes.size();
+  if (cancellation.cancelled() != boost::asio::cancellation_type::none)
+    co_return failure(Code::Cancelled);
+  if (std::chrono::steady_clock::now() >= deadline)
+    co_return failure(Code::TransportFailure);
+  co_return Result::success(
+      {std::move(bytes), bot_model::MediaKind::Image, std::nullopt});
 }
 
 struct ReceivedMediaStore::Receipt {
@@ -269,7 +301,8 @@ auto ReceivedMediaStore::normalize(
     throw std::invalid_argument("received media installation mismatch");
   std::vector<std::size_t> positions;
   auto result = binding.normalize_with_positions(
-      installation, event, received_at, observation_id, positions);
+      installation, event, received_at, observation_id, positions,
+      QqPlatformAdapter::MessageContent::Inbound);
   const auto observed_user = binding.observed_self(installation, event);
   for (std::size_t ordinal = 0; ordinal < event.message.size(); ++ordinal) {
     const auto &segment = event.message[ordinal];

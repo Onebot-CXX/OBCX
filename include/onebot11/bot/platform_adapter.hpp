@@ -31,10 +31,12 @@ public:
                                 const common::NoticeEvent &,
                                 obcx::bot::TimePoint) const
       -> std::optional<obcx::bot::MessageDeleted> override;
+  enum class MessageContent { Inbound, ForwardNode };
   auto normalize_with_positions(const obcx::bot::BotInstallationRef &,
                                 const common::MessageEvent &,
                                 obcx::bot::TimePoint, std::string_view,
-                                std::vector<std::size_t> &positions) const
+                                std::vector<std::size_t> &positions,
+                                MessageContent content) const
       -> obcx::bot::MessageReceived;
   auto observed_self(const obcx::bot::BotInstallationRef &,
                      const common::MessageEvent &) const

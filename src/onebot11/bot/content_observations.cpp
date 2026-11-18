@@ -12,12 +12,22 @@ auto text(const d::Json &object, const char *key, std::size_t maximum)
   d::validate_observation_text(value, maximum);
   return value;
 }
-auto face(const d::Json &data) -> d::ReceivedFace {
+auto face(const d::Json &data, bool rendered = false) -> d::ReceivedFace {
   const auto &id = data.at("id");
   if (!id.is_string() && !id.is_number_integer())
     throw std::invalid_argument("invalid face identifier");
   d::ReceivedFace result{id.is_string() ? id.get<std::string>() : id.dump(),
-                         text(data, "text", 2048)};
+                         std::nullopt};
+  try {
+    result.description = text(data, "text", 2048);
+  } catch (const std::invalid_argument &) {
+    if (!rendered)
+      throw;
+  } catch (const d::Json::exception &) {
+    if (!rendered)
+      throw;
+  }
+  // A bad optional label does not invalidate the ID of an inbound face.
   result.validate();
   return result;
 }
@@ -32,9 +42,11 @@ void QqPlatformAdapter::capture_observations(
         value.validate();
         message.observations.push_back({positions.at(index), std::move(value)});
       };
-      if (segment.type == "face")
-        emit(face(segment.data));
-      else if (segment.type == "mface")
+      if (segment.type == "face") {
+        const auto &block = message.body.at(positions.at(index));
+        emit(face(segment.data,
+                  !std::holds_alternative<d::UnsupportedContent>(block)));
+      } else if (segment.type == "mface")
         emit(d::ReceivedMarketFace{text(segment.data, "summary", 2048)});
       else if (segment.type == "forward") {
         const auto &token = d::detail::require_identifier(
